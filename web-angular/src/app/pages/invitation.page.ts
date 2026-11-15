@@ -7,6 +7,12 @@ import { authErrorMessage } from "@/lib/auth/messages";
 import { isPasswordValid } from "@/lib/auth/policy";
 import { AuthService } from "@shared/auth.service";
 import { LocaleService } from "@shared/locale.service";
+import type { RouteMeta } from "@analogjs/router";
+import { siteGateGuard } from "@shared/site-gate.guard";
+
+
+/** Rideau « site en construction » : code d'accès demandé tant qu'il n'a pas été saisi. */
+export const routeMeta: RouteMeta = { canActivate: [siteGateGuard] };
 
 /**
  * Port de src/routes/invitation.tsx — activation de compte (premier mot de passe).
