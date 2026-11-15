@@ -133,6 +133,8 @@ export interface DossierDraft {
   orgId: string;
   /** Crée aussi un membre à l'approbation. */
   createMember: boolean;
+  /** Photo du producteur (aperçu local `data:`), reportée sur sa fiche à l'approbation. */
+  photoUrl?: string | undefined;
 }
 
 export type DossierAction =

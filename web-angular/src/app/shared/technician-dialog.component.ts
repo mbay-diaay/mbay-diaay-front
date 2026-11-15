@@ -1,6 +1,8 @@
 import { Component, computed, effect, inject, input, model, signal, untracked } from "@angular/core";
 
+import { syncImage } from "@/lib/api/media";
 import type { MessageKey } from "@/lib/i18n";
+import type { PreparedImage } from "@/lib/image";
 import { inScope } from "@/lib/scope";
 
 import { LocaleService } from "./locale.service";
@@ -8,6 +10,7 @@ import { StoreService } from "./store.service";
 import { TechnicianCodeDialogComponent, type TechnicianCodeView } from "./technician-code-dialog.component";
 import { CheckListComponent } from "./ui/check-list.component";
 import { IconComponent } from "./ui/icon.component";
+import { ImagePickerComponent } from "./ui/image-picker.component";
 import { ModalComponent } from "./ui/modal.component";
 import { SelectComponent, type SelectOption } from "./ui/select.component";
 import { SnackbarService } from "./ui/snackbar.service";
@@ -26,7 +29,7 @@ type Errors = Partial<Record<"firstName" | "lastName" | "email" | "phone" | "sex
  */
 @Component({
   selector: "app-technician-dialog",
-  imports: [CheckListComponent, IconComponent, ModalComponent, SelectComponent, TechnicianCodeDialogComponent, TextFieldComponent],
+  imports: [CheckListComponent, IconComponent, ImagePickerComponent, ModalComponent, SelectComponent, TechnicianCodeDialogComponent, TextFieldComponent],
   styles: `
     .sec {
       display: flex;
@@ -148,6 +151,7 @@ type Errors = Partial<Record<"firstName" | "lastName" | "email" | "phone" | "sex
 
         @if (mode() === "new") {
           <h3 class="sec"><ui-icon name="person" [size]="18" />{{ t()("tech.dialog.section.identity") }}</h3>
+          <ui-image-picker class="mb-5" [value]="photo()" [name]="firstName() + ' ' + lastName()" (picked)="onPhoto($event)" (cleared)="clearPhoto()" />
           <div class="grid gap-5 sm:grid-cols-2">
             <ui-text-field preset="firstName" [label]="t()('tech.dialog.firstName')" [value]="firstName()" [error]="err().firstName ?? ''" (valueChange)="firstName.set($event); clear('firstName')" />
             <ui-text-field preset="lastName" [label]="t()('tech.dialog.lastName')" [value]="lastName()" [error]="err().lastName ?? ''" (valueChange)="lastName.set($event); clear('lastName')" />
@@ -212,6 +216,20 @@ export class TechnicianDialogComponent {
   protected readonly t = this.locale.t;
 
   protected readonly mode = signal<Mode>("new");
+  /** Photo choisie : aperçu gardé dans la fiche, fichier à envoyer à l'API. */
+  protected readonly photo = signal<string | null>(null);
+  private photoFile: Blob | null = null;
+
+  protected onPhoto(image: PreparedImage): void {
+    this.photo.set(image.dataUrl);
+    this.photoFile = image.blob;
+  }
+
+  protected clearPhoto(): void {
+    this.photo.set(null);
+    this.photoFile = null;
+  }
+
   protected readonly firstName = signal("");
   protected readonly lastName = signal("");
   protected readonly email = signal("");
@@ -277,6 +295,7 @@ export class TechnicianDialogComponent {
   }
 
   private reset(): void {
+    this.clearPhoto();
     const pre = this.scoopId();
     this.mode.set("new");
     this.firstName.set("");
@@ -335,7 +354,7 @@ export class TechnicianDialogComponent {
 
     if (this.mode() === "new") {
       const name = `${this.firstName().trim()} ${this.lastName().trim()}`;
-      const res = this.store.actions.createTechnician({ name, email: this.email(), phone: this.phone(), sex: this.sex() as "F" | "H", age: Number(this.age().trim()), scoopIds: this.scoopIds(), orgIds: this.orgIds().filter((id) => this.orgOptions().some((option) => option.value === id)) });
+      const res = this.store.actions.createTechnician({ name, email: this.email(), phone: this.phone(), sex: this.sex() as "F" | "H", age: Number(this.age().trim()), scoopIds: this.scoopIds(), orgIds: this.orgIds().filter((id) => this.orgOptions().some((option) => option.value === id)), ...(this.photo() && { photoUrl: this.photo()! }) });
       if (!res.ok) {
         // L'e-mail déjà utilisé se signale sous le champ ; le reste en message.
         const msg = this.locale.tNow(res.error as MessageKey);
@@ -345,6 +364,9 @@ export class TechnicianDialogComponent {
         return;
       }
       this.open.set(false);
+      void syncImage("user", res.userId, this.photoFile).then((sent) => {
+        if (!sent) this.snackbar.error(t("ui.image.uploadFailed"));
+      });
       this.codeView.set({ userId: res.userId, name, code: res.code, expiresAt: res.expiresAt, email: this.email().trim() });
       return;
     }

@@ -75,3 +75,11 @@ Comptes multi-rôles : [API `COMPTES_RECETTE.md`](https://github.com/mbay-diaay/
 
 Front : `web-angular/src/lib/api/*`, `web-angular/src/lib/auth/*`, `web-angular/src/lib/store.ts`  
 API : `auth/sign-in`, `auth/otp/*`, `users/*`
+
+## Logos et photos
+
+Logo de coopérative, photo de producteur, de personnel et de technicien : composant `ui-image-picker` dans les formulaires d'enregistrement (`web-angular/src/app/shared/ui/`). L'image est contrôlée (JPEG, PNG, WebP), réduite à 512 px dans le navigateur (`src/lib/image.ts`), gardée dans la fiche pour l'aperçu, puis, quand `VITE_API_URL` est configurée, envoyée à l'API (`src/lib/api/media.ts` : `PUT /scoops/:id/logo`, `/users/:id/photo`, `/producers/:id/photo`). Le contrat est dans `mbay-diaay-api/docs/API_ROUTES_M1.md`.
+
+- Un échec d'envoi n'annule pas l'enregistrement : un message prévient l'utilisateur.
+- La photo d'un producteur se saisit dans le dossier producteur ; elle passe sur la fiche à l'approbation (la fiche n'existe pas avant).
+- Les liens d'image de l'API sont relatifs (`/v1/media/…`) et valables 1 h : `mediaSrc()` les rend absolus.

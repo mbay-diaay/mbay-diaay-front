@@ -132,6 +132,18 @@ export const shell = {
   "ui.files.sensitive": "Sensible",
   "ui.files.remove": "Retirer {name}",
   "ui.files.add": "Ajouter un fichier",
+  /** Sélecteur d'image (logo, photo) : `ui-image-picker`. */
+  "ui.image.add": "Ajouter une image",
+  "ui.image.change": "Changer",
+  "ui.image.remove": "Retirer",
+  "ui.image.hint": "Glissez une image ici ou cliquez · JPEG, PNG ou WebP · 2 Mo au plus",
+  "ui.image.logo": "Logo",
+  "ui.image.photo": "Photo",
+  "ui.image.optional": "facultatif",
+  "ui.image.errorType": "Format refusé : choisissez une image JPEG, PNG ou WebP.",
+  "ui.image.errorSize": "Image trop lourde : 10 Mo au plus avant réduction.",
+  "ui.image.errorRead": "Cette image n'a pas pu être lue. Essayez-en une autre.",
+  "ui.image.uploadFailed": "L'enregistrement est fait, mais l'image n'a pas pu être envoyée au serveur.",
   "ui.files.addAnother": "Ajouter un autre fichier",
   /** Exemples affichés dans les champs vides (`ui-text-field preset="…"`). Données fictives, format réel. */
   "ui.field.ph.firstName": "Ex. Awa",

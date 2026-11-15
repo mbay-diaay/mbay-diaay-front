@@ -55,6 +55,10 @@ export interface HeroMeta {
       font-weight: 700;
       transition: transform 0.3s ease;
     }
+    .mono.has-image {
+      overflow: hidden;
+      background: var(--v2-blanc);
+    }
     .hero:hover .mono {
       transform: rotate(-4deg) scale(1.04);
     }
@@ -153,8 +157,10 @@ export interface HeroMeta {
 
       <div class="relative mt-6 flex flex-wrap items-start justify-between gap-6">
         <div class="flex min-w-0 items-start gap-5">
-          <span class="mono" aria-hidden="true">
-            @if (icon()) {
+          <span class="mono" aria-hidden="true" [class.has-image]="!!image()">
+            @if (image()) {
+              <img [src]="image()" alt="" class="h-full w-full object-cover" decoding="async" />
+            } @else if (icon()) {
               <ui-icon [name]="icon()!" [size]="32" />
             } @else {
               {{ mono() }}
@@ -205,6 +211,8 @@ export class DetailHeroComponent {
   readonly eyebrow = input("");
   /** Initiales ou code court affichés dans le carré citron (sinon `icon`). */
   readonly mono = input("");
+  /** Logo ou photo de la fiche : remplace le monogramme quand elle existe. */
+  readonly image = input<string | null | undefined>(null);
   readonly icon = input<IconName | null>(null);
   readonly badges = input<readonly HeroBadge[]>([]);
   readonly meta = input<readonly HeroMeta[]>([]);

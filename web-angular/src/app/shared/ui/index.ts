@@ -4,6 +4,7 @@
  * `import { ModalComponent, StatCardsComponent, V2_PAGE_STYLES } from "@shared/ui";`
  * Les composants de ce dossier s'importent entre eux en relatif (pas via ce fichier) pour éviter les cycles.
  */
+export * from "./avatar.component";
 export * from "./brand-logo.component";
 export * from "./button.component";
 export * from "./chart.component";
@@ -18,6 +19,7 @@ export * from "./event-calendar.component";
 export * from "./field-presets";
 export * from "./file-slots.component";
 export * from "./icon.component";
+export * from "./image-picker.component";
 export * from "./kpi-tile.component";
 export * from "./modal-a11y.directive";
 export * from "./modal-focus";

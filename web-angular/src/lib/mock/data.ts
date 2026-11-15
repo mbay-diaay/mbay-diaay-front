@@ -21,6 +21,8 @@ export interface Scoop {
   createdAt?: string;
   /** Une coopérative archivée garde ses données mais n'a plus d'accès actif ; jamais supprimée. */
   archived?: boolean;
+  /** Logo : aperçu local (`data:`) ou lien signé de l'API. */
+  logoUrl?: string | undefined;
 }
 export interface Org {
   id: string;
@@ -61,6 +63,8 @@ export interface Producer {
   enumerator: string;
   history: HistoryEntry[];
   mergedInto?: string | undefined;
+  /** Photo : aperçu local (`data:`) ou lien signé de l'API. */
+  photoUrl?: string | undefined;
 }
 export interface Plot {
   id: string;

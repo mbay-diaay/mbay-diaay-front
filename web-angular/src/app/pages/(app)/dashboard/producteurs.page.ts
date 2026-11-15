@@ -15,6 +15,7 @@ import {
   detailFact,
   detailKpi,
   DetailModalComponent,
+  AvatarComponent,
   IconComponent,
   initialsOf,
   ModalComponent,
@@ -85,6 +86,7 @@ const STATUS = {
   imports: [
     GlobalFiltersComponent,
     AppShellComponent,
+    AvatarComponent,
     IconComponent,
     ModalComponent,
     DetailModalComponent,
@@ -222,9 +224,13 @@ const STATUS = {
                   class="row-link flex w-full items-center gap-3 px-4 py-3.5 text-left"
                   (click)="openDetail(producer.id)"
                 >
-                  <span class="avatar">{{
-                    initials(producer.firstName + " " + producer.lastName)
-                  }}</span>
+                  @if (producer.photoUrl) {
+                    <ui-avatar [src]="producer.photoUrl" [name]="producer.firstName + ' ' + producer.lastName" [size]="36" />
+                  } @else {
+                    <span class="avatar">{{
+                      initials(producer.firstName + " " + producer.lastName)
+                    }}</span>
+                  }
                   <span class="min-w-0 flex-1">
                     <span class="block truncate font-bold"
                       >{{ producer.firstName }} {{ producer.lastName }}</span
@@ -264,6 +270,9 @@ const STATUS = {
                   <tr class="row-link" (click)="openDetail(producer.id)">
                     <td>
                       <span class="flex items-center gap-3">
+                        @if (producer.photoUrl) {
+                          <ui-avatar [src]="producer.photoUrl" [name]="producer.firstName + ' ' + producer.lastName" [size]="36" />
+                        } @else {
                         <span
                           class="avatar"
                           [style.background]="
@@ -274,6 +283,7 @@ const STATUS = {
                           "
                           >{{ initials(producer.firstName + " " + producer.lastName) }}</span
                         >
+                        }
                         <span class="min-w-0">
                           <span class="block truncate font-bold"
                             >{{ producer.firstName }} {{ producer.lastName }}</span
