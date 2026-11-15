@@ -1,6 +1,8 @@
 import { Component, computed, effect, inject, signal, untracked } from "@angular/core";
 
+import { syncImage } from "@/lib/api/media";
 import { nf } from "@/lib/format";
+import type { PreparedImage } from "@/lib/image";
 import { assignableRoles } from "@/lib/team";
 import { inScope } from "@/lib/scope";
 import type { RoleId } from "@/lib/permissions";
@@ -11,7 +13,9 @@ import { createPager } from "@shared/pager";
 import { RoleAccessPreviewComponent } from "@shared/role-access-preview.component";
 import { StoreService } from "@shared/store.service";
 import {
+  AvatarComponent,
   IconComponent,
+  ImagePickerComponent,
   ModalComponent,
   PaginationComponent,
   SelectComponent,
@@ -36,7 +40,9 @@ type StaffErrors = Partial<Record<"firstName" | "lastName" | "email" | "phone" |
   selector: "app-personnel-page",
   imports: [
     AppShellComponent,
+    AvatarComponent,
     IconComponent,
+    ImagePickerComponent,
     ModalComponent,
     PaginationComponent,
     RoleAccessPreviewComponent,
@@ -186,7 +192,7 @@ type StaffErrors = Partial<Record<"firstName" | "lastName" | "email" | "phone" |
                   <tr class="row-link" (click)="viewing.set(row.user)">
                     <td>
                       <span class="flex items-center gap-3">
-                        <span class="avatar" style="background: var(--v2-sauge); color: var(--v2-foret)">{{ row.initials }}</span>
+                        <ui-avatar [src]="row.user.photoUrl" [name]="row.user.name" [size]="36" />
                         <span class="min-w-0">
                           <span class="block truncate font-bold">{{ row.user.name }}</span>
                           <span class="sub block truncate">{{ row.user.email }}{{ row.user.phone ? " · " + store.phone(row.user.phone) : "" }}</span>
@@ -228,6 +234,7 @@ type StaffErrors = Partial<Record<"firstName" | "lastName" | "email" | "phone" |
       <!-- Ajouter une personne -->
       <ui-modal [open]="addOpen()" [title]="t()('personnel.add.title')" [description]="t()('personnel.add.description')" icon="person_add" [width]="700" [closeLabel]="t()('common.close')" (closed)="addOpen.set(false)">
         <div class="space-y-5 pb-6">
+          <ui-image-picker [value]="photo()" [name]="firstName() + ' ' + lastName()" (picked)="onPhoto($event)" (cleared)="clearPhoto()" />
           <div class="grid gap-5 sm:grid-cols-2">
             <ui-text-field preset="firstName" [label]="t()('tech.dialog.firstName')" [value]="firstName()" [error]="errors().firstName ?? ''" (valueChange)="firstName.set($event)" />
             <ui-text-field preset="lastName" [label]="t()('tech.dialog.lastName')" [value]="lastName()" [error]="errors().lastName ?? ''" (valueChange)="lastName.set($event)" />
@@ -287,6 +294,7 @@ type StaffErrors = Partial<Record<"firstName" | "lastName" | "email" | "phone" |
       @if (editing(); as person) {
         <ui-modal [open]="true" [title]="t()('personnel.edit.title', { name: person.name })" [description]="t()('personnel.edit.description')" icon="edit" [width]="680" [closeLabel]="t()('common.close')" (closed)="editing.set(null)">
           <div class="space-y-5 pb-6">
+            <ui-image-picker [value]="photo()" [name]="editName()" (picked)="onPhoto($event)" (cleared)="clearPhoto()" />
             <div class="grid gap-5 sm:grid-cols-2">
               <ui-text-field class="sm:col-span-2" [label]="t()('techniciens.edit.name')" [value]="editName()" [error]="editErrors().name ?? ''" (valueChange)="editName.set($event)" />
               <ui-text-field preset="phone" [label]="t()('tech.dialog.phone')" [value]="editPhone()" [error]="editErrors().phone ?? ''" (valueChange)="editPhone.set($event)" />
@@ -484,7 +492,26 @@ export default class PersonnelPage {
 
   protected readonly pager = createPager(() => this.shown());
 
+  /** Photo choisie : aperçu gardé dans la fiche, fichier à envoyer à l'API. */
+  protected readonly photo = signal<string | null>(null);
+  private photoFile: Blob | null = null;
+
+  protected onPhoto(image: PreparedImage): void {
+    this.photo.set(image.dataUrl);
+    this.photoFile = image.blob;
+  }
+
+  protected clearPhoto(): void {
+    this.photo.set(null);
+    this.photoFile = null;
+  }
+
+  private async syncPhoto(userId: string): Promise<void> {
+    if (!(await syncImage("user", userId, this.photoFile))) this.snackbar.error(this.t()("ui.image.uploadFailed"));
+  }
+
   protected openAdd(): void {
+    this.clearPhoto();
     this.firstName.set("");
     this.lastName.set("");
     this.email.set("");
@@ -519,6 +546,7 @@ export default class PersonnelPage {
       age: ageValue,
       role: this.role() as RoleId,
       scoopId: this.scoopId(),
+      ...(this.photo() && { photoUrl: this.photo()! }),
     });
     if (!result.ok) {
       if (result.error === t("errors.technician.emailTaken")) this.errors.set({ email: result.error });
@@ -526,6 +554,7 @@ export default class PersonnelPage {
       return;
     }
     this.addOpen.set(false);
+    void this.syncPhoto(result.userId);
     this.snackbar.success(t("personnel.add.done", { name: fullName }));
   }
 
@@ -543,6 +572,8 @@ export default class PersonnelPage {
     this.editSex.set(person.sex ?? "");
     this.pickedRole.set(person.role);
     this.editErrors.set({});
+    this.photo.set(person.photoUrl ?? null);
+    this.photoFile = null;
     this.editing.set(person);
   }
 
@@ -561,6 +592,7 @@ export default class PersonnelPage {
       phone: this.editPhone(),
       sex: this.editSex() as "F" | "H",
       age: ageValue,
+      photoUrl: this.photo(),
       ...(this.pickedRole() && this.pickedRole() !== person.role ? { role: this.pickedRole() as RoleId } : {}),
     });
     if (!result.ok) {
@@ -568,6 +600,7 @@ export default class PersonnelPage {
       return;
     }
     this.editing.set(null);
+    void this.syncPhoto(person.id);
     this.snackbar.success(t("personnel.edit.done", { name: this.editName().trim() }));
   }
 

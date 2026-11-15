@@ -79,6 +79,8 @@ export interface ScoopInput {
   commune: string;
   code: string;
   manager: { firstName: string; lastName: string; email: string };
+  /** Logo facultatif (aperçu local `data:`). */
+  logoUrl?: string | undefined;
 }
 
 /**

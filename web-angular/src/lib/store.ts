@@ -234,6 +234,8 @@ export interface AppUser {
   age?: number | undefined;
   /** Membre de la coopérative auquel le compte est lié (le statut de membre et le rôle sont deux choses). */
   memberId?: string | undefined;
+  /** Photo : aperçu local (`data:`) ou lien signé de l'API. */
+  photoUrl?: string | undefined;
   active: boolean;
   /** Invitation en attente : le compte reste inactif tant que la personne n'a pas choisi son mot de passe. */
   invited?: { sentAt: string; expiresAt: string } | undefined;
@@ -919,6 +921,7 @@ function producerFromDraft(d: ProducerDossier, approver: string, at: string): Pr
     scoopId: d.scoopId,
     orgId: draft.orgId,
     status: draft.createMember ? "membre" : "recensé",
+    ...(draft.photoUrl && { photoUrl: draft.photoUrl }),
     quality: "validé",
     crops: [],
     createdAt: at,
@@ -1242,6 +1245,7 @@ export const actions = {
     age: number;
     scoopIds: string[];
     orgIds?: string[];
+    photoUrl?: string | undefined;
   }): ActionResult<{ userId: string; code: string; expiresAt: string }> {
     const denied = access(["user.manage", "technician.invite"]);
     if (denied) return denied;
@@ -1282,6 +1286,7 @@ export const actions = {
       age: input.age,
       role: "technicien",
       scoopIds,
+      ...(input.photoUrl && { photoUrl: input.photoUrl }),
       ...(input.orgIds?.length
         ? { orgIds: [...new Set(input.orgIds)].filter((id) => state.orgs.some((o) => o.id === id && scoopIds.includes(o.scoopId))) }
         : {}),
@@ -1382,7 +1387,7 @@ export const actions = {
    */
   updateTechnician(
     userId: string,
-    input: { name: string; phone: string; sex: "F" | "H"; age: number; orgIds: string[] },
+    input: { name: string; phone: string; sex: "F" | "H"; age: number; orgIds: string[]; photoUrl?: string | null },
   ): ActionResult {
     const denied = access(["user.manage", "technician.invite"]);
     if (denied) return denied;
@@ -1408,7 +1413,17 @@ export const actions = {
     const orgIds = [...keptOutside, ...chosen];
     set((s) => ({
       users: s.users.map((u) =>
-        u.id === userId ? { ...u, name, phone: input.phone.trim(), sex: input.sex, age: input.age, orgIds } : u,
+        u.id === userId
+          ? {
+              ...u,
+              name,
+              phone: input.phone.trim(),
+              sex: input.sex,
+              age: input.age,
+              orgIds,
+              ...(input.photoUrl !== undefined && { photoUrl: input.photoUrl ?? undefined }),
+            }
+          : u,
       ),
     }));
     audit("Technicien modifié", `Utilisateur ${name}`, user.email, scoopIds[0]);
@@ -2142,6 +2157,7 @@ export const actions = {
     age: number;
     role: RoleId;
     scoopId: string;
+    photoUrl?: string | undefined;
   }): ActionResult<{ userId: string }> {
     const denied = access("role.assign");
     if (denied) return denied;
@@ -2176,6 +2192,7 @@ export const actions = {
       age: input.age,
       role: input.role,
       scoopId: input.scoopId,
+      ...(input.photoUrl && { photoUrl: input.photoUrl }),
       active: false,
       invited: { sentAt: at, expiresAt: new Date(Date.now() + INVITATION_TTL_MS).toISOString() },
     };
@@ -2187,7 +2204,7 @@ export const actions = {
   /** Personnel d'une coopérative de son périmètre : ni soi-même, ni un technicien, ni un rôle du réseau. */
   updateStaff(
     userId: string,
-    patch: { role?: RoleId; active?: boolean; name?: string; phone?: string; sex?: "F" | "H"; age?: number },
+    patch: { role?: RoleId; active?: boolean; name?: string; phone?: string; sex?: "F" | "H"; age?: number; photoUrl?: string | null },
   ): ActionResult {
     const denied = access("role.assign");
     if (denied) return denied;
@@ -2218,6 +2235,7 @@ export const actions = {
       if (patch.sex !== undefined) identity.sex = patch.sex;
       if (patch.age !== undefined) identity.age = patch.age;
     }
+    if (patch.photoUrl !== undefined) identity.photoUrl = patch.photoUrl ?? undefined;
     set((s) => ({
       users: s.users.map((u) =>
         u.id === userId
@@ -3491,6 +3509,7 @@ export const actions = {
       code: normalizeCode(input.code),
       ...(input.region?.trim() && { region: input.region.trim() }),
       createdAt: input.createdAt ? new Date(input.createdAt).toISOString() : at,
+      ...(input.logoUrl && { logoUrl: input.logoUrl }),
     };
     const m = input.manager;
     const member: Member = {
@@ -3538,14 +3557,14 @@ export const actions = {
   },
   updateScoop(
     id: string,
-    patch: { name: string; commune: string; code: string; region?: string },
+    patch: { name: string; commune: string; code: string; region?: string; logoUrl?: string | null },
   ): ActionResult {
     const who = actor();
     if (!who?.session.permissions.includes("scoop.manage")) return fail("errors.scoop.notAllowed");
     const scoop = state.scoops.find((s) => s.id === id);
     if (!scoop) return fail("errors.scoop.notFound");
     const issues = scoopIssues(
-      { ...patch, manager: { firstName: "", lastName: "", email: "" } },
+      { name: patch.name, commune: patch.commune, code: patch.code, manager: { firstName: "", lastName: "", email: "" } },
       state.scoops,
       [],
       { checkManager: false, ignore: id },
@@ -3560,6 +3579,8 @@ export const actions = {
               commune: patch.commune.trim(),
               code: normalizeCode(patch.code),
               ...(patch.region !== undefined && { region: patch.region.trim() }),
+              // null = retirer le logo ; absent = ne pas y toucher.
+              ...(patch.logoUrl !== undefined && { logoUrl: patch.logoUrl ?? undefined }),
             }
           : x,
       ),

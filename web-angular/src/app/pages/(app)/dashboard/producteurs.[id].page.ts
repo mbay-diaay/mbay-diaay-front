@@ -134,6 +134,7 @@ const PHONE_RE = /^7[0678]\s?\d{3}\s?\d{2}\s?\d{2}$/;
             [title]="current.firstName + ' ' + current.lastName"
             [eyebrow]="current.code"
             [mono]="initials(current.firstName + ' ' + current.lastName)"
+            [image]="current.photoUrl"
             [badges]="heroBadges()"
             [meta]="heroMeta()"
             [backLabel]="t()('producteurs.fiche.back')"

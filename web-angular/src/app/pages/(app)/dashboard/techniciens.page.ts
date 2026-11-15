@@ -1,6 +1,8 @@
 import { Component, computed, inject, signal } from "@angular/core";
 
+import { syncImage } from "@/lib/api/media";
 import { nf } from "@/lib/format";
+import type { PreparedImage } from "@/lib/image";
 import type { MessageKey } from "@/lib/i18n";
 import { inScope } from "@/lib/scope";
 import type { AppUser } from "@/lib/store";
@@ -11,8 +13,10 @@ import { StoreService } from "@shared/store.service";
 import { TechnicianCodeDialogComponent, type TechnicianCodeView } from "@shared/technician-code-dialog.component";
 import { TechnicianDialogComponent } from "@shared/technician-dialog.component";
 import {
+  AvatarComponent,
   CheckListComponent,
   IconComponent,
+  ImagePickerComponent,
   ModalComponent,
   PaginationComponent,
   SelectComponent,
@@ -48,8 +52,10 @@ interface TechnicianRow {
   selector: "app-techniciens-page",
   imports: [
     AppShellComponent,
+    AvatarComponent,
     CheckListComponent,
     IconComponent,
+    ImagePickerComponent,
     ModalComponent,
     PaginationComponent,
     SelectComponent,
@@ -139,7 +145,7 @@ interface TechnicianRow {
                   <tr class="row-link" (click)="viewing.set(row.user)">
                     <td>
                       <span class="flex items-center gap-3">
-                        <span class="avatar" style="background: var(--v2-sauge); color: var(--v2-foret)">{{ row.initials }}</span>
+                        <ui-avatar [src]="row.user.photoUrl" [name]="row.user.name" [size]="36" />
                         <span class="min-w-0">
                           <span class="block truncate font-bold">{{ row.user.name }}</span>
                           <span class="sub block truncate">{{ store.phone(row.user.phone) }}{{ row.user.email ? " · " + row.user.email : "" }}</span>
@@ -207,6 +213,7 @@ interface TechnicianRow {
       @if (editing(); as edited) {
         <ui-modal [open]="true" [title]="t()('techniciens.edit.title', { name: edited.name })" [description]="t()('techniciens.edit.description')" icon="edit" [width]="640" [closeLabel]="t()('common.close')" (closed)="editing.set(null)">
           <div class="space-y-5 pb-6">
+            <ui-image-picker [value]="photo()" [name]="editName()" (picked)="onPhoto($event)" (cleared)="clearPhoto()" />
             <ui-text-field [label]="t()('techniciens.edit.name')" [value]="editName()" [error]="editError()" (valueChange)="editName.set($event); editError.set('')" />
             <ui-text-field preset="phone" [label]="t()('tech.dialog.phone')" [value]="editPhone()" (valueChange)="editPhone.set($event)" />
             <ui-text-field preset="age" [label]="t()('adherents.add.age')" [hint]="t()('tech.dialog.ageHint')" [value]="editAge()" (valueChange)="editAge.set($event)" />
@@ -443,7 +450,23 @@ export default class TechniciensPage {
     return person ? (this.rows().find((row) => row.user.id === person.id) ?? null) : null;
   });
 
+  /** Photo choisie : aperçu gardé dans la fiche, fichier à envoyer à l'API. */
+  protected readonly photo = signal<string | null>(null);
+  private photoFile: Blob | null = null;
+
+  protected onPhoto(image: PreparedImage): void {
+    this.photo.set(image.dataUrl);
+    this.photoFile = image.blob;
+  }
+
+  protected clearPhoto(): void {
+    this.photo.set(null);
+    this.photoFile = null;
+  }
+
   protected openEdit(user: AppUser): void {
+    this.photo.set(user.photoUrl ?? null);
+    this.photoFile = null;
     this.viewing.set(null);
     this.editName.set(user.name);
     this.editPhone.set(user.phone);
@@ -465,6 +488,7 @@ export default class TechniciensPage {
       sex: (this.editSex() || "F") as "F" | "H",
       age: Number(this.editAge().trim()),
       orgIds: this.editOrgIds(),
+      photoUrl: this.photo(),
     });
     if (!result.ok) {
       if (result.error === this.locale.tNow("errors.technician.name")) this.editError.set(result.error);
@@ -472,6 +496,9 @@ export default class TechniciensPage {
       return;
     }
     this.editing.set(null);
+    void syncImage("user", user.id, this.photoFile).then((sent) => {
+      if (!sent) this.snackbar.error(this.t()("ui.image.uploadFailed"));
+    });
     this.snackbar.success(this.t()("techniciens.edit.saved", { name: this.editName().trim() }));
   }
 

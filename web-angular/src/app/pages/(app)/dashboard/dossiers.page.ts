@@ -22,6 +22,7 @@ import {
   DetailModalComponent,
   FileSlotsComponent,
   IconComponent,
+  ImagePickerComponent,
   initialsOf,
   ModalComponent,
   PaginationComponent,
@@ -105,6 +106,7 @@ const emptyForm = (scoopId: string): NewForm => ({
   imports: [
     AppShellComponent,
     FileSlotsComponent,
+    ImagePickerComponent,
     IconComponent,
     ModalComponent,
     DetailModalComponent,
@@ -364,6 +366,13 @@ const emptyForm = (scoopId: string): NewForm => ({
           <h3 class="sec">
             <ui-icon name="person" [size]="18" />{{ t()("dossiers.new.section.identity") }}
           </h3>
+          <ui-image-picker
+            class="mb-5"
+            [value]="photo()"
+            [name]="form().firstName + ' ' + form().lastName"
+            (picked)="photo.set($event.dataUrl)"
+            (cleared)="photo.set(null)"
+          />
           <div class="grid gap-5 sm:grid-cols-2">
             <ui-text-field
               preset="firstName"
@@ -788,7 +797,11 @@ export default class DossiersPage {
     );
   }
 
+  /** Photo du producteur : gardée dans le brouillon, reportée sur sa fiche à l'approbation du dossier. */
+  protected readonly photo = signal<string | null>(null);
+
   protected openNew(): void {
+    this.photo.set(null);
     this.form.set(emptyForm(this.createScoops()[0]?.id ?? ""));
     this.issues.set([]);
     this.files.set([]);
@@ -861,6 +874,7 @@ export default class DossiersPage {
       village: f.village.trim(),
       orgId: f.orgId,
       createMember: f.createMember,
+      ...(this.photo() && { photoUrl: this.photo()! }),
     };
   }
 

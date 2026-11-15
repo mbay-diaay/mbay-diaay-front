@@ -1,7 +1,9 @@
 import { Component, computed, inject, signal, viewChildren } from "@angular/core";
 import { RouterLink } from "@angular/router";
 
+import { syncImage } from "@/lib/api/media";
 import { fmtDate, nf } from "@/lib/format";
+import type { PreparedImage } from "@/lib/image";
 import type { MessageKey } from "@/lib/i18n";
 import { accountOf, managerOf, type AccountState } from "@/lib/scoop-account";
 import { inScope } from "@/lib/scope";
@@ -10,8 +12,10 @@ import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
 import { StoreService } from "@shared/store.service";
 import {
+  AvatarComponent,
   CollapsibleComponent,
   IconComponent,
+  ImagePickerComponent,
   ModalComponent,
   PaginationComponent,
   SnackbarService,
@@ -67,6 +71,8 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
     RouterLink,
     AppShellComponent,
     IconComponent,
+    ImagePickerComponent,
+    AvatarComponent,
     ModalComponent,
     TextFieldComponent,
     CollapsibleComponent,
@@ -726,7 +732,11 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
                   class="coop-link flex min-w-0 flex-1 items-start gap-4 rounded-[14px]"
                   [routerLink]="['/dashboard/cooperatives', row.scoop.id]"
                 >
-                  <span class="monogram" aria-hidden="true">{{ row.mono }}</span>
+                  @if (row.scoop.logoUrl) {
+                    <ui-avatar [src]="row.scoop.logoUrl" [name]="row.scoop.name" shape="square" [size]="52" />
+                  } @else {
+                    <span class="monogram" aria-hidden="true">{{ row.mono }}</span>
+                  }
                   <span class="min-w-0">
                     <span
                       class="block text-[17px] font-extrabold leading-snug tracking-[-0.01em]"
@@ -941,12 +951,16 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
                 >
                   <td class="px-5 py-3.5">
                     <span class="flex items-center gap-3">
-                      <span
-                        class="monogram"
-                        style="height: 40px; width: 40px; border-radius: 12px; font-size: 12px"
-                        aria-hidden="true"
-                        >{{ row.mono }}</span
-                      >
+                      @if (row.scoop.logoUrl) {
+                        <ui-avatar [src]="row.scoop.logoUrl" [name]="row.scoop.name" shape="square" [size]="40" />
+                      } @else {
+                        <span
+                          class="monogram"
+                          style="height: 40px; width: 40px; border-radius: 12px; font-size: 12px"
+                          aria-hidden="true"
+                          >{{ row.mono }}</span
+                        >
+                      }
                       <span class="min-w-0">
                         <span class="block truncate font-bold">{{ row.scoop.name }}</span>
                         @if (row.place) {
@@ -1093,6 +1107,13 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
           novalidate
           (submit)="$event.preventDefault(); submitForm()"
         >
+          <ui-image-picker
+            shape="square"
+            [value]="logo()"
+            [name]="form().name"
+            (picked)="onLogo($event)"
+            (cleared)="clearLogo()"
+          />
           <ui-text-field
             #f_name
             preset="scoopName"
@@ -1522,6 +1543,9 @@ export default class CooperativesPage {
     managerEmail: "",
   };
   protected readonly form = signal({ ...this.emptyForm });
+  /** Logo choisi : aperçu (`data:`) gardé dans la fiche, et fichier à envoyer à l'API. */
+  protected readonly logo = signal<string | null>(null);
+  private logoFile: Blob | null = null;
   protected readonly errors = signal<Partial<Record<FieldKey, string>>>({});
   private readonly fields = viewChildren(TextFieldComponent);
 
@@ -1534,6 +1558,8 @@ export default class CooperativesPage {
     this.editId.set(null);
     this.form.set({ ...this.emptyForm });
     this.errors.set({});
+    this.logo.set(null);
+    this.logoFile = null;
     this.createOpen.set(true);
   }
 
@@ -1551,7 +1577,24 @@ export default class CooperativesPage {
       region: scoop.region ?? "",
     });
     this.errors.set({});
+    this.logo.set(scoop.logoUrl ?? null);
+    this.logoFile = null;
     this.createOpen.set(true);
+  }
+
+  protected onLogo(image: PreparedImage): void {
+    this.logo.set(image.dataUrl);
+    this.logoFile = image.blob;
+  }
+
+  protected clearLogo(): void {
+    this.logo.set(null);
+    this.logoFile = null;
+  }
+
+  /** Avec l'API branchée, envoie aussi le logo au serveur ; l'enregistrement local reste acquis en cas d'échec. */
+  private async syncLogo(scoopId: string): Promise<void> {
+    if (!(await syncImage("scoop", scoopId, this.logoFile))) this.snackbar.error(this.t()("ui.image.uploadFailed"));
   }
 
   protected submitForm(): void {
@@ -1584,12 +1627,14 @@ export default class CooperativesPage {
       commune: input.commune,
       code: input.code,
       region: input.region ?? "",
+      logoUrl: this.logo(),
     });
     if (!res.ok) {
       this.snackbar.error(this.t()(res.error as MessageKey));
       return;
     }
     this.createOpen.set(false);
+    void this.syncLogo(id);
     this.snackbar.success(this.t()("cooperatives.edit.done"));
   }
 
@@ -1630,12 +1675,13 @@ export default class CooperativesPage {
     const used = [...s.users.map((u) => u.email), ...s.members.map((m) => m.email)].filter(Boolean);
     const issues = scoopIssues(input, s.scoops, used);
     if (issues.length) return this.showIssues(issues);
-    const res = this.store.actions.createScoop(input);
+    const res = this.store.actions.createScoop({ ...input, ...(this.logo() && { logoUrl: this.logo()! }) });
     if (!res.ok) {
       this.snackbar.error(this.t()(res.error as MessageKey));
       return;
     }
     this.createOpen.set(false);
+    void this.syncLogo(res.scoopId);
     this.snackbar.success(
       this.t()("cooperatives.create.done", { email: input.manager.email.trim() }),
     );

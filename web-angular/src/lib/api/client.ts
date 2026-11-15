@@ -15,6 +15,7 @@ export class ApiError extends Error {
 
 type RequestOpts = {
   method?: string;
+  /** Objet JSON, ou `FormData` pour un envoi de fichier. */
   body?: unknown;
   auth?: boolean;
   /** Évite une boucle infinie sur refresh. */
@@ -46,7 +47,9 @@ export async function apiFetch<T>(path: string, opts: RequestOpts = {}): Promise
   const headers: Record<string, string> = {
     Accept: "application/json",
   };
-  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  const isForm = typeof FormData !== "undefined" && opts.body instanceof FormData;
+  // FormData : le navigateur pose lui-même le Content-Type multipart (avec sa frontière).
+  if (opts.body !== undefined && !isForm) headers["Content-Type"] = "application/json";
   if (opts.auth !== false) {
     const token = getAccessToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -56,7 +59,7 @@ export async function apiFetch<T>(path: string, opts: RequestOpts = {}): Promise
     method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
     headers,
   };
-  if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
+  if (opts.body !== undefined) init.body = isForm ? (opts.body as FormData) : JSON.stringify(opts.body);
 
   const res = await fetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, init);
 
