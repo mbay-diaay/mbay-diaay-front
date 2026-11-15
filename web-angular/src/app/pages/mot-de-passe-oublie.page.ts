@@ -6,11 +6,17 @@ import { OTP_LENGTH, OTP_TTL_MS, isPasswordValid, normalizeEmail } from "@/lib/a
 import type { CodeSent } from "@/lib/auth/types";
 import { AuthService } from "@shared/auth.service";
 import { LocaleService } from "@shared/locale.service";
+import type { RouteMeta } from "@analogjs/router";
+import { siteGateGuard } from "@shared/site-gate.guard";
 
 type Step =
   | { name: "email" }
   | { name: "code"; email: string; sent: CodeSent }
   | { name: "password"; email: string; resetToken: string };
+
+
+/** Rideau « site en construction » : code d'accès demandé tant qu'il n'a pas été saisi. */
+export const routeMeta: RouteMeta = { canActivate: [siteGateGuard] };
 
 /**
  * Port allégé de src/routes/mot-de-passe-oublie.tsx — réinitialisation en

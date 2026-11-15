@@ -132,6 +132,16 @@ export const shell = {
   "ui.files.sensitive": "Sensible",
   "ui.files.remove": "Retirer {name}",
   "ui.files.add": "Ajouter un fichier",
+  /** Écran « site en construction » (`/construction`), avant l'ouverture au public. */
+  "gate.eyebrow": "Bientôt disponible",
+  "gate.title": "Le site est en construction",
+  "gate.text": "Mbay Diaay ouvre bientôt. L'accès est réservé à l'équipe du projet et aux testeurs : saisissez le code qui vous a été remis.",
+  "gate.label": "Code d'accès",
+  "gate.placeholder": "Ex. ABCD-EFGH",
+  "gate.submit": "Entrer",
+  "gate.error": "Ce code n'est pas le bon. Vérifiez-le auprès de l'équipe du projet.",
+  "gate.empty": "Saisissez le code d'accès.",
+  "gate.help": "Pas de code ? Contactez le CRADESC",
   /** Sélecteur d'image (logo, photo) : `ui-image-picker`. */
   "ui.image.add": "Ajouter une image",
   "ui.image.change": "Changer",
