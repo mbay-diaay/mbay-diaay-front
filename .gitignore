@@ -64,3 +64,4 @@ playwright-report/
 
 # PDF de travail : jamais envoyés sur GitHub (sauf ceux déjà suivis)
 /*.pdf
+/docs/cadrage/*.pdf
