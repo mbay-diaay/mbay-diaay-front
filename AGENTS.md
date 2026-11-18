@@ -11,19 +11,21 @@ Mbay Diaay Module 1 administratif SCOOP (Zone des Niayes, client CRADESC). Donn�
 ## Commandes
 Node **22.x** uniquement (jamais de plage ouverte), pnpm ≥ 11 (jamais `npm`/`bun install`).
 
-Angular (depuis `web-angular/`) :
-- `pnpm dev` — vite
-- `pnpm typecheck` — `tsc --noEmit -p tsconfig.app.json`
-- `pnpm test` — `vitest run` (seul test actuel : `src/app/app.spec.ts`)
-- `pnpm build` — `vite build` (site statique dans `dist/client`)
+Angular (depuis `web-angular/`, dépendances séparées : `pnpm install --ignore-workspace`) :
+- `pnpm dev` — vite (port 4200)
+- `pnpm typecheck` — `tsc --noEmit -p tsconfig.app.json` (ne valide pas les templates Angular)
+- `pnpm test` — `vitest run` (seul test : `src/app/app.spec.ts`)
+- `pnpm build` — `vite build` (site statique dans `dist/client`) ; seul moyen de compiler les templates
 - `pnpm check:host` — garde-fou site statique / `.env.production`
 - `pnpm ci` — `check:host` + `typecheck` + `build`
+- Pas de config ESLint/Prettier dans `web-angular/`
 
 E2E Playwright (depuis la racine, démarre `web-angular` sur le port 4173) :
 - `pnpm e2e:install` — une fois
 - `pnpm e2e` — projets « bureau » et « mobile » (fichiers `mobile*.spec.ts`)
 - `pnpm e2e e2e/auth.spec.ts` — un fichier ; ajouter `-g "<titre>"` pour un test
 - `E2E_BASE_URL=http://localhost:4173 pnpm e2e` — cibler un serveur déjà lancé
+- Piège hydration Angular : après `waitForSelector`, attendre un court instant avant de cliquer (listeners pas encore attachés).
 
 React archive (depuis la racine) :
 - `pnpm run ci` — `check:host`, `typecheck`, `lint`, `format:check`, `test`, `build`
@@ -43,7 +45,7 @@ React archive (depuis la racine) :
 ## Hébergement / pièges de déploiement
 - Le front Angular est un **site statique** (`analog({ ssr: false })`, sortie `dist/client`), voir `docs/DEPLOY_FRONT.md`. Ne pas rétablir le rendu serveur sans mettre à jour ce guide et `pnpm check:host` dans le même commit.
 - Hébergement : Build Path `web-angular/`, Node 22.x, dossier publié `dist/client`, mode SPA activé.
-- `VITE_DEMO_MODE` (`true|false`) doit être commitée dans `.env.production` (lue par Vite et `scripts/check-env.mjs`) ; les variables `VITE_*` sont lues à la construction.
+- `VITE_DEMO_MODE` (`true|false`) doit être commitée dans `.env.production` (racine pour React, `web-angular/.env.production` pour Angular ; lue par Vite et `scripts/check-env.mjs` depuis le cwd) ; les variables `VITE_*` sont lues à la construction.
 - CSP en **Report-Only**, posée sur le routeur du serveur (voir `docs/DEPLOY_FRONT.md`) ; tuiles Esri autorisées, pas d'OSM.org.
 
 ## Workflow
