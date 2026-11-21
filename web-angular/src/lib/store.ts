@@ -3656,6 +3656,52 @@ export const actions = {
     audit("Coopérative réactivée", `SCOOP ${scoop.name}`, "", id);
     return { ok: true };
   },
+  /** Mode API : remplace la liste locale des coopératives par celle du serveur (source de vérité). */
+  replaceScoopsFromApi(items: Scoop[]) {
+    set({ scoops: items });
+  },
+  /**
+   * Mode API : ajoute ou met à jour une coopérative renvoyée par le serveur. Le compte gestionnaire créé avec elle
+   * rejoint la liste locale (inactif, invité) pour apparaître tout de suite dans l'équipe.
+   */
+  upsertScoopFromApi(scoop: Scoop, manager?: { userId: string; name: string; email: string }) {
+    set((s) => ({
+      scoops: s.scoops.some((x) => x.id === scoop.id)
+        ? s.scoops.map((x) => (x.id === scoop.id ? scoop : x))
+        : [...s.scoops, scoop],
+      users:
+        manager && !s.users.some((user) => user.id === manager.userId)
+          ? [
+              ...s.users,
+              {
+                id: manager.userId,
+                name: manager.name,
+                email: manager.email,
+                phone: "",
+                role: "gestionnaire",
+                scoopId: scoop.id,
+                active: false,
+                invited: { sentAt: new Date().toISOString(), expiresAt: new Date(Date.now() + INVITATION_TTL_MS).toISOString() },
+              } satisfies AppUser,
+            ]
+          : s.users,
+    }));
+  },
+  /** Mode API : archive ou réactive en local ce que le serveur vient d'archiver (les accès fermés se désactivent). */
+  setScoopArchivedFromApi(id: string, archived: boolean) {
+    const closes = (u: AppUser) =>
+      u.active &&
+      u.role !== "admin" &&
+      (u.scoopId === id || (u.scoopIds?.length === 1 && u.scoopIds[0] === id));
+    set((s) => ({
+      scoops: s.scoops.map((x) => {
+        if (x.id !== id) return x;
+        const { archived: _previous, ...rest } = x;
+        return archived ? { ...rest, archived: true } : rest;
+      }),
+      users: archived ? s.users.map((u) => (closes(u) ? { ...u, active: false } : u)) : s.users,
+    }));
+  },
   /** Nouvelle invitation pour un compte qui n'a pas encore choisi son mot de passe. */
   resendInvitation(userId: string): ActionResult {
     const who = actor();

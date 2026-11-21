@@ -1,7 +1,18 @@
 import { Component, computed, inject, signal, viewChildren } from "@angular/core";
 import { RouterLink } from "@angular/router";
 
+import { isApiMode } from "@/lib/api/config";
 import { syncImage } from "@/lib/api/media";
+import { fetchAllPages } from "@/lib/api/pagination";
+import {
+  archiveScoop as archiveScoopApi,
+  createScoop as createScoopApi,
+  listScoops,
+  restoreScoop as restoreScoopApi,
+  scoopApiError,
+  scoopFromApi,
+  updateScoop as updateScoopApi,
+} from "@/lib/api/scoops";
 import { fmtDate, nf } from "@/lib/format";
 import type { PreparedImage } from "@/lib/image";
 import type { MessageKey } from "@/lib/i18n";
@@ -1192,7 +1203,7 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
           <button type="button" class="btn btn-ghost" (click)="createOpen.set(false)">
             {{ t()("cooperatives.form.cancel") }}
           </button>
-          <button type="submit" form="create-scoop" class="btn btn-primary">
+          <button type="submit" form="create-scoop" class="btn btn-primary" [disabled]="saving()">
             {{
               formMode() === "edit"
                 ? t()("cooperatives.edit.submit")
@@ -1266,6 +1277,8 @@ export default class CooperativesPage {
   protected readonly view = signal<View>(readView());
   protected readonly menuFor = signal<string | null>(null);
   protected readonly createOpen = signal(false);
+  /** Vrai pendant un envoi à l'API : évite le double clic sur « Enregistrer ». */
+  protected readonly saving = signal(false);
   protected readonly archiveTarget = signal<{
     id: string;
     blocked: boolean;
@@ -1553,6 +1566,33 @@ export default class CooperativesPage {
   protected readonly formMode = signal<"create" | "edit">("create");
   private readonly editId = signal<string | null>(null);
 
+  constructor() {
+    // Mode API : la liste vient du serveur (source de vérité), y compris après un rechargement de la page.
+    if (isApiMode()) void this.loadFromApi();
+  }
+
+  private async loadFromApi(): Promise<void> {
+    try {
+      const scoops = await fetchAllPages((query) => listScoops(query));
+      this.store.actions.replaceScoopsFromApi(scoops.map(scoopFromApi));
+    } catch {
+      this.snackbar.error(this.t()("errors.scoop.loadError"));
+    }
+  }
+
+  /** Affiche une erreur de l'API sous le bon champ (ou en message général) et rend la main au formulaire. */
+  private showApiError(error: unknown): void {
+    const { key, field } = scoopApiError(error);
+    const message = this.t()(key);
+    if (field) {
+      this.errors.set({ [field]: message });
+      const index = FIELD_ORDER.indexOf(field);
+      const order = [0, 1, 3, 4, 5];
+      this.fields()[order[index] ?? 0]?.focus();
+    }
+    this.snackbar.error(message);
+  }
+
   protected openCreate(): void {
     this.formMode.set("create");
     this.editId.set(null);
@@ -1622,6 +1662,10 @@ export default class CooperativesPage {
     const input = this.input();
     const issues = scoopIssues(input, s.scoops, [], { checkManager: false, ignore: id });
     if (issues.length) return this.showIssues(issues);
+    if (isApiMode()) {
+      void this.submitEditApi(id, input);
+      return;
+    }
     const res = this.store.actions.updateScoop(id, {
       name: input.name,
       commune: input.commune,
@@ -1636,6 +1680,28 @@ export default class CooperativesPage {
     this.createOpen.set(false);
     void this.syncLogo(id);
     this.snackbar.success(this.t()("cooperatives.edit.done"));
+  }
+
+  private async submitEditApi(id: string, input: ScoopInput & { region?: string }): Promise<void> {
+    if (this.saving()) return;
+    this.saving.set(true);
+    try {
+      const saved = await updateScoopApi(id, {
+        name: input.name,
+        commune: input.commune,
+        code: input.code,
+        region: input.region ?? "",
+      });
+      // Le logo (aperçu local ou lien signé) reste celui du navigateur tant que le serveur n'en renvoie pas un nouveau.
+      this.store.actions.upsertScoopFromApi({ ...scoopFromApi(saved), ...(this.logo() && { logoUrl: this.logo()! }) });
+      this.createOpen.set(false);
+      void this.syncLogo(id);
+      this.snackbar.success(this.t()("cooperatives.edit.done"));
+    } catch (error) {
+      this.showApiError(error);
+    } finally {
+      this.saving.set(false);
+    }
   }
 
   protected patch(key: keyof typeof this.emptyForm, value: string): void {
@@ -1672,9 +1738,14 @@ export default class CooperativesPage {
   private submitCreate(): void {
     const s = this.store.state();
     const input = this.input();
-    const used = [...s.users.map((u) => u.email), ...s.members.map((m) => m.email)].filter(Boolean);
+    // Mode API : les adresses déjà prises sont connues du serveur seul, qui répond « adresse déjà utilisée ».
+    const used = isApiMode() ? [] : [...s.users.map((u) => u.email), ...s.members.map((m) => m.email)].filter(Boolean);
     const issues = scoopIssues(input, s.scoops, used);
     if (issues.length) return this.showIssues(issues);
+    if (isApiMode()) {
+      void this.submitCreateApi(input);
+      return;
+    }
     const res = this.store.actions.createScoop({ ...input, ...(this.logo() && { logoUrl: this.logo()! }) });
     if (!res.ok) {
       this.snackbar.error(this.t()(res.error as MessageKey));
@@ -1685,6 +1756,41 @@ export default class CooperativesPage {
     this.snackbar.success(
       this.t()("cooperatives.create.done", { email: input.manager.email.trim() }),
     );
+  }
+
+  private async submitCreateApi(input: ScoopInput & { region?: string }): Promise<void> {
+    if (this.saving()) return;
+    this.saving.set(true);
+    try {
+      const created = await createScoopApi({
+        name: input.name,
+        commune: input.commune,
+        ...(input.code && { code: input.code }),
+        ...(input.region?.trim() && { region: input.region.trim() }),
+        manager: {
+          firstName: input.manager.firstName,
+          lastName: input.manager.lastName,
+          email: input.manager.email,
+        },
+      });
+      this.store.actions.upsertScoopFromApi(
+        { ...scoopFromApi(created), ...(this.logo() && { logoUrl: this.logo()! }) },
+        created.manager
+          ? {
+              userId: created.manager.userId,
+              name: `${input.manager.firstName.trim()} ${input.manager.lastName.trim()}`,
+              email: input.manager.email.trim(),
+            }
+          : undefined,
+      );
+      this.createOpen.set(false);
+      void this.syncLogo(created.id);
+      this.snackbar.success(this.t()("cooperatives.create.done", { email: input.manager.email.trim() }));
+    } catch (error) {
+      this.showApiError(error);
+    } finally {
+      this.saving.set(false);
+    }
   }
 
   // ───── Archivage / réactivation ─────
@@ -1731,6 +1837,10 @@ export default class CooperativesPage {
   }
 
   protected confirmArchive(id: string): void {
+    if (isApiMode()) {
+      void this.confirmArchiveApi(id);
+      return;
+    }
     const res = this.store.actions.archiveScoop(id);
     this.archiveTarget.set(null);
     if (!res.ok) {
@@ -1743,8 +1853,37 @@ export default class CooperativesPage {
     );
   }
 
+  private async confirmArchiveApi(id: string): Promise<void> {
+    try {
+      const archived = await archiveScoopApi(id);
+      this.archiveTarget.set(null);
+      this.store.actions.setScoopArchivedFromApi(id, true);
+      const n = archived.closedAccounts;
+      this.snackbar.success(
+        `${this.t()("cooperatives.archive.done")} · ${this.t()(n > 1 ? "cooperatives.archive.doneAccounts.autre" : "cooperatives.archive.doneAccounts.un", { count: n })}`,
+      );
+    } catch (error) {
+      this.archiveTarget.set(null);
+      this.snackbar.error(this.t()(scoopApiError(error).key));
+    }
+  }
+
+  private async restoreApi(id: string): Promise<void> {
+    try {
+      await restoreScoopApi(id);
+      this.store.actions.setScoopArchivedFromApi(id, false);
+      this.snackbar.success(this.t()("cooperatives.restore.done"));
+    } catch (error) {
+      this.snackbar.error(this.t()(scoopApiError(error).key));
+    }
+  }
+
   protected restore(id: string): void {
     this.menuFor.set(null);
+    if (isApiMode()) {
+      void this.restoreApi(id);
+      return;
+    }
     const res = this.store.actions.restoreScoop(id);
     if (!res.ok) {
       this.snackbar.error(this.t()(res.error as MessageKey));
