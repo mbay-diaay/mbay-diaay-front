@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from "@angular/core";
 import { CommonModule } from "@angular/common";
@@ -34,6 +35,7 @@ import { BRAND, CRADESC } from "@/config/brand";
 import { can } from "@/lib/store";
 import { loadMeetingsIntoStore } from "@/lib/api/meetings";
 import { LocaleService } from "./locale.service";
+import { ProducerWorkflow } from "./producer-workflow.service";
 import { StoreService } from "./store.service";
 import { SidebarNavComponent } from "./sidebar-nav.component";
 import { CommandPaletteComponent } from "./command-palette.component";
@@ -638,6 +640,7 @@ export class AppLayoutComponent {
   protected readonly localeService = inject(LocaleService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly producerWorkflow = inject(ProducerWorkflow);
 
   protected readonly t = this.localeService.t;
   protected readonly brand = BRAND;
@@ -823,6 +826,12 @@ export class AppLayoutComponent {
       };
       document.addEventListener("click", onDocClick);
       this.destroyRef.onDestroy(() => document.removeEventListener("click", onDocClick));
+    });
+
+    // Mode API : producteurs, dossiers et corrections du périmètre lus sur le serveur à chaque ouverture de session.
+    effect(() => {
+      const email = this.session()?.email;
+      if (email && this.ready()) untracked(() => void this.producerWorkflow.hydrate());
     });
 
     // Redirect to /login if there's no session (mirrors the React useEffect).
