@@ -10,6 +10,7 @@ import { inScope } from "@/lib/store";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
 import { PlotMapComponent } from "@shared/plot-map.component";
+import { ProducerWorkflow } from "@shared/producer-workflow.service";
 import { StoreService } from "@shared/store.service";
 import {
   DetailHeroComponent,
@@ -613,6 +614,7 @@ const PHONE_RE = /^7[0678]\s?\d{3}\s?\d{2}\s?\d{2}$/;
 export default class ProducteurDetailPage {
   private readonly route = inject(ActivatedRoute);
   readonly store = inject(StoreService);
+  private readonly flow = inject(ProducerWorkflow);
   readonly locale = inject(LocaleService);
   readonly t = this.locale.t;
   readonly fmtAge = fmtAge;
@@ -826,21 +828,25 @@ export default class ProducteurDetailPage {
     this.cniReason.set("");
   }
 
-  confirmRevealCni(): void {
+  async confirmRevealCni(): Promise<void> {
     const p = this.producer();
     if (!p) return;
-    try {
-      this.store.actions.revealCni(p, this.cniReason().trim());
-      this.showCni.set(true);
-      this.snackbar.info(this.t()("producteurs.detail.revealed"));
-      this.closeCniDialog();
-    } catch {
-      this.snackbar.error(this.t()("producteurs.detail.cniDialog.tooShort"));
+    const res = await this.flow.revealCni(p, this.cniReason().trim());
+    if (!res.ok) {
+      this.snackbar.error(res.error);
+      return;
     }
+    this.showCni.set(true);
+    this.snackbar.info(this.t()("producteurs.detail.revealed"));
+    this.closeCniDialog();
   }
 
-  revealPhone(p: Producer): void {
-    this.store.actions.revealPhone(p);
+  async revealPhone(p: Producer): Promise<void> {
+    const res = await this.flow.revealPhone(p);
+    if (!res.ok) {
+      this.snackbar.error(res.error);
+      return;
+    }
     this.showPhone.set(true);
     this.snackbar.info(this.t()("producteurs.detail.revealed"));
   }
@@ -857,10 +863,14 @@ export default class ProducteurDetailPage {
     this.correctionOpen.set(true);
   }
 
-  submitCorrectionForm(): void {
+  async submitCorrectionForm(): Promise<void> {
     const p = this.producer();
     if (!p || !this.canSubmitCorrection()) return;
-    this.store.actions.submitCorrection(p.id, this.correctionChanges(), this.corrMotif().trim());
+    const res = await this.flow.submitCorrection(p.id, this.correctionChanges(), this.corrMotif().trim());
+    if (!res.ok) {
+      this.snackbar.error(res.error);
+      return;
+    }
     this.correctionOpen.set(false);
     this.snackbar.success(
       `${this.t()("producteurs.detail.correction.sent")} · ${this.t()("producteurs.detail.correction.sentDesc")}`,
