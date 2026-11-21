@@ -1218,6 +1218,53 @@ export const actions = {
   removeUserFromApi(userId: string) {
     set((s) => ({ users: s.users.filter((user) => user.id !== userId) }));
   },
+  // ============ Producteurs, corrections et dossiers lus sur l'API (mode API) ============
+
+  /** Remplace les fiches producteurs par celles du périmètre du compte, lues sur l'API. */
+  setProducersFromApi(items: Producer[]) {
+    set({ producers: items });
+  },
+  upsertProducerFromApi(item: Producer) {
+    set((s) => ({
+      producers: s.producers.some((p) => p.id === item.id)
+        ? s.producers.map((p) => (p.id === item.id ? item : p))
+        : [...s.producers, item],
+    }));
+  },
+  /** CNI ou téléphone révélés par l'API : le clair remplace le masque, le temps de la session. */
+  revealProducerFromApi(id: string, secret: { cni?: string; phone?: string }) {
+    set((s) => ({ producers: s.producers.map((p) => (p.id === id ? { ...p, ...secret } : p)) }));
+  },
+  setDossiersFromApi(items: ProducerDossier[]) {
+    set({ dossiers: items });
+  },
+  upsertDossierFromApi(item: ProducerDossier) {
+    set((s) => ({
+      dossiers: s.dossiers.some((d) => d.id === item.id)
+        ? s.dossiers.map((d) => (d.id === item.id ? item : d))
+        : [...s.dossiers, item],
+    }));
+  },
+  /** Fin d'un dossier approuvé : ses pièces passent à la fiche producteur créée. */
+  reassignDossierDocuments(dossierId: string, producerId: string) {
+    set((s) => ({
+      documents: s.documents.map((d) =>
+        d.ownerType === "dossier" && d.ownerId === dossierId
+          ? { ...d, ownerType: "producteur" as const, ownerId: producerId }
+          : d,
+      ),
+    }));
+  },
+  setCorrectionsFromApi(items: CorrectionRequest[]) {
+    set({ corrections: items });
+  },
+  upsertCorrectionFromApi(item: CorrectionRequest) {
+    set((s) => ({
+      corrections: s.corrections.some((c) => c.id === item.id)
+        ? s.corrections.map((c) => (c.id === item.id ? item : c))
+        : [item, ...s.corrections],
+    }));
+  },
   /**
    * Désactive ou réactive un compte. On ne se désactive pas soi-même ; seul le super administrateur touche à un
    * compte super administrateur. Un compte désactivé ne se connecte plus, ses données restent.

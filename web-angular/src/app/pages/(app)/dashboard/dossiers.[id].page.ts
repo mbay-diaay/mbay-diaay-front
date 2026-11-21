@@ -18,6 +18,7 @@ import {
 import { scopedDossiers } from "@/lib/scope";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
+import { ProducerWorkflow } from "@shared/producer-workflow.service";
 import { StoreService } from "@shared/store.service";
 import {
   DetailHeroComponent,
@@ -711,6 +712,7 @@ type DialogKind = "approve" | "complement" | "refuse" | null;
 export default class DossierDetailPage {
   private readonly route = inject(ActivatedRoute);
   readonly store = inject(StoreService);
+  private readonly flow = inject(ProducerWorkflow);
   readonly locale = inject(LocaleService);
   readonly t = this.locale.t;
   readonly maskPhone = maskPhone;
@@ -870,27 +872,27 @@ export default class DossierDetailPage {
     return out;
   }
 
-  saveDraft(): void {
+  async saveDraft(): Promise<void> {
     const d = this.dossier();
     if (!d) return;
     const p = this.patch();
     if (!Object.keys(p).length) return;
-    const res = this.store.actions.updateDossier(d.id, p);
+    const res = await this.flow.updateDossier(d.id, p);
     this.say(res.ok, res.ok ? this.t()("dossiers.detail.edit.saved") : this.errMsg(res.error));
   }
 
-  saveAndSubmit(): void {
+  async saveAndSubmit(): Promise<void> {
     const d = this.dossier();
     if (!d) return;
     const p = this.patch();
     if (Object.keys(p).length) {
-      const save = this.store.actions.updateDossier(d.id, p);
+      const save = await this.flow.updateDossier(d.id, p);
       if (!save.ok) {
         this.say(false, this.errMsg(save.error));
         return;
       }
     }
-    const res = this.store.actions.submitDossier(d.id);
+    const res = await this.flow.submitDossier(d.id);
     this.say(
       res.ok,
       res.ok
@@ -902,7 +904,7 @@ export default class DossierDetailPage {
   }
 
   /** Pièces déposées dans une case (type = case), 5 Mo au plus chacune. */
-  addFiles(kind: string, files: File[]): void {
+  async addFiles(kind: string, files: File[]): Promise<void> {
     const d = this.dossier();
     if (!d) return;
     for (const file of files) {
@@ -913,7 +915,7 @@ export default class DossierDetailPage {
         );
         continue;
       }
-      const res = this.store.actions.addDocument(d.id, {
+      const res = await this.flow.addDocument(d.id, {
         kind: kind as DocumentKind,
         name: file.name,
         sizeKb,
@@ -923,8 +925,8 @@ export default class DossierDetailPage {
     }
   }
 
-  removeDoc(docId: string): void {
-    const res = this.store.actions.removeDocument(docId);
+  async removeDoc(docId: string): Promise<void> {
+    const res = await this.flow.removeDocument(docId);
     this.say(res.ok, res.ok ? this.t()("dossiers.detail.pieces.removed") : this.errMsg(res.error));
   }
 
@@ -939,20 +941,20 @@ export default class DossierDetailPage {
     this.dialog.set("refuse");
   }
 
-  startReview(): void {
+  async startReview(): Promise<void> {
     const d = this.dossier();
     if (!d) return;
-    const res = this.store.actions.startReview(d.id);
+    const res = await this.flow.startReview(d.id);
     this.say(
       res.ok,
       res.ok ? this.t()("dossiers.detail.decision.startedToast") : this.errMsg(res.error),
     );
   }
 
-  approve(): void {
+  async approve(): Promise<void> {
     const d = this.dossier();
     if (!d) return;
-    const res = this.store.actions.approveDossier(d.id, {
+    const res = await this.flow.approveDossier(d.id, {
       ...(d.possibleDuplicateOf ? { duplicate: this.duplicateChoice } : {}),
       createMember: this.createMember,
     });
@@ -967,10 +969,10 @@ export default class DossierDetailPage {
     );
   }
 
-  complement(): void {
+  async complement(): Promise<void> {
     const d = this.dossier();
     if (!d) return;
-    const res = this.store.actions.requestComplement(d.id, this.comment);
+    const res = await this.flow.requestComplement(d.id, this.comment);
     this.dialog.set(null);
     this.say(
       res.ok,
@@ -978,10 +980,10 @@ export default class DossierDetailPage {
     );
   }
 
-  refuse(): void {
+  async refuse(): Promise<void> {
     const d = this.dossier();
     if (!d) return;
-    const res = this.store.actions.refuseDossier(d.id, this.refuseReason, this.comment);
+    const res = await this.flow.refuseDossier(d.id, this.refuseReason, this.comment);
     this.dialog.set(null);
     this.say(
       res.ok,

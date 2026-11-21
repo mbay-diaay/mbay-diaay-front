@@ -7,6 +7,7 @@ import type { MessageKey } from "@/lib/i18n";
 import { inScope } from "@/lib/scope";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
+import { ProducerWorkflow } from "@shared/producer-workflow.service";
 import { StoreService } from "@shared/store.service";
 import { createPager } from "@shared/pager";
 import {
@@ -419,6 +420,7 @@ const STATUS_TONE: Record<CorrectionStatus, { bg: string; fg: string }> = {
 })
 export default class QualiteCorrectionsPage {
   protected readonly store = inject(StoreService);
+  private readonly flow = inject(ProducerWorkflow);
   protected readonly locale = inject(LocaleService);
   protected readonly t = this.locale.t;
   protected readonly ALL = ALL;
@@ -685,18 +687,19 @@ export default class QualiteCorrectionsPage {
     return this.t()(STATUS_VALUE_LABEL[s]);
   }
 
-  protected decide(approved: boolean) {
+  protected async decide(approved: boolean) {
     const o = this.open();
     if (!o) return;
     const cmt = this.decisionComment().trim();
     if (!approved && cmt.length < 3) return;
-    this.store.actions.decideCorrection(
+    const res = await this.flow.decideCorrection(
       o.id,
       approved,
       cmt || "Approuvée après vérification du justificatif.",
     );
     this.closeDialog();
-    if (approved) this.snackbar.success(this.t()("qualite.v2.corr.approved"));
+    if (!res.ok) this.snackbar.error(res.error);
+    else if (approved) this.snackbar.success(this.t()("qualite.v2.corr.approved"));
     else this.snackbar.info(this.t()("qualite.v2.corr.refused"));
   }
 
