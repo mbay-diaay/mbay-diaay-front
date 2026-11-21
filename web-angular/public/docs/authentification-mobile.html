@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>Authentification mobile technicien</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap">
+<style>
+/* Fond blanc, thème unique. Un arbre d'organigramme : racine en haut, branches par situation, une chaîne d'écrans sous chaque branche. */
+:root{--bg:#ffffff;--fg:#16231c;--muted:#58675e;--card:#fff;--line:#9db3a4;--accent:#1d4a36;--ok:#1d5a2b;--ok-bg:#dcefdc;--ok-bd:#8fc79c;--todo:#7a4a00;--todo-bg:#f8e9c8;--todo-bd:#dcb760;--bad:#8a2616;--bad-bg:#f8e1dc;--bad-bd:#e09a8c;--root:#1d4a36;--root-fg:#e9f06a;--font:'Plus Jakarta Sans',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace}
+body{background:var(--bg);color:var(--fg);font:14px/1.4 var(--font);padding-block:28px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:1100px;margin:0 auto;display:grid;gap:18px}
+h1{font-size:24px;margin:0;color:var(--accent);text-wrap:balance}
+.sub{color:var(--muted);margin:4px 0 0}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:12px;height:12px;border-radius:3px;border:2px solid}
+.d-ok{background:var(--ok-bg);border-color:var(--ok-bd)}.d-todo{background:var(--todo-bg);border-color:var(--todo-bd)}.d-bad{background:var(--bad-bg);border-color:var(--bad-bd)}
+.scroll{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 12px 24px}
+/* arbre */
+.tree{min-width:max-content;margin:0 auto}
+.tree ul{display:flex;justify-content:center;padding-top:22px;margin:0;position:relative}
+.tree>ul{padding-top:0}
+.tree li{list-style:none;position:relative;padding:22px 7px 0;text-align:center;display:flex;flex-direction:column;align-items:center}
+.tree li::before,.tree li::after{content:"";position:absolute;top:0;right:50%;width:50%;height:22px;border-top:2px solid var(--line)}
+.tree li::after{right:auto;left:50%;border-left:2px solid var(--line)}
+.tree li:only-child::before,.tree li:only-child::after{display:none}
+.tree li:only-child{padding-top:0}
+.tree li:first-child::before,.tree li:last-child::after{border:0 none}
+.tree li:last-child::before{border-right:2px solid var(--line);border-radius:0 8px 0 0}
+.tree li:first-child::after{border-radius:8px 0 0 0}
+.tree ul ul::before{content:"";position:absolute;top:0;left:50%;border-left:2px solid var(--line);height:22px}
+.tree>ul>li{padding-top:0}
+.tree>ul>li::before,.tree>ul>li::after{display:none}
+.node{width:176px;padding:9px 10px;border-radius:10px;border:2px solid;background:var(--card);box-sizing:border-box}
+.node b{display:block;font-size:13px;line-height:1.25}
+.node code{display:block;font:600 10.5px var(--mono);margin-top:4px;overflow-wrap:anywhere;opacity:.85}
+.ok{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok)}
+.todo{background:var(--todo-bg);border-color:var(--todo-bd);color:var(--todo)}
+.bad{background:var(--bad-bg);border-color:var(--bad-bd);color:var(--bad)}
+.root{background:var(--root);border-color:var(--root);color:var(--root-fg);width:220px;text-align:center}
+.branch{background:var(--card);border-color:var(--accent);color:var(--accent)}
+.hint{font-size:12.5px;color:var(--muted)}
+h2{font-size:17px;margin:10px 0 0;color:var(--accent)}
+.node.q{border-style:dashed;background:var(--card);color:var(--accent)}
+.wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:720px}
+th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:9px 12px;border-bottom:1px solid var(--line)}
+td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13px}tr:last-child td{border-bottom:0}
+td code,.pill{font:600 12px var(--mono)}
+.pill{padding:1px 8px;border-radius:99px;border:1.5px solid;white-space:nowrap;display:inline-block}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.cols>div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px;min-width:0}
+.cols h3{margin:0 0 6px;font-size:14px;color:var(--accent)}
+.cols ul{margin:0;padding-left:18px;display:grid;gap:4px;font-size:13px}
+</style>
+<main>
+<header><h1>Authentification mobile technicien</h1><p class="sub">Ce qui se passe quand le technicien ouvre l’app, et ce qui change. Code d’activation : 5 chiffres.</p></header>
+<div class="legend"><span><i class="dot d-ok"></i>Existe déjà</span><span><i class="dot d-todo"></i>À faire ou à changer (mobile)</span><span><i class="dot d-bad"></i>Défaut à corriger</span><span>Cadre pointillé = condition</span></div>
+<div class="scroll"><div class="tree"><ul><li><div class="node root"><b>Ouverture de l'app</b></div><ul><li><div class="node q"><b>Si appareil neuf</b></div><ul><li><div class="node todo"><b>Première connexion</b>téléphone + code 5 chiffres + mot de passe<code>POST /auth/technician/activate</code></div><ul><li><div class="node q"><b>Si OK</b></div><ul><li><div class="node ok"><b>Profil</b><code>GET /me</code></div><ul><li><div class="node ok"><b>Création du PIN</b></div><ul><li><div class="node ok"><b>Téléchargement</b>annuaire<code>GET /producers</code></div></li></ul></li></ul></li></ul></li><li><div class="node q"><b>Si code faux ou expiré</b></div><ul><li><div class="node todo"><b>Message + nouvel essai</b>INVALID_ACTIVATION</div></li></ul></li><li><div class="node q"><b>Si 5 essais faux</b></div><ul><li><div class="node todo"><b>Nouveau code du gestionnaire</b>ACTIVATION_LOCKED</div></li></ul></li></ul></li></ul></li><li><div class="node q"><b>Si déjà activé</b></div><ul><li><div class="node ok"><b>Écran PIN</b></div><ul><li><div class="node q"><b>Si PIN juste</b></div><ul><li><div class="node ok"><b>Accueil</b></div></li></ul></li><li><div class="node q"><b>Si 3 erreurs</b></div><ul><li><div class="node ok"><b>Blocage temporaire</b></div></li></ul></li></ul></li></ul></li><li><div class="node q"><b>Si jeton expiré (401)</b></div><ul><li><div class="node bad"><b>Renouvellement</b>un 429 ou 5xx déconnecte à tort<code>POST /auth/refresh</code></div><ul><li><div class="node q"><b>Si OK</b></div><ul><li><div class="node ok"><b>On continue</b></div></li></ul></li><li><div class="node q"><b>Si refusé</b></div><ul><li><div class="node todo"><b>Écran Connexion</b>téléphone + mot de passe<code>POST /auth/technician/sign-in</code></div><ul><li><div class="node q"><b>Si compte désactivé ou nouveau code</b></div><ul><li><div class="node todo"><b>Première connexion</b></div></li></ul></li></ul></li></ul></li></ul></li></ul></li><li><div class="node q"><b>Si réseau coupé</b></div><ul><li><div class="node ok"><b>Session gardée</b>mode hors ligne</div></li></ul></li><li><div class="node q"><b>Si rôle ≠ technicien</b></div><ul><li><div class="node todo"><b>Accès refusé</b>après GET /me</div></li></ul></li><li><div class="node q"><b>Si déconnexion</b></div><ul><li><div class="node bad"><b>Efface le local</b>jeton valable 7 jours côté serveur<code>POST /auth/logout</code></div></li></ul></li></ul></li></ul></div></div>
+
+<h2>Endpoints</h2>
+<div class="wrap"><table><thead><tr><th>Méthode</th><th>Route (<code>/v1</code>)</th><th>Rôle</th><th>Envoie</th><th>Reçoit</th><th>Erreurs</th><th>Mobile</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/auth/technician/activate</code></td><td>Première connexion</td><td><code>{phone, code, password}</code></td><td>tokens + user</td><td>INVALID_ACTIVATION, ACTIVATION_LOCKED</td><td><span class="pill todo">à brancher</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/technician/sign-in</code></td><td>Reconnexion</td><td><code>{phone, password}</code></td><td>tokens + user</td><td>INVALID_CREDENTIALS</td><td><span class="pill todo">à brancher</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/refresh</code></td><td>Renouveler la session</td><td><code>{refreshToken}</code></td><td>tokens</td><td>REFRESH_INVALID</td><td><span class="pill bad">à corriger</span></td></tr><tr><td><code>GET</code></td><td><code>/me</code></td><td>Rôle, SCOOP, permissions</td><td><code>—</code></td><td>user + permissions</td><td>UNAUTHORIZED</td><td><span class="pill ok">en place</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/logout</code></td><td>Déconnexion</td><td><code>—</code></td><td>{ok:true}</td><td>—</td><td><span class="pill bad">sans effet serveur</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/sign-in</code></td><td>Ancien parcours e-mail</td><td><code>{email, password}</code></td><td>challengeId</td><td>INVALID_CREDENTIALS</td><td><span class="pill todo">test seulement</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/otp/verify</code></td><td>Ancien parcours : code e-mail</td><td><code>{challengeId, code}</code></td><td>tokens + user</td><td>OTP_INVALID, OTP_EXPIRED</td><td><span class="pill todo">test seulement</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/otp/resend</code></td><td>Ancien parcours : renvoi</td><td><code>{challengeId}</code></td><td>challengeId</td><td>RATE_LIMITED</td><td><span class="pill todo">test seulement</span></td></tr></tbody></table></div>
+
+<h2>À modifier</h2>
+<div class="cols">
+<div><h3>Mobile</h3><ul>
+<li>Écran 01 → Première connexion (téléphone, code, mot de passe)</li>
+<li>Créer l'écran Connexion (téléphone + mot de passe)</li>
+<li>Retirer l'écran 02 (code e-mail)</li>
+<li>Brancher <code>activate</code> et <code>sign-in</code> dans <code>auth_service.dart</code></li>
+<li><code>_doRefresh</code> : déconnecter seulement sur 401</li>
+<li>Expiration de session : garder PIN et données locales</li>
+<li>Messages <code>INVALID_ACTIVATION</code> et <code>ACTIVATION_LOCKED</code></li>
+<li>Refuser tout rôle autre que technicien</li>
+<li>Ne pas afficher l'adresse technique <code>tel-…@technicien…local</code></li>
+</ul></div>
+<div><h3>API</h3><ul>
+<li><code>/auth/logout</code> : révoquer le jeton de renouvellement</li>
+<li>Rotation du jeton à chaque <code>/auth/refresh</code></li>
+<li><code>technician/sign-in</code> : blocage après 5 essais faux par numéro</li>
+<li>Ajouter les deux routes technicien à <code>docs/openapi.json</code></li>
+</ul></div>
+<div><h3>À décider</h3><ul>
+<li>PIN oublié : aucun parcours prévu</li>
+<li>Mot de passe oublié : seul le gestionnaire peut régénérer un code</li>
+<li>Session hors ligne : 7 jours aujourd'hui</li>
+<li>Compte déjà activé pour la revue Apple</li>
+</ul></div>
+</div>
+</main>
+
+</html>
