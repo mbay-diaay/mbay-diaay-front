@@ -97,4 +97,14 @@ export const documents = {
   "documents.quick.effect": "Date d'effet",
   "documents.quick.addedBy": "Ajouté par",
   "documents.quick.scoop": "Coopérative",
+  "errors.library.api.generic": "Le serveur a refusé l'opération sur ce document. Réessayez.",
+  "errors.library.api.tooBig": "Le fichier dépasse 5 Mo.",
+  "errors.library.api.format":
+    "Format refusé : PDF, images (JPEG, PNG, WebP), Word, Excel, PowerPoint, OpenDocument, texte ou CSV uniquement.",
+  "errors.library.api.content": "Le contenu du fichier ne correspond pas à son format.",
+  "errors.library.api.fileRequired": "Choisissez un fichier à déposer.",
+  "errors.library.api.noFile": "Ce document de démonstration n'a pas de fichier à télécharger.",
+  "errors.library.api.linkExpired": "Le lien de téléchargement a expiré. Réessayez.",
+  "errors.library.api.storage":
+    "Le stockage des fichiers n'est pas disponible sur ce serveur. Contactez l'administrateur.",
 } as const;

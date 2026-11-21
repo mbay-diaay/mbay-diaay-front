@@ -3,6 +3,9 @@ import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, RouterLink } from "@angular/router";
 import { map } from "rxjs";
 
+import { isApiMode } from "@/lib/api/config";
+import { deleteLibraryDocument, documentDownloadUrl, listLibraryDocuments, uploadLibraryDocument } from "@/lib/api/documents";
+import { libraryApiError } from "@/lib/api/library-errors";
 import { actions } from "@/lib/store";
 import { KIND_KEY } from "@/lib/dossier-labels";
 import { fmtDate, nf, nf1 } from "@/lib/format";
@@ -487,7 +490,7 @@ const ALL = "__tous";
           modal-footer
           type="button"
           class="btn btn-primary"
-          [disabled]="!addFile() || !addScoop() || (addLinkType() !== 'scoop' && !addLinkId())"
+          [disabled]="saving() || !addFile() || !addScoop() || (addLinkType() !== 'scoop' && !addLinkId())"
           (click)="submitAdd()"
         >
           {{ t()("documents.add.submit") }}
@@ -534,6 +537,19 @@ export default class DocumentsPage {
   protected readonly kindStyle = KIND_STYLE;
   protected readonly libraryKinds = [...LIBRARY_KINDS];
   protected readonly maxMb = MAX_KB / 1024;
+
+  constructor() {
+    if (isApiMode()) void this.loadFromApi();
+  }
+
+  /** Mode API : la bibliothèque vient du serveur (périmètre du compte) ; une erreur laisse la liste actuelle. */
+  private async loadFromApi(): Promise<void> {
+    try {
+      actions.replaceLibraryFromApi(await listLibraryDocuments());
+    } catch {
+      this.snackbar.error(this.t()("errors.library.api.generic"));
+    }
+  }
 
   private readonly route = inject(ActivatedRoute);
   private readonly scoopFilter = toSignal(
@@ -650,6 +666,10 @@ export default class DocumentsPage {
   }
 
   protected download(d: DocumentMeta): void {
+    if (isApiMode()) {
+      void this.downloadFromApi(d);
+      return;
+    }
     const r = actions.downloadDocument(d.id);
     if (!r.ok) {
       this.snackbar.error(this.locale.tNow(r.error as MessageKey));
@@ -664,6 +684,19 @@ export default class DocumentsPage {
     a.download = `${d.name}.txt`;
     a.click();
     URL.revokeObjectURL(a.href);
+  }
+
+  /** Mode API : lien signé de 5 minutes (le serveur trace le téléchargement), puis téléchargement du vrai fichier. */
+  private async downloadFromApi(d: DocumentMeta): Promise<void> {
+    try {
+      const link = await documentDownloadUrl(d.id);
+      const a = document.createElement("a");
+      a.href = link.url;
+      a.download = link.name;
+      a.click();
+    } catch (error) {
+      this.snackbar.error(this.locale.tNow(libraryApiError(error)));
+    }
   }
 
   // ── Détail en modale ──
@@ -742,6 +775,9 @@ export default class DocumentsPage {
   protected readonly addScoop = signal("");
   protected readonly addKind = signal<LibraryDocumentKind>("statuts");
   protected readonly addFile = signal<{ name: string; sizeKb: number; mime: string } | null>(null);
+  /** Le fichier choisi, envoyé tel quel à l'API en mode API. */
+  private addRawFile: File | null = null;
+  protected readonly saving = signal(false);
   protected readonly addSensitive = signal(false);
   protected readonly addLinkType = signal<"scoop" | DocumentLinkType>("scoop");
   protected readonly addLinkId = signal("");
@@ -858,6 +894,7 @@ export default class DocumentsPage {
       );
       return;
     }
+    this.addRawFile = file;
     this.addFile.set({ name: file.name, sizeKb, mime: file.type || "application/octet-stream" });
   }
 
@@ -870,6 +907,10 @@ export default class DocumentsPage {
       dup && !(this.replace() && this.canManage())
         ? f.name.replace(/(\.[^.]+)?$/, (ext) => ` (${(dup.version ?? 1) + 1})${ext}`)
         : f.name;
+    if (isApiMode()) {
+      void this.addToApi(name, !!dup && this.replace() && this.canManage());
+      return;
+    }
     const res = actions.addLibraryDocument(this.addScoop(), {
       kind: this.addKind(),
       name,
@@ -887,6 +928,29 @@ export default class DocumentsPage {
     this.snackbar.success(this.t()("documents.added"));
   }
 
+  /** Mode API : dépôt du fichier (multipart) ; le serveur numérote la version et vérifie le rattachement. */
+  private async addToApi(name: string, replaceExisting: boolean): Promise<void> {
+    const file = this.addRawFile;
+    if (!file || this.saving()) return;
+    this.saving.set(true);
+    try {
+      const saved = await uploadLibraryDocument(this.addScoop(), file, name, {
+        kind: this.addKind(),
+        sensitive: this.addSensitive(),
+        ...(this.addLinkType() !== "scoop" && { link: { type: this.addLinkType(), id: this.addLinkId() } }),
+        replaceExisting,
+      });
+      actions.mergeLibraryDocumentFromApi(saved);
+      this.addRawFile = null;
+      this.addOpen.set(false);
+      this.snackbar.success(this.t()("documents.added"));
+    } catch (error) {
+      this.snackbar.error(this.locale.tNow(libraryApiError(error)));
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
   // ── Retirer un document ──
   protected readonly toRemove = computed(() => {
     const id = this.removeId();
@@ -894,6 +958,10 @@ export default class DocumentsPage {
   });
 
   protected submitRemove(id: string): void {
+    if (isApiMode()) {
+      void this.removeFromApi(id);
+      return;
+    }
     const res = actions.removeLibraryDocument(id);
     if (!res.ok) {
       this.snackbar.error(this.locale.tNow(res.error as MessageKey));
@@ -901,5 +969,17 @@ export default class DocumentsPage {
     }
     this.removeId.set(null);
     this.snackbar.success(this.t()("documents.removed"));
+  }
+
+  /** Mode API : retrait sur le serveur (suppression logique, le fichier est conservé), puis sortie de la liste. */
+  private async removeFromApi(id: string): Promise<void> {
+    try {
+      await deleteLibraryDocument(id);
+      actions.removeLibraryDocumentFromApi(id);
+      this.removeId.set(null);
+      this.snackbar.success(this.t()("documents.removed"));
+    } catch (error) {
+      this.snackbar.error(this.locale.tNow(libraryApiError(error)));
+    }
   }
 }

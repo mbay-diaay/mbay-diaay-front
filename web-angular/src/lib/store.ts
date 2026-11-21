@@ -973,6 +973,45 @@ function appUserFromApi(apiUser: ApiUserRow): AppUser {
   };
 }
 
+/** Document de la bibliothèque tel que l'API le renvoie (`GET /documents`). */
+export interface ApiDocumentRow {
+  id: string;
+  scoopId: string;
+  kind: string;
+  name: string;
+  sizeKb: number;
+  mime: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  sensitive: boolean;
+  version: number;
+  effectiveAt: string;
+  lifecycle: "en vigueur" | "remplacé";
+  replacedById: string | null;
+  link: { type: string; id: string } | null;
+}
+
+function libraryDocumentFromApi(row: ApiDocumentRow): DocumentMeta {
+  return {
+    id: row.id,
+    ownerType: "scoop",
+    ownerId: row.scoopId,
+    scoopId: row.scoopId,
+    kind: row.kind as LibraryDocumentKind,
+    name: row.name,
+    sizeKb: row.sizeKb,
+    mime: row.mime,
+    uploadedBy: row.uploadedBy,
+    uploadedAt: row.uploadedAt,
+    sensitive: row.sensitive,
+    version: row.version,
+    effectiveAt: row.effectiveAt,
+    lifecycle: row.lifecycle,
+    replacedById: row.replacedById,
+    ...(row.link && { link: row.link as DocumentLink }),
+  };
+}
+
 export const actions = {
   restoreSession() {
     try {
@@ -4541,6 +4580,35 @@ export const actions = {
     }));
     audit("Document retiré", `SCOOP ${scoopName(doc.scoopId)}`, doc.name, doc.scoopId);
     return { ok: true };
+  },
+  /** Mode API : la bibliothèque (documents des coopératives) vient du serveur ; les pièces de dossier restent telles quelles. */
+  replaceLibraryFromApi(rows: ApiDocumentRow[]) {
+    set((s) => ({
+      documents: [...s.documents.filter((d) => d.ownerType !== "scoop"), ...rows.map(libraryDocumentFromApi)],
+    }));
+  },
+  /** Ajoute un document déposé sur l'API ; la version précédente, si elle est remplacée, passe en « remplacé ». */
+  mergeLibraryDocumentFromApi(row: ApiDocumentRow) {
+    const fresh = libraryDocumentFromApi(row);
+    set((s) => ({
+      documents: [
+        ...s.documents.map((d) =>
+          d.ownerType === "scoop" &&
+          d.scoopId === fresh.scoopId &&
+          d.name.toLowerCase() === fresh.name.toLowerCase() &&
+          d.id !== fresh.id &&
+          (fresh.version ?? 1) > (d.version ?? 1) &&
+          (d.lifecycle ?? "en vigueur") === "en vigueur"
+            ? { ...d, lifecycle: "remplacé" as const, replacedById: fresh.id }
+            : d,
+        ),
+        fresh,
+      ],
+    }));
+  },
+  /** Retire de la liste locale un document retiré sur l'API. */
+  removeLibraryDocumentFromApi(id: string) {
+    set((s) => ({ documents: s.documents.filter((d) => d.id !== id) }));
   },
   setSeuil(key: "gpsPrecisionMax" | "areaGapPct" | "minAreaM2" | "maxAreaHa", value: number) {
     set((s) => ({ seuils: { ...s.seuils, [key]: value } }));
