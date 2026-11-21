@@ -1,5 +1,7 @@
-import { computed, DestroyRef, Injectable, inject, signal } from "@angular/core";
+import { computed, DestroyRef, effect, Injectable, inject, signal, untracked } from "@angular/core";
 import { actions, can, getState, subscribeToStore, type State } from "@/lib/store";
+import { isApiMode } from "@/lib/api/config";
+import { fetchAllMembers } from "@/lib/api/members";
 import { maskPhone } from "@/lib/format";
 import { isConsolidated, scoopIdsOf } from "@/lib/scope";
 import {
@@ -33,6 +35,28 @@ export class StoreService {
   constructor() {
     const unsubscribe = subscribeToStore(() => this.stateSignal.set(getState()));
     this.destroyRef.onDestroy(unsubscribe);
+    // Mode API : les membres se lisent sur le serveur à chaque ouverture de session, et se vident à la déconnexion.
+    effect(() => {
+      const email = this.state().session?.email ?? null;
+      untracked(() => this.loadMembersFor(email));
+    });
+  }
+
+  private membersLoadedFor: string | null = null;
+
+  private loadMembersFor(email: string | null): void {
+    if (!isApiMode() || email === this.membersLoadedFor) return;
+    this.membersLoadedFor = email;
+    if (!email) {
+      actions.replaceMembersFromApi([]);
+      return;
+    }
+    if (!this.can("member.read")) return;
+    fetchAllMembers()
+      .then((rows) => {
+        if (this.membersLoadedFor === email) actions.replaceMembersFromApi(rows);
+      })
+      .catch((error: unknown) => console.error("[ERROR][StoreService.loadMembersFor]", error));
   }
 
   private readonly locale = inject(LocaleService);

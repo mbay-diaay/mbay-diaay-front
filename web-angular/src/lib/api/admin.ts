@@ -17,15 +17,6 @@ export type ApiProducer = {
   status: string;
   cniMasked: string;
 };
-export type ApiMember = {
-  id: string;
-  scoopId: string;
-  firstName: string;
-  lastName: string;
-  status: string;
-  producerId: string;
-};
-export type ApiMemberCounts = { active: number; candidates: number; suspended: number; left: number; roster: number };
 export type ApiContribution = { memberId: string; status: string; period: string; amount: number };
 export type ApiMeeting = { id: string; title: string; status: string; date: string };
 export type ApiDocument = { id: string; title: string; version: number; status: string };
@@ -46,9 +37,6 @@ export const listOrganisations = (q: PageQuery & { scoopId?: string } = {}) =>
 
 export const listProducers = (q: PageQuery & { q?: string } = {}) =>
   apiFetch<Page<ApiProducer>>(withPage("/producers", q));
-
-export const listMembers = (q: PageQuery = {}) =>
-  apiFetch<Page<ApiMember> & { counts: ApiMemberCounts }>(withPage("/members", q));
 
 export const listContributions = (q: PageQuery = {}) =>
   apiFetch<Page<ApiContribution>>(withPage("/contributions", q));
