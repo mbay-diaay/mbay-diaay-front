@@ -32,6 +32,7 @@ import { fmtDateTime } from "@/lib/format";
 import type { Permission } from "@/lib/permissions";
 import { BRAND, CRADESC } from "@/config/brand";
 import { can } from "@/lib/store";
+import { loadMeetingsIntoStore } from "@/lib/api/meetings";
 import { LocaleService } from "./locale.service";
 import { StoreService } from "./store.service";
 import { SidebarNavComponent } from "./sidebar-nav.component";
@@ -808,7 +809,11 @@ export class AppLayoutComponent {
       } catch {
         /* stockage indisponible : menu déplié par défaut */
       }
-      void ensureSessionHydrated().finally(() => this.ready.set(true));
+      void ensureSessionHydrated().finally(() => {
+        this.ready.set(true);
+        // Mode API : les réunions viennent du serveur (aucun effet en démonstration).
+        void loadMeetingsIntoStore();
+      });
 
       const onDocClick = (event: MouseEvent) => {
         const target = event.target;

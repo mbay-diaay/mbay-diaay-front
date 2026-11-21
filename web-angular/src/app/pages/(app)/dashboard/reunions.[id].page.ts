@@ -9,6 +9,7 @@ import type { Meeting } from "@/lib/mock/cooperative";
 import { scopedMeetings, scopedMembers } from "@/lib/scope";
 import type { MessageKey } from "@/lib/i18n";
 import { AccessDeniedError } from "@/lib/store";
+import { meetingActions } from "@/lib/api/meetings";
 import { MEETING_KIND_LABEL, MEETING_STATUS_LABEL } from "@shared/meeting-kinds";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
@@ -789,12 +790,12 @@ export default class ReunionDetailPage {
     }
   }
 
-  protected submitHoldMeeting(): void {
+  protected async submitHoldMeeting(): Promise<void> {
     const m = this.meeting();
     if (!m) return;
     const ids = this.holdPresentIds();
     try {
-      const res = this.store.actions.holdMeeting(m.id, ids);
+      const res = await meetingActions.hold(m.id, ids);
       if (!res.ok) {
         this.flash("error", this.locale.tNow(res.error as MessageKey));
         return;
@@ -816,12 +817,12 @@ export default class ReunionDetailPage {
     this.cancelReasonText = "";
   }
 
-  protected submitCancelMeeting(): void {
+  protected async submitCancelMeeting(): Promise<void> {
     const m = this.meeting();
     if (!m) return;
     const reason = this.cancelReasonText.trim();
     try {
-      const res = this.store.actions.cancelMeeting(m.id, reason);
+      const res = await meetingActions.cancel(m.id, reason);
       if (!res.ok) {
         this.flash("error", this.locale.tNow(res.error as MessageKey));
         return;
@@ -833,13 +834,13 @@ export default class ReunionDetailPage {
     }
   }
 
-  protected saveMinutesDraft(): void {
+  protected async saveMinutesDraft(): Promise<void> {
     const m = this.meeting();
     if (!m) return;
     this.minutesTried.set(true);
     if (!this.minutesDraft.trim()) return;
     try {
-      const res = this.store.actions.saveMinutes(m.id, this.minutesDraft);
+      const res = await meetingActions.saveMinutes(m.id, this.minutesDraft);
       if (!res.ok) {
         this.flash("error", this.locale.tNow(res.error as MessageKey));
         return;
@@ -860,18 +861,18 @@ export default class ReunionDetailPage {
     this.validateConfirmOpen.set(false);
   }
 
-  protected confirmValidateMinutes(): void {
+  protected async confirmValidateMinutes(): Promise<void> {
     const m = this.meeting();
     if (!m) return;
     try {
       if (this.minutesDirty()) {
-        const saveRes = this.store.actions.saveMinutes(m.id, this.minutesDraft);
+        const saveRes = await meetingActions.saveMinutes(m.id, this.minutesDraft);
         if (!saveRes.ok) {
           this.flash("error", this.locale.tNow(saveRes.error as MessageKey));
           return;
         }
       }
-      const res = this.store.actions.validateMinutes(m.id);
+      const res = await meetingActions.validateMinutes(m.id);
       if (!res.ok) {
         this.flash("error", this.locale.tNow(res.error as MessageKey));
         return;
