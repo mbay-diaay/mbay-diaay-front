@@ -174,6 +174,8 @@ export const errors = {
     "La décision revient au gestionnaire ou au représentant : vous pouvez instruire le dossier.",
   "errors.store.leDossierEstIncomplet": "Le dossier est incomplet.",
   "errors.store.membreIntrouvable": "Membre introuvable.",
+  "errors.member.emailTaken": "Un membre porte déjà cette adresse e-mail.",
+  "errors.member.statusUnchanged": "Le membre a déjà ce statut.",
   "errors.store.pieceIntrouvable": "Pièce introuvable.",
   "errors.store.planIntrouvable": "Plan introuvable.",
   "errors.store.precisezCeQuiManque5": "Précisez ce qui manque (5 caractères au moins).",

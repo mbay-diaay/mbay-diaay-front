@@ -576,7 +576,8 @@ let state: State = {
   cropRefs: CROP_REFS,
   cropAliases: CROP_ALIASES,
   seuils: SEUILS,
-  members: MEMBERS,
+  // Mode API : la liste vient du serveur après la connexion (jamais les membres de démonstration).
+  members: isApiMode() ? [] : MEMBERS,
   dossiers: DOSSIERS,
   documents: [...DOCUMENTS, ...LIBRARY_DOCUMENTS],
   scoops: SCOOPS,
@@ -2098,6 +2099,18 @@ export const actions = {
       m.scoopId,
     );
     return true;
+  },
+  /** Remplace la liste locale par celle de l'API (mode `VITE_API_URL`), lue au démarrage de la session. */
+  replaceMembersFromApi(items: Member[]) {
+    set({ members: items });
+  },
+  /** Ajoute ou met à jour un membre renvoyé par l'API après une création, une modification ou un changement de statut. */
+  mergeMemberFromApi(item: Member) {
+    set((s) =>
+      s.members.some((x) => x.id === item.id)
+        ? { members: s.members.map((x) => (x.id === item.id ? item : x)) }
+        : { members: [...s.members, item] },
+    );
   },
   /** Le statut dans la coopérative ne change aucun droit dans l'application et ne touche pas à la fiche producteur. */
   setMembershipStatus(id: string, status: MembershipStatus, comment?: string) {
