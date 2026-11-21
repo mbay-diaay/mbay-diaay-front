@@ -6,6 +6,7 @@ import { AccessDeniedError } from "@/lib/store";
 import { MEETING_KINDS, MEETING_MODES, type Meeting, type MeetingKind, type MeetingMode } from "@/lib/mock/cooperative";
 import type { Scoop } from "@/lib/mock/data";
 import { inScope } from "@/lib/scope";
+import { meetingActions } from "@/lib/api/meetings";
 
 import { MEETING_KIND_LABEL } from "./meeting-kinds";
 import { LocaleService } from "./locale.service";
@@ -569,7 +570,7 @@ export class MeetingFormDialogComponent {
     this.closed.emit();
   }
 
-  protected submit(): void {
+  protected async submit(): Promise<void> {
     this.tried.set(true);
     if (this.errTitle() || this.errDate() || this.errPlace() || this.errLink()) return;
     this.addOther();
@@ -579,7 +580,7 @@ export class MeetingFormDialogComponent {
 
     try {
       if (m) {
-        const res = this.store.actions.updateMeeting(m.id, {
+        const res = await meetingActions.update(m.id, {
           kind: this.kind(),
           title: this.title(),
           date: this.dateLocal(),
@@ -599,7 +600,7 @@ export class MeetingFormDialogComponent {
         return;
       }
 
-      const res = this.store.actions.createMeeting({
+      const res = await meetingActions.create({
         scoopId: this.scoopId(),
         kind: this.kind(),
         title: this.title(),
