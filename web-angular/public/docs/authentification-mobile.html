@@ -59,32 +59,6 @@ td code,.pill{font:600 12px var(--mono)}
 <h2>Endpoints</h2>
 <div class="wrap"><table><thead><tr><th>Méthode</th><th>Route (<code>/v1</code>)</th><th>Rôle</th><th>Envoie</th><th>Reçoit</th><th>Erreurs</th><th>Mobile</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/auth/technician/activate</code></td><td>Première connexion</td><td><code>{phone, code, password}</code></td><td>tokens + user</td><td>INVALID_ACTIVATION, ACTIVATION_LOCKED</td><td><span class="pill todo">à brancher</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/technician/sign-in</code></td><td>Reconnexion</td><td><code>{phone, password}</code></td><td>tokens + user</td><td>INVALID_CREDENTIALS</td><td><span class="pill todo">à brancher</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/refresh</code></td><td>Renouveler la session</td><td><code>{refreshToken}</code></td><td>tokens</td><td>REFRESH_INVALID</td><td><span class="pill bad">à corriger</span></td></tr><tr><td><code>GET</code></td><td><code>/me</code></td><td>Rôle, SCOOP, permissions</td><td><code>—</code></td><td>user + permissions</td><td>UNAUTHORIZED</td><td><span class="pill ok">en place</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/logout</code></td><td>Déconnexion</td><td><code>—</code></td><td>{ok:true}</td><td>—</td><td><span class="pill bad">sans effet serveur</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/sign-in</code></td><td>Ancien parcours e-mail</td><td><code>{email, password}</code></td><td>challengeId</td><td>INVALID_CREDENTIALS</td><td><span class="pill todo">test seulement</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/otp/verify</code></td><td>Ancien parcours : code e-mail</td><td><code>{challengeId, code}</code></td><td>tokens + user</td><td>OTP_INVALID, OTP_EXPIRED</td><td><span class="pill todo">test seulement</span></td></tr><tr><td><code>POST</code></td><td><code>/auth/otp/resend</code></td><td>Ancien parcours : renvoi</td><td><code>{challengeId}</code></td><td>challengeId</td><td>RATE_LIMITED</td><td><span class="pill todo">test seulement</span></td></tr></tbody></table></div>
 
-<h2>À modifier</h2>
-<div class="cols">
-<div><h3>Mobile</h3><ul>
-<li>Écran 01 → Première connexion (téléphone, code, mot de passe)</li>
-<li>Créer l'écran Connexion (téléphone + mot de passe)</li>
-<li>Retirer l'écran 02 (code e-mail)</li>
-<li>Brancher <code>activate</code> et <code>sign-in</code> dans <code>auth_service.dart</code></li>
-<li><code>_doRefresh</code> : déconnecter seulement sur 401</li>
-<li>Expiration de session : garder PIN et données locales</li>
-<li>Messages <code>INVALID_ACTIVATION</code> et <code>ACTIVATION_LOCKED</code></li>
-<li>Refuser tout rôle autre que technicien</li>
-<li>Ne pas afficher l'adresse technique <code>tel-…@technicien…local</code></li>
-</ul></div>
-<div><h3>API</h3><ul>
-<li><code>/auth/logout</code> : révoquer le jeton de renouvellement</li>
-<li>Rotation du jeton à chaque <code>/auth/refresh</code></li>
-<li><code>technician/sign-in</code> : blocage après 5 essais faux par numéro</li>
-<li>Ajouter les deux routes technicien à <code>docs/openapi.json</code></li>
-</ul></div>
-<div><h3>À décider</h3><ul>
-<li>PIN oublié : aucun parcours prévu</li>
-<li>Mot de passe oublié : seul le gestionnaire peut régénérer un code</li>
-<li>Session hors ligne : 7 jours aujourd'hui</li>
-<li>Compte déjà activé pour la revue Apple</li>
-</ul></div>
-</div>
 </main>
 
 </html>
