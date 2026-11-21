@@ -3,6 +3,9 @@ import { Component, computed, effect, inject, input, model, signal, untracked } 
 import { syncImage } from "@/lib/api/media";
 import type { MessageKey } from "@/lib/i18n";
 import type { PreparedImage } from "@/lib/image";
+import { isApiMode } from "@/lib/api/config";
+import { createTechnician, isTechnicalEmail, linkTechnicianToScoop, updateUser } from "@/lib/api/users";
+import { technicianApiError } from "@/lib/api/technician-errors";
 import { isSenegalPhone } from "@/lib/phone-sn";
 import { inScope } from "@/lib/scope";
 
@@ -353,6 +356,12 @@ export class TechnicianDialogComponent {
     this.err.set(err);
     if (Object.keys(err).length) return;
 
+    // Mode API : le technicien et son code sont créés par le serveur, jamais par le navigateur.
+    if (isApiMode()) {
+      void this.submitToApi();
+      return;
+    }
+
     if (this.mode() === "new") {
       const name = `${this.firstName().trim()} ${this.lastName().trim()}`;
       const res = this.store.actions.createTechnician({ name, email: this.email(), phone: this.phone(), sex: this.sex() as "F" | "H", age: Number(this.age().trim()), scoopIds: this.scoopIds(), orgIds: this.orgIds().filter((id) => this.orgOptions().some((option) => option.value === id)), ...(this.photo() && { photoUrl: this.photo()! }) });
@@ -380,6 +389,78 @@ export class TechnicianDialogComponent {
     }
     this.open.set(false);
     this.snackbar.success(t("tech.dialog.saved", { name: u?.name ?? "" }));
+  }
+
+  /** Évite un double envoi pendant que l'API répond. */
+  private submitting = false;
+
+  /** Une erreur de l'API : sous le champ concerné si on le connaît, sinon en message. */
+  private showApiError(error: unknown): void {
+    const { key, field } = technicianApiError(error);
+    const message = this.locale.tNow(key);
+    if (field) this.err.set({ [field]: message });
+    else this.snackbar.error(message);
+  }
+
+  private async submitToApi(): Promise<void> {
+    if (this.submitting) return;
+    this.submitting = true;
+    try {
+      if (this.mode() === "new") await this.createOnApi();
+      else await this.linkOnApi();
+    } catch (error) {
+      this.showApiError(error);
+    } finally {
+      this.submitting = false;
+    }
+  }
+
+  private async createOnApi(): Promise<void> {
+    const t = this.t();
+    const name = `${this.firstName().trim()} ${this.lastName().trim()}`.replace(/\s+/g, " ");
+    const [firstScoopId, ...otherScoopIds] = this.scoopIds();
+    if (!firstScoopId) return;
+    const email = this.email().trim();
+    const created = await createTechnician(firstScoopId, {
+      name,
+      phone: this.phone(),
+      sex: this.sex() as "F" | "H",
+      age: Number(this.age().trim()),
+      ...(email && { email }),
+    });
+    let user = created.user;
+    // Un technicien peut couvrir plusieurs coopératives : on rattache les autres une fois le compte créé.
+    if (otherScoopIds.length) {
+      try {
+        user = await updateUser(user.id, { scoopIds: this.scoopIds() });
+      } catch {
+        this.snackbar.error(t("errors.technician.scope"));
+      }
+    }
+    this.store.actions.mergeUsersFromApi([user]);
+    this.open.set(false);
+    void syncImage("user", user.id, this.photoFile).then((sent) => {
+      if (!sent) this.snackbar.error(t("ui.image.uploadFailed"));
+    });
+    // Le code montré est celui de l'API. Pas de bouton d'envoi par e-mail : le code ne se rejoue pas.
+    this.codeView.set({ userId: user.id, name, code: created.code, expiresAt: created.expiresAt, email: "" });
+  }
+
+  /** Technicien déjà inscrit : on le rattache aux coopératives choisies. */
+  private async linkOnApi(): Promise<void> {
+    const person = this.technicians().find((candidate) => candidate.id === this.pickId());
+    if (!person) return;
+    const alreadyLinked = new Set(person.scoopIds ?? (person.scoopId ? [person.scoopId] : []));
+    const toLink = this.scoopIds().filter((scoopId) => !alreadyLinked.has(scoopId));
+    let latest = null;
+    for (const scoopId of toLink) {
+      latest = isTechnicalEmail(person.email)
+        ? await updateUser(person.id, { scoopIds: [...alreadyLinked, ...toLink] })
+        : await linkTechnicianToScoop(scoopId, person.email);
+    }
+    if (latest) this.store.actions.mergeUsersFromApi([latest]);
+    this.open.set(false);
+    this.snackbar.success(this.t()("tech.dialog.saved", { name: person.name }));
   }
 
 }

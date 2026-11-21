@@ -931,6 +931,47 @@ function producerFromDraft(d: ProducerDossier, approver: string, at: string): Pr
   };
 }
 
+/** Compte tel que l'API le renvoie (`GET /users`, création de technicien…). */
+export interface ApiUserRow {
+  id: string;
+  name: string;
+  email: string;
+  role: RoleId;
+  scoopId: string | null;
+  /** Coopératives liées : plusieurs pour un technicien ou une faîtière. */
+  scoopIds?: string[];
+  phone: string | null;
+  active: boolean;
+  sex?: "F" | "H" | null | undefined;
+  age?: number | null | undefined;
+  photoUrl?: string | null | undefined;
+  /** Technicien qui n'a pas encore utilisé son code temporaire. */
+  activationPending?: boolean | undefined;
+}
+
+function appUserFromApi(apiUser: ApiUserRow): AppUser {
+  const manyScoops = roleAllowsManyScoops(apiUser.role);
+  const scoopIds = apiUser.scoopIds?.length ? apiUser.scoopIds : apiUser.scoopId ? [apiUser.scoopId] : [];
+  return {
+    id: apiUser.id,
+    name: apiUser.name,
+    email: apiUser.email,
+    phone: apiUser.phone ?? "",
+    role: apiUser.role,
+    // Technicien et faîtière : liste des coopératives ; les autres rôles : une seule.
+    scoopId: manyScoops ? undefined : (apiUser.scoopId ?? undefined),
+    ...(manyScoops && { scoopIds }),
+    ...(apiUser.sex && { sex: apiUser.sex }),
+    ...(apiUser.age && { age: apiUser.age }),
+    ...(apiUser.photoUrl && { photoUrl: apiUser.photoUrl }),
+    active: apiUser.active,
+    // Le code lui-même n'est jamais relu : l'API ne garde que son empreinte. Seul « en attente » est connu.
+    ...(apiUser.activationPending && {
+      activation: { code: "", issuedAt: "", expiresAt: "", failedAttempts: 0 },
+    }),
+  };
+}
+
 export const actions = {
   restoreSession() {
     try {
@@ -1150,37 +1191,32 @@ export const actions = {
     audit("Création utilisateur", "Utilisateur", u.name);
   },
   /** Remplace la liste locale par celle de l'API (mode `VITE_API_URL`). */
-  replaceUsersFromApi(
-    items: Array<{
-      id: string;
-      name: string;
-      email: string;
-      role: RoleId;
-      scoopId: string | null;
-      /** Coopératives liées : plusieurs pour un technicien ou une faîtière. */
-      scoopIds?: string[];
-      phone: string | null;
-      active: boolean;
-    }>,
-  ) {
+  replaceUsersFromApi(items: ApiUserRow[]) {
     requirePermission("user.manage");
-    set({
-      users: items.map((apiUser) => {
-        const manyScoops = roleAllowsManyScoops(apiUser.role);
-        const scoopIds = apiUser.scoopIds?.length ? apiUser.scoopIds : apiUser.scoopId ? [apiUser.scoopId] : [];
-        return {
-          id: apiUser.id,
-          name: apiUser.name,
-          email: apiUser.email,
-          phone: apiUser.phone ?? "",
-          role: apiUser.role,
-          // Technicien et faîtière : liste des coopératives ; les autres rôles : une seule.
-          scoopId: manyScoops ? undefined : (apiUser.scoopId ?? undefined),
-          ...(manyScoops && { scoopIds }),
-          active: apiUser.active,
-        };
-      }),
-    });
+    set({ users: items.map(appUserFromApi) });
+  },
+  /**
+   * Ajoute ou met à jour des comptes lus sur l'API, sans toucher aux autres. Sert aux techniciens : un gestionnaire
+   * qui n'a pas `user.manage` ne peut pas lister tous les comptes, mais voit celui qu'il vient de créer.
+   */
+  mergeUsersFromApi(items: ApiUserRow[]) {
+    const incoming = new Map(items.map((apiUser) => [apiUser.id, appUserFromApi(apiUser)]));
+    set((s) => ({
+      users: [
+        ...s.users.map((user) => {
+          const fresh = incoming.get(user.id);
+          if (!fresh) return user;
+          incoming.delete(user.id);
+          // Ce que l'API ne garde pas (GIE suivis) reste tel qu'il était dans le navigateur.
+          return { ...fresh, ...(user.orgIds && { orgIds: user.orgIds }) };
+        }),
+        ...incoming.values(),
+      ],
+    }));
+  },
+  /** Retire un compte de la liste locale une fois supprimé sur l'API. */
+  removeUserFromApi(userId: string) {
+    set((s) => ({ users: s.users.filter((user) => user.id !== userId) }));
   },
   /**
    * Désactive ou réactive un compte. On ne se désactive pas soi-même ; seul le super administrateur touche à un

@@ -1,6 +1,10 @@
 import { Component, computed, inject, signal } from "@angular/core";
 
+import { isApiMode } from "@/lib/api/config";
 import { syncImage } from "@/lib/api/media";
+import { fetchAllPages } from "@/lib/api/pagination";
+import { technicianApiError } from "@/lib/api/technician-errors";
+import { deleteUser, isTechnicalEmail, listUsers, regenerateTechnicianCode, updateUser } from "@/lib/api/users";
 import { nf } from "@/lib/format";
 import type { PreparedImage } from "@/lib/image";
 import type { MessageKey } from "@/lib/i18n";
@@ -148,7 +152,7 @@ interface TechnicianRow {
                         <ui-avatar [src]="row.user.photoUrl" [name]="row.user.name" [size]="36" />
                         <span class="min-w-0">
                           <span class="block truncate font-bold">{{ row.user.name }}</span>
-                          <span class="sub block truncate">{{ store.phone(row.user.phone) }}{{ row.user.email ? " · " + row.user.email : "" }}</span>
+                          <span class="sub block truncate">{{ store.phone(row.user.phone) }}{{ shownEmail(row.user.email) ? " · " + row.user.email : "" }}</span>
                           @if (row.user.sex || row.user.age) {
                             <span class="sub block truncate">{{ row.user.sex === "F" ? t()("adherents.add.female") : row.user.sex === "H" ? t()("adherents.add.male") : "" }}{{ row.user.sex && row.user.age ? " · " : "" }}{{ row.user.age ? t()("tech.ageYears", { count: row.user.age }) : "" }}</span>
                           }
@@ -193,7 +197,7 @@ interface TechnicianRow {
         <ui-modal [open]="true" [title]="view.user.name" [description]="t()(stateLabel[view.state])" icon="person" [width]="640" [closeLabel]="t()('common.close')" (closed)="viewing.set(null)">
           <dl class="facts pb-6">
             <div><dt>{{ t()("tech.dialog.phone") }}</dt><dd>{{ view.user.phone ? store.phone(view.user.phone) : "—" }}</dd></div>
-            <div><dt>{{ t()("tech.dialog.email") }}</dt><dd>{{ view.user.email || t()("techniciens.noEmail") }}</dd></div>
+            <div><dt>{{ t()("tech.dialog.email") }}</dt><dd>{{ shownEmail(view.user.email) ? view.user.email : t()("techniciens.noEmail") }}</dd></div>
             <div><dt>{{ t()("adherents.add.sex") }}</dt><dd>{{ view.user.sex === "F" ? t()("adherents.add.female") : view.user.sex === "H" ? t()("adherents.add.male") : "—" }}</dd></div>
             <div><dt>{{ t()("adherents.add.age") }}</dt><dd>{{ view.user.age ? t()("tech.ageYears", { count: view.user.age }) : "—" }}</dd></div>
             <div class="wide"><dt>{{ t()("techniciens.col.scoops") }}</dt><dd>{{ view.scoopNames.join(", ") }}</dd></div>
@@ -282,6 +286,29 @@ export default class TechniciensPage {
   protected readonly editSex = signal<"F" | "H" | "">("");
   protected readonly editOrgIds = signal<string[]>([]);
   protected readonly editError = signal("");
+
+  constructor() {
+    if (isApiMode()) void this.loadFromApi();
+  }
+
+  /** L'adresse technique d'un technicien créé par téléphone seul ne s'affiche jamais. */
+  protected shownEmail(email: string): boolean {
+    return !!email && !isTechnicalEmail(email);
+  }
+
+  /** Mode API : la liste vient du serveur, pour qu'un technicien créé survive au rechargement. */
+  private async loadFromApi(): Promise<void> {
+    try {
+      this.store.actions.replaceUsersFromApi(await fetchAllPages(listUsers));
+    } catch {
+      // Un gestionnaire ne peut pas lister tous les comptes : il garde ce qu'il vient de créer ou de lier.
+    }
+  }
+
+  /** Une erreur de l'API, en message général. */
+  private showApiError(error: unknown): void {
+    this.snackbar.error(this.locale.tNow(technicianApiError(error).key));
+  }
 
   /** Coopératives visibles par la session : un gestionnaire n'en a qu'une, qu'on pré-coche à l'ajout. */
   private readonly visibleScoopIds = computed(() => {
@@ -436,12 +463,29 @@ export default class TechniciensPage {
   protected newCode(user: AppUser): void {
     this.viewing.set(null);
     this.renewing.set(null);
+    if (isApiMode()) {
+      void this.newCodeFromApi(user);
+      return;
+    }
     const result = this.store.actions.regenerateTechnicianCode(user.id);
     if (!result.ok) {
       this.snackbar.error(result.error);
       return;
     }
     this.codeView.set({ userId: user.id, name: user.name, code: result.code, expiresAt: result.expiresAt, email: user.email });
+  }
+
+  /** Le nouveau code est celui de l'API ; l'ancien et le mot de passe déjà choisi cessent de marcher. */
+  private async newCodeFromApi(user: AppUser): Promise<void> {
+    const scoopId = this.scoopToLeave(user);
+    if (!scoopId) return;
+    try {
+      const result = await regenerateTechnicianCode(scoopId, user.id);
+      this.store.actions.mergeUsersFromApi([result.user]);
+      this.codeView.set({ userId: user.id, name: user.name, code: result.code, expiresAt: result.expiresAt, email: "" });
+    } catch (error) {
+      this.showApiError(error);
+    }
   }
 
   /** Ligne du technicien affiché (toujours à jour après une modification). */
@@ -482,6 +526,10 @@ export default class TechniciensPage {
       this.snackbar.error(this.locale.tNow("errors.technician.sex"));
       return;
     }
+    if (isApiMode()) {
+      void this.saveEditOnApi(user);
+      return;
+    }
     const result = this.store.actions.updateTechnician(user.id, {
       name: this.editName(),
       phone: this.editPhone(),
@@ -502,6 +550,30 @@ export default class TechniciensPage {
     this.snackbar.success(this.t()("techniciens.edit.saved", { name: this.editName().trim() }));
   }
 
+  /** Mode API : nom et téléphone sont enregistrés par le serveur ; sexe, âge et GIE restent dans le navigateur. */
+  private async saveEditOnApi(user: AppUser): Promise<void> {
+    try {
+      const updated = await updateUser(user.id, { name: this.editName().trim(), phone: this.editPhone() });
+      this.store.actions.mergeUsersFromApi([updated]);
+    } catch (error) {
+      this.showApiError(error);
+      return;
+    }
+    this.store.actions.updateTechnician(user.id, {
+      name: this.editName(),
+      phone: this.editPhone(),
+      sex: (this.editSex() || "F") as "F" | "H",
+      age: Number(this.editAge().trim()),
+      orgIds: this.editOrgIds(),
+      photoUrl: this.photo(),
+    });
+    this.editing.set(null);
+    void syncImage("user", user.id, this.photoFile).then((sent) => {
+      if (!sent) this.snackbar.error(this.t()("ui.image.uploadFailed"));
+    });
+    this.snackbar.success(this.t()("techniciens.edit.saved", { name: this.editName().trim() }));
+  }
+
   /** Coopérative dont on retire le technicien : celle de la session (la seule d'un gestionnaire). */
   private scoopToLeave(user: AppUser): string | null {
     const visible = new Set(this.visibleScoopIds());
@@ -515,6 +587,10 @@ export default class TechniciensPage {
   protected confirmRemove(user: AppUser): void {
     const scoopId = this.scoopToLeave(user);
     if (!scoopId) return;
+    if (isApiMode()) {
+      void this.removeOnApi(user, scoopId);
+      return;
+    }
     const result = this.store.actions.removeTechnicianFromScoop(user.id, scoopId);
     this.removing.set(null);
     if (!result.ok) {
@@ -523,4 +599,23 @@ export default class TechniciensPage {
     }
     this.snackbar.success(this.t()("techniciens.removed", { name: user.name }));
   }
+  /** Mode API : le technicien quitte la coopérative ; s'il n'en avait qu'une, son compte est supprimé. */
+  private async removeOnApi(user: AppUser, scoopId: string): Promise<void> {
+    try {
+      if (this.isOnlyHere(user)) {
+        await deleteUser(user.id, user.email);
+        this.store.actions.removeUserFromApi(user.id);
+      } else {
+        const remaining = this.scoopIdsOf(user).filter((id) => id !== scoopId);
+        this.store.actions.mergeUsersFromApi([await updateUser(user.id, { scoopIds: remaining })]);
+      }
+    } catch (error) {
+      this.showApiError(error);
+      return;
+    } finally {
+      this.removing.set(null);
+    }
+    this.snackbar.success(this.t()("techniciens.removed", { name: user.name }));
+  }
+
 }
