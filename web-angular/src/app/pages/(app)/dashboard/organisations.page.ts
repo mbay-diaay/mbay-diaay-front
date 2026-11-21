@@ -3,6 +3,9 @@ import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute } from "@angular/router";
 import { map } from "rxjs";
 
+import { isApiMode } from "@/lib/api/config";
+import { listOrganisations, orgFromApi } from "@/lib/api/organisations";
+import { fetchAllPages } from "@/lib/api/pagination";
 import { inScope } from "@/lib/scope";
 import { nf } from "@/lib/format";
 import type { Org } from "@/lib/mock/data";
@@ -217,6 +220,19 @@ export default class OrganisationsPage {
   protected readonly q = signal("");
   protected readonly type = signal<string>(ALL);
   protected readonly detailId = signal<string | null>(null);
+
+  constructor() {
+    if (isApiMode()) void this.loadFromApi();
+  }
+
+  /** Mode API : la liste vient du serveur, pour qu'elle survive au rechargement. */
+  private async loadFromApi(): Promise<void> {
+    try {
+      this.store.actions.replaceOrgsFromApi((await fetchAllPages(listOrganisations)).map(orgFromApi));
+    } catch {
+      // Serveur injoignable : on garde ce qui est déjà affiché.
+    }
+  }
 
   /** Filtre SCOOP de l'en-tête (`?scoop=`). */
   private readonly scoopFilter = toSignal(
