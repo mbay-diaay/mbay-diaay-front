@@ -4051,6 +4051,19 @@ export const actions = {
 
   // ============ Réunions et procès-verbaux (plan 4.6, M1-4) ============
 
+  /** Mode API : remplace les réunions locales par celles du serveur. */
+  replaceMeetingsFromApi(items: Meeting[]) {
+    set({ meetings: items });
+  },
+  /** Mode API : range une réunion renvoyée par le serveur (création ou mise à jour). */
+  mergeMeetingFromApi(item: Meeting) {
+    set((s) => ({
+      meetings: s.meetings.some((m) => m.id === item.id)
+        ? s.meetings.map((m) => (m.id === item.id ? item : m))
+        : [...s.meetings, item],
+    }));
+  },
+
   createMeeting(input: {
     scoopId: string;
     kind: MeetingKind;

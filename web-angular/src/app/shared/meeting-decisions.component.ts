@@ -3,6 +3,7 @@ import { Component, computed, inject, input, signal } from "@angular/core";
 import { fmtDate } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
 import type { DecisionStatus, Meeting, MeetingDecision } from "@/lib/mock/cooperative";
+import { meetingActions } from "@/lib/api/meetings";
 
 import { LocaleService } from "./locale.service";
 import { StoreService } from "./store.service";
@@ -192,10 +193,10 @@ export class MeetingDecisionsComponent {
     this.addOpen.set(true);
   }
 
-  protected submitAdd(): void {
+  protected async submitAdd(): Promise<void> {
     this.addTried.set(true);
     if (Object.keys(this.addErrors()).length) return;
-    const result = this.store.actions.addMeetingDecision(this.meeting().id, {
+    const result = await meetingActions.addDecision(this.meeting().id, {
       text: this.text(),
       ownerName: this.owner(),
       dueDate: this.dueDate() || null,
@@ -208,8 +209,8 @@ export class MeetingDecisionsComponent {
     this.addOpen.set(false);
   }
 
-  protected start(decision: MeetingDecision): void {
-    const result = this.store.actions.setDecisionStatus(this.meeting().id, decision.id, "en cours");
+  protected async start(decision: MeetingDecision): Promise<void> {
+    const result = await meetingActions.setDecisionStatus(this.meeting().id, decision.id, "en cours");
     if (!result.ok) this.snackbar.error(result.error);
     else this.snackbar.success(this.locale.tNow("decisions.started"));
   }
@@ -220,10 +221,10 @@ export class MeetingDecisionsComponent {
     this.closing.set(decision);
   }
 
-  protected submitClose(decision: MeetingDecision): void {
+  protected async submitClose(decision: MeetingDecision): Promise<void> {
     this.noteTried.set(true);
     if (this.note().trim().length < 5) return;
-    const result = this.store.actions.setDecisionStatus(
+    const result = await meetingActions.setDecisionStatus(
       this.meeting().id,
       decision.id,
       "clôturée",

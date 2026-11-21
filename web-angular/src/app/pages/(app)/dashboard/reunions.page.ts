@@ -11,6 +11,7 @@ import { scopedMeetings, scopedMembers } from "@/lib/scope";
 import { fmtDate, fmtDateTime, nf } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
 import { AccessDeniedError } from "@/lib/store";
+import { meetingActions } from "@/lib/api/meetings";
 import { MEETING_KIND_LABEL, MEETING_STATUS_LABEL } from "@shared/meeting-kinds";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { GlobalFiltersComponent } from "@shared/global-filters.component";
@@ -917,10 +918,10 @@ export default class ReunionsPage {
     }
   }
 
-  protected submitHold(meetingId: string): void {
+  protected async submitHold(meetingId: string): Promise<void> {
     const ids = this.holdPresentIds();
     try {
-      const res = this.store.actions.holdMeeting(meetingId, ids);
+      const res = await meetingActions.hold(meetingId, ids);
       if (!res.ok) {
         this.flash("error", this.locale.tNow(res.error as MessageKey));
         return;
@@ -942,12 +943,12 @@ export default class ReunionsPage {
     this.cancelReason.set("");
   }
 
-  protected submitCancel(): void {
+  protected async submitCancel(): Promise<void> {
     const id = this.cancelMeetingId();
     if (!id) return;
     const reason = this.cancelReason().trim();
     try {
-      const res = this.store.actions.cancelMeeting(id, reason);
+      const res = await meetingActions.cancel(id, reason);
       if (!res.ok) {
         this.flash("error", this.locale.tNow(res.error as MessageKey));
         return;
