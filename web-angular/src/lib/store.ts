@@ -1094,6 +1094,14 @@ export const actions = {
     const p = state.producers.find((x) => x.id === id);
     audit("Modification", `Producteur ${p?.code}`, Object.keys(labels).join(", "));
   },
+  /** Mode API : les organisations viennent du serveur (remplacent celles du navigateur). */
+  replaceOrgsFromApi(items: Org[]) {
+    set({ orgs: items });
+  },
+  /** Mode API : une organisation relue sur le serveur (ajoutée ou mise à jour). */
+  upsertOrgFromApi(item: Org) {
+    set((s) => ({ orgs: s.orgs.some((o) => o.id === item.id) ? s.orgs.map((o) => (o.id === item.id ? item : o)) : [...s.orgs, item] }));
+  },
   qualifyOrgs(ids: string[], type: OrgType) {
     requirePermission("org.manage");
     set((s) => ({ orgs: s.orgs.map((o) => (ids.includes(o.id) ? { ...o, type } : o)) }));

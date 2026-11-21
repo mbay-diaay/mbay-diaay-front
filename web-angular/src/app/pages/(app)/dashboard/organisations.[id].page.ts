@@ -3,6 +3,9 @@ import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { map } from "rxjs";
 
+import { isApiMode } from "@/lib/api/config";
+import { listOrganisations, orgFromApi, organisationApiError, qualifyOrganisations } from "@/lib/api/organisations";
+import { fetchAllPages } from "@/lib/api/pagination";
 import { ageAtMost, downloadCsv, fmtAge, fmtDate, nf, nf1 } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
 import { ORG_TYPES, type OrgType, type Producer } from "@/lib/mock/data";
@@ -654,6 +657,10 @@ export default class OrganisationDetailPage {
     return `cooperatives.fiche.status.${status}` as MessageKey;
   }
 
+  constructor() {
+    if (isApiMode()) void this.loadFromApi();
+  }
+
   protected openProducer(id: string): void {
     void this.router.navigate(["/dashboard/producteurs", id]);
   }
@@ -663,9 +670,39 @@ export default class OrganisationDetailPage {
     this.typeOpen.set(true);
   }
 
+  /** Mode API : l'organisation vient du serveur, pour qu'elle survive au rechargement. */
+  private async loadFromApi(): Promise<void> {
+    try {
+      this.store.actions.replaceOrgsFromApi((await fetchAllPages(listOrganisations)).map(orgFromApi));
+    } catch {
+      // Serveur injoignable : on garde ce qui est déjà affiché.
+    }
+  }
+
+  /** Mode API : le type est enregistré sur le serveur, puis relu. */
+  private async saveTypeOnApi(id: string, type: OrgType): Promise<void> {
+    try {
+      await qualifyOrganisations([id], type);
+    } catch (e) {
+      this.snackbar.error(this.locale.tNow(organisationApiError(e).key));
+      return;
+    }
+    await this.loadFromApi();
+    this.typeOpen.set(false);
+    this.snackbar.success(
+      this.t()("organisations.detail.typeAssigned", {
+        type: this.locale.tEnum("organisations.type", type),
+      }),
+    );
+  }
+
   protected saveType(id: string): void {
     const type = this.pickType();
     if (!type) return;
+    if (isApiMode()) {
+      void this.saveTypeOnApi(id, type);
+      return;
+    }
     try {
       actions.qualifyOrgs([id], type);
     } catch (e) {
