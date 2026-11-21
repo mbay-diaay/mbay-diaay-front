@@ -182,7 +182,7 @@ export const ROLE_DOCS: Record<DocRoleId, RoleDoc> = {
     ],
     peut: [
       "Créer son équipe et les rôles de sa coopérative",
-      "Ajouter des techniciens (code à 8 chiffres)",
+      "Ajouter des techniciens (code à 5 chiffres)",
       "Modifier les fiches producteurs et les organisations",
       "Examiner et décider des dossiers",
       "Gérer adhérents, cotisations, réunions, PV, décisions, documents",
@@ -261,10 +261,10 @@ export const ROLE_DOCS: Record<DocRoleId, RoleDoc> = {
     court: "Technicien",
     voit: "Une ou plusieurs SCOOP",
     mission: "Recense : crée et envoie les dossiers producteurs",
-    cree: "Ajouté par le gestionnaire de la coopérative, qui lui remet un code à 8 chiffres.",
+    cree: "Ajouté par le gestionnaire de la coopérative, qui lui remet un code à 5 chiffres.",
     etapes: [
       ["Ajout", "Le gestionnaire saisit nom, téléphone, sexe, âge et photo."],
-      ["Code", "Code à 8 chiffres, valable 72 h, une seule fois, remis en main propre."],
+      ["Code", "Code à 5 chiffres, valable 72 h, une seule fois, remis en main propre."],
       ["Activation sur téléphone", "Numéro + code, puis choix du mot de passe."],
       ["Ensuite", "Numéro + mot de passe sur le mobile ; e-mail + mot de passe + code sur le web."],
     ],
@@ -322,7 +322,7 @@ export const TREES = {
 ├── crée ──► Coopérative A + son gestionnaire
 │   └── Gestionnaire A
 │       ├── crée ──► Équipe de A            bureau, secrétaire, autres rôles…
-│       ├── ajoute ──► Technicien           code à 8 chiffres, application mobile
+│       ├── ajoute ──► Technicien           code à 5 chiffres, application mobile
 │       │   └── recense ──► Fiches de A     producteurs et GIE (pas de compte)
 │       └── enregistre ──► Fiches de A
 └── crée ──► Coopérative B + son gestionnaire
@@ -357,7 +357,7 @@ export const TREES = {
 └── 4. La fiche reprend la photo du dossier`,
   technicien: `Technicien
 ├── Le gestionnaire l'ajoute                 nom, téléphone, sexe, âge, photo
-├── La plateforme donne un code à 8 chiffres valable 72 h, une seule fois, remis en main propre
+├── La plateforme donne un code à 5 chiffres valable 72 h, une seule fois, remis en main propre
 ├── Sur son téléphone : numéro + code ──► il choisit son mot de passe
 └── Ensuite : numéro + mot de passe`,
   image: `Image d'une fiche        logo de coopérative, photo de producteur, de personnel, de technicien
@@ -482,7 +482,7 @@ export const PROCHAINES_ETAPES: readonly string[] = [
 export const API_ROUTES: readonly { domaine: string; routes: string; usage: string }[] = [
   { domaine: "Santé", routes: "GET /health · GET /ready", usage: "Supervision (Postgres, Redis)" },
   { domaine: "Connexion", routes: "POST /auth/sign-in · /auth/otp/verify · /auth/otp/resend · /auth/refresh · GET /me", usage: "E-mail + mot de passe, code à 6 chiffres ; jetons 1 h / 7 j" },
-  { domaine: "Technicien mobile", routes: "POST /auth/technician/activate · /auth/technician/sign-in", usage: "Téléphone + code à 8 chiffres, puis téléphone + mot de passe" },
+  { domaine: "Technicien mobile", routes: "POST /auth/technician/activate · /auth/technician/sign-in", usage: "Téléphone + code à 5 chiffres, puis téléphone + mot de passe" },
   { domaine: "Comptes", routes: "/users · /scoops/:id/accounts · /scoops/:id/technicians", usage: "Création, modification, activation, liaison" },
   { domaine: "Rôles de coopérative", routes: "/scoops/:id/roles", usage: "Sous-rôles propres à une coopérative" },
   { domaine: "Administratif", routes: "/scoops · /organisations · /producers · /members · /contributions · /meetings · /documents", usage: "Listes paginées filtrées par périmètre" },

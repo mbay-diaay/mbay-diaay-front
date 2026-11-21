@@ -377,12 +377,12 @@ describe("accueil d'un compte d'une seule coopérative", () => {
 describe("techniciens : code temporaire à usage unique", () => {
   const input = { name: "Seydou Test", phone: "77 555 01 02", sex: "H" as const, age: 30, scoopIds: ["s1"] };
 
-  it("génère un code de 8 chiffres, sans e-mail obligatoire, et jamais deux comptes sur un même numéro", () => {
+  it("génère un code de 5 chiffres, sans e-mail obligatoire, et jamais deux comptes sur un même numéro", () => {
     loginAs("gestionnaire", "babacar.fall@scoop-kms.example", "Babacar Fall");
     const created = actions.createTechnician(input);
     expect(created.ok).toBe(true);
     if (!created.ok) return;
-    expect(created.code).toMatch(/^\d{8}$/);
+    expect(created.code).toMatch(/^\d{5}$/);
     const user = getState().users.find((candidate) => candidate.id === created.userId);
     expect(user?.email).toBe("");
     expect(user?.active).toBe(false);
@@ -397,7 +397,7 @@ describe("techniciens : code temporaire à usage unique", () => {
     expect(actions.regenerateTechnicianCode(fatou.id).ok).toBe(true);
     const after = getState().users.find((candidate) => candidate.id === fatou.id)!;
     expect(after.active).toBe(false);
-    expect(after.activation?.code).toMatch(/^\d{8}$/);
+    expect(after.activation?.code).toMatch(/^\d{5}$/);
   });
 
   it("exige téléphone, sexe et âge, et change le code à la régénération", () => {
@@ -410,7 +410,7 @@ describe("techniciens : code temporaire à usage unique", () => {
     const again = actions.regenerateTechnicianCode(created.userId);
     expect(again.ok).toBe(true);
     if (!again.ok) return;
-    expect(again.code).toMatch(/^\d{8}$/);
+    expect(again.code).toMatch(/^\d{5}$/);
     expect(getState().users.find((candidate) => candidate.id === created.userId)?.active).toBe(false);
     // L'ancien code ne peut plus partir par e-mail.
     expect(actions.sendTechnicianCodeByEmail(created.userId, created.code).ok).toBe(false);

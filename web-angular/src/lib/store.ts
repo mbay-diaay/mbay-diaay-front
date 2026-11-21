@@ -224,7 +224,7 @@ export interface AppUser {
   /** GIE suivis par un technicien. Vide : il suit toute la coopérative (association, pas une restriction de droits). */
   orgIds?: string[] | undefined;
   /**
-   * Code temporaire à usage unique d'un technicien (8 chiffres), remis en main propre. Tant qu'il existe, le
+   * Code temporaire à usage unique d'un technicien (5 chiffres), remis en main propre. Tant qu'il existe, le
    * technicien n'a pas encore choisi son mot de passe sur l'application mobile. Démonstration seulement : l'API
    * ne garde que son empreinte.
    */
@@ -354,9 +354,9 @@ function persistPaymentLinks(): void {
 /** Un code temporaire de technicien vaut 72 heures. */
 const TECHNICIAN_CODE_TTL_MS = 72 * 60 * 60 * 1000;
 
-/** Code temporaire : 8 chiffres tirés au hasard (cryptographiquement), jamais un mot ni une lettre. */
+/** Code temporaire : 5 chiffres tirés au hasard (cryptographiquement), jamais un mot ni une lettre. */
 function generateTemporaryCode(): string {
-  const digits = new Uint32Array(8);
+  const digits = new Uint32Array(5);
   globalThis.crypto.getRandomValues(digits);
   return Array.from(digits, (value) => String(value % 10)).join("");
 }
