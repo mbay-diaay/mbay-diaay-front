@@ -1,4 +1,5 @@
 import { checkAccess } from "./guard";
+import { isSenegalPhone } from "./phone-sn";
 import {
   ACCOUNT_CANDIDATES,
   ACCOUNT_LINKS,
@@ -768,7 +769,7 @@ function access(
 }
 /** Contrôles communs à la création et à la modification d'un technicien : téléphone, sexe et âge obligatoires. */
 function technicianProfileError(input: { phone: string; sex?: string; age?: number }): string | null {
-  if (input.phone.replace(/\D/g, "").length < 9) return "errors.technician.phone";
+  if (!isSenegalPhone(input.phone)) return "errors.technician.phone";
   if (input.sex !== "F" && input.sex !== "H") return "errors.technician.sex";
   if (!Number.isInteger(input.age) || (input.age as number) < 15 || (input.age as number) > 100)
     return "errors.technician.age";

@@ -3,6 +3,7 @@ import { Component, computed, effect, inject, input, model, signal, untracked } 
 import { syncImage } from "@/lib/api/media";
 import type { MessageKey } from "@/lib/i18n";
 import type { PreparedImage } from "@/lib/image";
+import { isSenegalPhone } from "@/lib/phone-sn";
 import { inScope } from "@/lib/scope";
 
 import { LocaleService } from "./locale.service";
@@ -156,7 +157,7 @@ type Errors = Partial<Record<"firstName" | "lastName" | "email" | "phone" | "sex
             <ui-text-field preset="firstName" [label]="t()('tech.dialog.firstName')" [value]="firstName()" [error]="err().firstName ?? ''" (valueChange)="firstName.set($event); clear('firstName')" />
             <ui-text-field preset="lastName" [label]="t()('tech.dialog.lastName')" [value]="lastName()" [error]="err().lastName ?? ''" (valueChange)="lastName.set($event); clear('lastName')" />
             <ui-text-field class="sm:col-span-2" preset="email" [label]="t()('tech.dialog.email')" [optional]="t()('cooperatives.form.regionOptional')" [hint]="t()('tech.dialog.emailHint')" [value]="email()" [error]="err().email ?? ''" (valueChange)="email.set($event); clear('email')" />
-            <ui-text-field preset="phone" [label]="t()('tech.dialog.phone')" [value]="phone()" [error]="err().phone ?? ''" (valueChange)="phone.set($event); clear('phone')" />
+            <ui-text-field preset="phoneSn" [label]="t()('tech.dialog.phone')" [value]="phone()" [error]="err().phone ?? ''" (valueChange)="phone.set($event); clear('phone')" />
             <ui-text-field preset="age" [label]="t()('adherents.add.age')" [hint]="t()('tech.dialog.ageHint')" [value]="age()" [error]="err().age ?? ''" (valueChange)="age.set($event); clear('age')" />
             <div class="sm:col-span-2">
               <p class="lbl">{{ t()("adherents.add.sex") }}</p>
@@ -342,7 +343,7 @@ export class TechnicianDialogComponent {
       if (!this.firstName().trim()) err.firstName = t("errors.technician.name");
       if (!this.lastName().trim()) err.lastName = t("errors.technician.name");
       if (this.email().trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email().trim())) err.email = t("errors.technician.email");
-      if (this.phone().replace(/\D/g, "").length < 9) err.phone = t("errors.technician.phone");
+      if (!isSenegalPhone(this.phone())) err.phone = t("errors.technician.phone");
       if (!this.sex()) err.sex = t("errors.technician.sex");
       const ageValue = Number(this.age().trim());
       if (!this.age().trim() || !Number.isInteger(ageValue) || ageValue < 15 || ageValue > 100) err.age = t("errors.technician.age");

@@ -1,5 +1,7 @@
 import { Component, ElementRef, computed, inject, input, output, viewChild } from "@angular/core";
 
+import { formatSenegalPhone } from "@/lib/phone-sn";
+
 import { LocaleService } from "../locale.service";
 import { FIELD_PRESETS, type FieldPreset } from "./field-presets";
 
@@ -124,7 +126,7 @@ let nextId = 0;
         [attr.aria-invalid]="error() ? true : null"
         [attr.aria-describedby]="describedBy()"
         [value]="value()"
-        (input)="valueChange.emit($any($event.target).value)"
+        (input)="onInput($any($event.target))"
       />
     </div>
     @if (error()) {
@@ -163,6 +165,7 @@ export class TextFieldComponent {
       autocomplete: this.autocomplete() || p?.autocomplete || "",
       inputmode: this.inputmode() || p?.inputmode || "",
       maxlength: this.maxlength() ?? p?.maxlength ?? null,
+      mask: p?.mask ?? null,
     };
   });
 
@@ -173,6 +176,13 @@ export class TextFieldComponent {
   protected readonly describedBy = computed(() => (this.error() ? this.errorId : this.hint() ? this.hintId : null));
 
   private readonly field = viewChild<ElementRef<HTMLInputElement>>("field");
+
+  /** Applique le masque du champ type (ex. téléphone sénégalais) puis rend la valeur, y compris dans la zone de saisie. */
+  protected onInput(target: HTMLInputElement): void {
+    const formatted = this.eff().mask === "phoneSn" ? formatSenegalPhone(target.value) : target.value;
+    if (formatted !== target.value) target.value = formatted;
+    this.valueChange.emit(formatted);
+  }
 
   focus(): void {
     this.field()?.nativeElement.focus();
