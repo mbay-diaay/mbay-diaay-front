@@ -397,7 +397,7 @@ export const cooperatives = {
   "tech.dialog.created": "{name} a été ajouté.",
   "tech.code.title": "Code temporaire de {name}",
   "tech.code.description": "À remettre au technicien en main propre. Il le saisira à sa première connexion sur l'application mobile.",
-  "tech.code.aria": "Code temporaire à 8 chiffres",
+  "tech.code.aria": "Code temporaire à 5 chiffres",
   "tech.code.rules": "Ce code ne sert qu'une fois et reste valable jusqu'au {date}. Il ne sera plus affiché après cette fenêtre : notez-le ou remettez-le maintenant.",
   "tech.code.emailText": "Le technicien a une adresse e-mail ({email}). Envoyez-lui le code seulement s'il le souhaite.",
   "tech.code.copy": "Copier le code",

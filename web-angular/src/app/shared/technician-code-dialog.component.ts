@@ -13,7 +13,7 @@ import { V2_PAGE_STYLES } from "./ui/v2-page.styles";
 export interface TechnicianCodeView {
   userId: string;
   name: string;
-  /** 8 chiffres. */
+  /** 5 chiffres. */
   code: string;
   expiresAt: string;
   /** Adresse e-mail du technicien, si elle est connue : active le bouton d'envoi. */
@@ -92,7 +92,7 @@ export class TechnicianCodeDialogComponent {
   /** Vrai un court instant après la copie, pour le dire à la personne. */
   protected readonly copied = signal(false);
 
-  /** Copie le code sans espace (8 chiffres), prêt à être collé dans un message. */
+  /** Copie le code sans espace (5 chiffres), prêt à être collé dans un message. */
   protected async copy(code: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(code);
@@ -105,10 +105,10 @@ export class TechnicianCodeDialogComponent {
     setTimeout(() => this.copied.set(false), 2500);
   }
 
-  /** « 1234 5678 » : plus facile à lire à voix haute. */
+  /** « 123 45 » : plus facile à lire à voix haute. */
   protected readonly grouped = computed(() => {
     const code = this.view()?.code ?? "";
-    return `${code.slice(0, 4)} ${code.slice(4)}`;
+    return `${code.slice(0, 3)} ${code.slice(3)}`;
   });
 
   protected readonly expiry = computed(() => {
