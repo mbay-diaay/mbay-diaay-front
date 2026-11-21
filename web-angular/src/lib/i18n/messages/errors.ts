@@ -114,7 +114,7 @@ export const errors = {
   "errors.technician.name": "Indiquez le prénom et le nom du technicien.",
   "errors.staff.notFound": "Personne introuvable dans votre coopérative.",
   "errors.staff.scope": "Cette coopérative est hors de votre périmètre.",
-  "errors.technician.phone": "Indiquez le téléphone du technicien, par exemple 77 123 45 67.",
+  "errors.technician.phone": "Indiquez un numéro sénégalais à 9 chiffres, par exemple 77 123 45 67.",
   "errors.technician.sex": "Indiquez le sexe du technicien.",
   "errors.technician.age": "L'âge doit être un nombre entier entre 15 et 100.",
   "errors.technician.phoneTaken": "Ce numéro de téléphone est déjà utilisé par un compte.",

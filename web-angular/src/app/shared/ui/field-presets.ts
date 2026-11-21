@@ -14,6 +14,7 @@ export type FieldPreset =
   | "lastName"
   | "age"
   | "phone"
+  | "phoneSn"
   | "cni"
   | "village"
   | "commune"
@@ -35,6 +36,8 @@ export interface FieldPresetDef {
   inputmode?: "text" | "numeric" | "tel" | "email";
   autocomplete?: string;
   maxlength?: number;
+  /** Mise en forme automatique pendant la saisie. */
+  mask?: "phoneSn";
 }
 
 export const FIELD_PRESETS: Record<FieldPreset, FieldPresetDef> = {
@@ -42,6 +45,7 @@ export const FIELD_PRESETS: Record<FieldPreset, FieldPresetDef> = {
   lastName: { placeholder: "ui.field.ph.lastName", autocomplete: "family-name", maxlength: 60 },
   age: { placeholder: "ui.field.ph.age", icon: "calendar_today", type: "number", inputmode: "numeric", maxlength: 3 },
   phone: { placeholder: "ui.field.ph.phone", icon: "call", type: "tel", inputmode: "tel", autocomplete: "tel", maxlength: 20 },
+  phoneSn: { placeholder: "ui.field.ph.phone", icon: "call", type: "tel", inputmode: "numeric", autocomplete: "tel-national", maxlength: 12, mask: "phoneSn" },
   cni: { placeholder: "ui.field.ph.cni", icon: "badge", inputmode: "numeric", autocomplete: "off", maxlength: 20 },
   village: { placeholder: "ui.field.ph.village", icon: "location_on", maxlength: 80 },
   commune: { placeholder: "ui.field.ph.commune", icon: "location_on", maxlength: 80 },

@@ -215,7 +215,7 @@ interface TechnicianRow {
           <div class="space-y-5 pb-6">
             <ui-image-picker [value]="photo()" [name]="editName()" (picked)="onPhoto($event)" (cleared)="clearPhoto()" />
             <ui-text-field [label]="t()('techniciens.edit.name')" [value]="editName()" [error]="editError()" (valueChange)="editName.set($event); editError.set('')" />
-            <ui-text-field preset="phone" [label]="t()('tech.dialog.phone')" [value]="editPhone()" (valueChange)="editPhone.set($event)" />
+            <ui-text-field preset="phoneSn" [label]="t()('tech.dialog.phone')" [value]="editPhone()" (valueChange)="editPhone.set($event)" />
             <ui-text-field preset="age" [label]="t()('adherents.add.age')" [hint]="t()('tech.dialog.ageHint')" [value]="editAge()" (valueChange)="editAge.set($event)" />
             <div>
               <p class="lbl">{{ t()("adherents.add.sex") }}</p>
