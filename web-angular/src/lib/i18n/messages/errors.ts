@@ -98,6 +98,8 @@ export const errors = {
     "Cette adresse e-mail est déjà utilisée par un autre compte ou un autre membre.",
   "errors.scoop.notAllowed": "Seul l'administrateur peut gérer les coopératives.",
   "errors.scoop.notFound": "Coopérative introuvable.",
+  "errors.scoop.api": "Le serveur a refusé l'opération sur cette coopérative. Réessayez.",
+  "errors.scoop.loadError": "Impossible de charger les coopératives. Réessayez.",
   "errors.scoop.archived":
     "Cette coopérative est archivée : elle ne reçoit plus de nouvelles données.",
   "errors.scoop.blocked":

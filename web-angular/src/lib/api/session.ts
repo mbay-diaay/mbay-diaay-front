@@ -2,6 +2,8 @@ import type { Permission, RoleId } from "../permissions";
 import { actions, getState } from "../store";
 import { apiFetch } from "./client";
 import { isApiMode } from "./config";
+import { fetchAllPages } from "./pagination";
+import { listScoops, scoopFromApi } from "./scoops";
 import { clearTokens, getAccessToken } from "./tokens";
 
 type MeResponse = {
@@ -31,10 +33,24 @@ export async function hydrateSessionFromApi(): Promise<boolean> {
   try {
     const me = await apiFetch<MeResponse>("/me");
     actions.login(me.name, me.email, me.role, me.permissions);
+    await loadScoopsFromApi();
     return true;
   } catch {
     clearTokens();
     actions.logout();
     return false;
+  }
+}
+
+/**
+ * Mode API : les coopératives du compte (son périmètre) viennent du serveur, pas des données de démonstration.
+ * Un échec laisse la liste actuelle en place : les écrans la rechargent à leur ouverture.
+ */
+export async function loadScoopsFromApi(): Promise<void> {
+  try {
+    const scoops = await fetchAllPages((query) => listScoops(query));
+    actions.replaceScoopsFromApi(scoops.map(scoopFromApi));
+  } catch {
+    // Silencieux : voir ci-dessus.
   }
 }
