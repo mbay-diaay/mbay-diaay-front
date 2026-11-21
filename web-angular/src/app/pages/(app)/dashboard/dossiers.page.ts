@@ -14,6 +14,7 @@ import { inScope, scopedDossiers } from "@/lib/scope";
 import { fmtDate, nf } from "@/lib/format";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
+import { ProducerWorkflow } from "@shared/producer-workflow.service";
 import { StoreService } from "@shared/store.service";
 import { createPager } from "@shared/pager";
 import {
@@ -540,6 +541,7 @@ export default class DossiersPage {
   private readonly router = inject(Router);
   private readonly snackbar = inject(SnackbarService);
   protected readonly store = inject(StoreService);
+  private readonly flow = inject(ProducerWorkflow);
   protected readonly locale = inject(LocaleService);
   protected readonly t = this.locale.t;
   protected readonly nf = nf;
@@ -882,7 +884,7 @@ export default class DossiersPage {
    * Crée le dossier, joint les pièces, puis le soumet si demandé.
    * Soumettre applique d'abord les contrôles du store (`validateDraft`) : erreurs affichées champ par champ.
    */
-  protected submitNew(submit: boolean): void {
+  protected async submitNew(submit: boolean): Promise<void> {
     const draft = this.draft();
     if (submit) {
       const found = validateDraft(draft, this.files().length);
@@ -897,13 +899,13 @@ export default class DossiersPage {
       );
       return;
     }
-    const res = this.store.actions.createDossier(this.form().scoopId, draft);
+    const res = await this.flow.createDossier(this.form().scoopId, draft);
     if (!res.ok) {
       this.snackbar.error(this.locale.tNow(res.error as MessageKey));
       return;
     }
     for (const f of this.files()) {
-      const added = this.store.actions.addDocument(res.id, {
+      const added = await this.flow.addDocument(res.id, {
         kind: f.kind,
         name: f.name,
         sizeKb: f.sizeKb,
@@ -913,7 +915,7 @@ export default class DossiersPage {
     }
     let message = this.t()("dossiers.new.done");
     if (submit) {
-      const sent = this.store.actions.submitDossier(res.id);
+      const sent = await this.flow.submitDossier(res.id);
       message = sent.ok
         ? sent.possibleDuplicateOf
           ? `${this.t()("dossiers.detail.edit.submitted")} · ${this.t()("dossiers.detail.edit.duplicateFlagged")}`
