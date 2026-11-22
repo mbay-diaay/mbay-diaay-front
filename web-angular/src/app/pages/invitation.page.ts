@@ -1,10 +1,15 @@
 import { Component, DestroyRef, inject, signal } from "@angular/core";
+import { ArrowRight, CircleAlert, Loader2, LucideAngularModule, ShieldCheck } from "lucide-angular";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { take } from "rxjs";
 
 import { authErrorMessage } from "@/lib/auth/messages";
 import { isPasswordValid } from "@/lib/auth/policy";
+import { AUTH_FORM_STYLES } from "@shared/auth-form.styles";
+import { AuthFieldComponent } from "@shared/auth-field.component";
+import { AuthPasswordRulesComponent } from "@shared/auth-password-rules.component";
+import { AuthShellComponent } from "@shared/auth-shell.component";
 import { AuthService } from "@shared/auth.service";
 import { LocaleService } from "@shared/locale.service";
 import type { RouteMeta } from "@analogjs/router";
@@ -20,86 +25,86 @@ export const routeMeta: RouteMeta = { canActivate: [siteGateGuard] };
  */
 @Component({
   selector: "app-invitation-page",
-  imports: [RouterLink],
+  imports: [
+    RouterLink,
+    LucideAngularModule,
+    AuthShellComponent,
+    AuthFieldComponent,
+    AuthPasswordRulesComponent,
+  ],
+  styles: AUTH_FORM_STYLES,
   template: `
-    <div
-      class="flex min-h-screen items-start justify-center px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-8 sm:items-center sm:p-6"
-    >
-      <div class="w-full max-w-sm">
-        <h1 class="text-xl font-semibold">{{ t()("auth.invitation.title") }}</h1>
+    <app-auth-shell>
+      <span
+        class="mono inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5"
+        style="background: var(--v2-sauge); color: var(--v2-foret)"
+      >
+        <lucide-angular [img]="icons.shield" [size]="14" />
+        {{ t()("auth.invitation.badge") }}
+      </span>
 
-        @if (checking()) {
-          <p role="status" class="mt-6 text-sm text-muted-foreground">
-            {{ t()("auth.invitation.checking") }}
-          </p>
-        } @else if (known(); as k) {
-          <p class="mt-1 text-muted-foreground">{{ t()("auth.invitation.description") }}</p>
-          <form class="mt-6 space-y-5" novalidate (submit)="$event.preventDefault(); submitForm()">
-            <p class="text-sm text-muted-foreground">
-              <span class="font-medium text-foreground">{{ k.name }}</span>
-              <br />
-              {{ t()("auth.invitation.account", { email: k.maskedEmail }) }}
-            </p>
-            <div class="space-y-2">
-              <label for="pw1" class="text-sm font-medium">{{
-                t()("auth.invitation.password")
-              }}</label>
-              <input
-                id="pw1"
-                type="password"
-                autocomplete="new-password"
-                [value]="password()"
-                (input)="password.set(inputValue($event))"
-                class="flex h-touch w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
-                autofocus
-              />
-            </div>
-            <div class="space-y-2">
-              <label for="pw2" class="text-sm font-medium">{{
-                t()("auth.invitation.confirm")
-              }}</label>
-              <input
-                id="pw2"
-                type="password"
-                autocomplete="new-password"
-                [value]="confirm()"
-                (input)="confirm.set(inputValue($event))"
-                class="flex h-touch w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
-              />
-            </div>
-            @if (mismatch()) {
-              <div role="alert" class="rounded-md bg-danger-bg px-3 py-2.5 text-sm text-danger-fg">
-                {{ t()("auth.invitation.mismatch") }}
-              </div>
-            } @else if (error()) {
-              <div role="alert" class="rounded-md bg-danger-bg px-3 py-2.5 text-sm text-danger-fg">
-                {{ error() }}
-              </div>
-            }
-            <button
-              type="submit"
-              class="inline-flex h-touch w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              [disabled]="busy() || !canSubmit()"
-            >
-              {{ busy() ? t()("auth.invitation.submitting") : t()("auth.invitation.submit") }}
-            </button>
-          </form>
-        } @else {
-          <div role="alert" class="mt-6 rounded-md bg-danger-bg px-3 py-2.5 text-sm text-danger-fg">
-            {{ error() || t()("auth.error.invitation_invalid") }}
-          </div>
-        }
+      <h1 class="mt-7 text-[32px] font-extrabold leading-[1.05] tracking-[-0.03em] lg:text-[40px]">
+        {{ t()("auth.invitation.title") }}
+      </h1>
 
-        <p class="mt-8 text-center text-sm">
-          <a
-            routerLink="/login"
-            class="font-semibold text-primary hover:underline pointer-coarse:inline-block pointer-coarse:py-2"
-          >
-            {{ t()("auth.invitation.toLogin") }}
-          </a>
+      @if (checking()) {
+        <p role="status" class="mt-3 flex items-center gap-2 text-base font-medium" style="color: var(--v2-gris-texte)">
+          <lucide-angular [img]="icons.loader" [size]="18" class="animate-spin" />
+          {{ t()("auth.invitation.checking") }}
         </p>
-      </div>
-    </div>
+      } @else if (known(); as k) {
+        <p class="mt-3 text-base font-medium" style="color: var(--v2-gris-texte)">
+          {{ t()("auth.invitation.description") }}
+        </p>
+        <div
+          class="mt-6 rounded-[16px] border p-4"
+          style="border-color: var(--v2-bord-carte); background: var(--v2-blanc)"
+        >
+          <p class="text-[17px] font-extrabold">{{ k.name }}</p>
+          <p class="mono mt-1" style="color: var(--v2-gris-texte)">
+            {{ t()("auth.invitation.account", { email: k.maskedEmail }) }}
+          </p>
+        </div>
+        <form class="mt-6 space-y-5" novalidate (submit)="$event.preventDefault(); submitForm()">
+          <app-auth-field
+            id="pw1"
+            kind="password"
+            autocomplete="new-password"
+            [label]="t()('auth.invitation.password')"
+            [(value)]="password"
+          />
+          <app-auth-password-rules [password]="password()" [email]="k.email" />
+          <app-auth-field
+            id="pw2"
+            kind="password"
+            autocomplete="new-password"
+            [label]="t()('auth.invitation.confirm')"
+            [invalid]="mismatch()"
+            [(value)]="confirm"
+          />
+          @if (mismatch()) {
+            <div role="alert" class="alert"><lucide-angular [img]="icons.alert" [size]="20" />{{ t()("auth.invitation.mismatch") }}</div>
+          } @else if (error()) {
+            <div role="alert" class="alert"><lucide-angular [img]="icons.alert" [size]="20" />{{ error() }}</div>
+          }
+          <button type="submit" class="btn-primary !mt-7" [disabled]="busy() || !canSubmit()">
+            <span>{{ busy() ? t()("auth.invitation.submitting") : t()("auth.invitation.submit") }}</span>
+            <span class="btn-chip" aria-hidden="true">
+              <lucide-angular [img]="busy() ? icons.loader : icons.arrowRight" [size]="22" [class.animate-spin]="busy()" />
+            </span>
+          </button>
+        </form>
+      } @else {
+        <div role="alert" class="alert mt-6">
+          <lucide-angular [img]="icons.alert" [size]="20" class="mt-0.5 shrink-0" />
+          <span>{{ error() || t()("auth.error.invitation_invalid") }}</span>
+        </div>
+      }
+
+      <p class="mt-8 text-[15px]">
+        <a routerLink="/login" class="link">{{ t()("auth.invitation.toLogin") }}</a>
+      </p>
+    </app-auth-shell>
   `,
 })
 export default class InvitationPage {
@@ -109,6 +114,8 @@ export default class InvitationPage {
   private readonly destroyRef = inject(DestroyRef);
   protected readonly locale = inject(LocaleService);
   protected readonly t = this.locale.t;
+
+  protected readonly icons = { alert: CircleAlert, arrowRight: ArrowRight, loader: Loader2, shield: ShieldCheck };
 
   private token: string | null = null;
   protected readonly checking = signal(false);
