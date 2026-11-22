@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from "@angular/core";
-import { Router } from "@angular/router";
+import { ActivatedRoute, Router } from "@angular/router";
 
 import type { MessageKey } from "@/lib/i18n";
 import { type DraftIssue, validateDraft } from "@/lib/dossiers";
@@ -539,6 +539,7 @@ const emptyForm = (scoopId: string): NewForm => ({
 })
 export default class DossiersPage {
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly snackbar = inject(SnackbarService);
   protected readonly store = inject(StoreService);
   private readonly flow = inject(ProducerWorkflow);
@@ -566,6 +567,16 @@ export default class DossiersPage {
   );
 
   protected readonly canCreate = computed(() => this.store.can("dossier.create"));
+
+  constructor() {
+    // « Nouveau producteur » (page Producteurs) arrive ici avec `?nouveau` : le formulaire s'ouvre tout de suite.
+    if (this.route.snapshot.queryParamMap.has("nouveau")) {
+      queueMicrotask(() => {
+        if (this.canCreate()) this.openNew();
+        void this.router.navigate([], { queryParams: { nouveau: null }, queryParamsHandling: "merge", replaceUrl: true });
+      });
+    }
+  }
 
   protected readonly createScoops = computed(() => {
     const session = this.store.state().session;

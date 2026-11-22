@@ -975,15 +975,15 @@ const initials = (name: string) =>
 
             <!-- ═════ GIE et organisations ═════ -->
             @if (current === "gie") {
-              <section class="card mt-6 overflow-hidden">
-                @if (canManageOrgs()) {
-                  <div class="flex justify-end px-5 pt-5">
-                    <button type="button" class="btn btn-primary" (click)="orgOpen.set(true)">
-                      {{ t()("cooperatives.fiche.org.add") }}
-                      <span class="grid size-9 place-items-center rounded-[12px]" style="background: var(--v2-citron); color: var(--v2-foret)"><ui-icon name="add" [size]="18" /></span>
-                    </button>
-                  </div>
-                }
+              @if (canManageOrgs()) {
+                <div class="mt-6 flex justify-end">
+                  <button type="button" class="btn btn-primary" (click)="orgOpen.set(true)">
+                    {{ t()("cooperatives.fiche.org.add") }}
+                    <span class="grid size-9 place-items-center rounded-[12px]" style="background: var(--v2-citron); color: var(--v2-foret)"><ui-icon name="add" [size]="18" /></span>
+                  </button>
+                </div>
+              }
+              <section class="card overflow-hidden" [class.mt-4]="canManageOrgs()" [class.mt-6]="!canManageOrgs()">
                 <div class="flex flex-wrap items-center justify-between gap-3 p-5">
                   <label class="search min-w-[240px] flex-1">
                     <ui-icon name="search" [size]="20" />
@@ -1117,15 +1117,15 @@ const initials = (name: string) =>
 
             <!-- ═════ Adhérents ═════ -->
             @if (current === "membres") {
-              <section class="card mt-6 overflow-hidden">
-                @if (canManageMembers()) {
-                  <div class="flex justify-end px-5 pt-5">
-                    <button type="button" class="btn btn-primary" (click)="memberOpen.set(true)">
-                      {{ t()("cooperatives.fiche.member.add") }}
-                      <span class="grid size-9 place-items-center rounded-[12px]" style="background: var(--v2-citron); color: var(--v2-foret)"><ui-icon name="person_add" [size]="18" /></span>
-                    </button>
-                  </div>
-                }
+              @if (canManageMembers()) {
+                <div class="mt-6 flex justify-end">
+                  <button type="button" class="btn btn-primary" (click)="memberOpen.set(true)">
+                    {{ t()("cooperatives.fiche.member.add") }}
+                    <span class="grid size-9 place-items-center rounded-[12px]" style="background: var(--v2-citron); color: var(--v2-foret)"><ui-icon name="person_add" [size]="18" /></span>
+                  </button>
+                </div>
+              }
+              <section class="card overflow-hidden" [class.mt-4]="canManageMembers()" [class.mt-6]="!canManageMembers()">
                 <div class="flex flex-wrap items-center justify-between gap-3 p-5">
                   <label class="search min-w-[240px] flex-1">
                     <ui-icon name="search" [size]="20" />

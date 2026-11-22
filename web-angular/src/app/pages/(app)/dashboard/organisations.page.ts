@@ -57,20 +57,19 @@ const typeTone = (type: string | null) =>
   template: `
     <app-shell perm="org.read" [area]="t()('organisations.area')">
       <!-- ───── En-tête ───── -->
-      <header class="rise">
-        <p class="mono" style="color: var(--v2-gris-texte)">{{ t()("organisations.eyebrow") }}</p>
-        <h1
-          class="mt-2 text-[30px] font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-[38px]"
-        >
-          {{ t()("organisations.title") }}
-        </h1>
-        <p class="mt-2 max-w-2xl text-[16px] font-medium" style="color: var(--v2-gris-texte)">
-          {{ t()("organisations.lead") }}
-        </p>
+      <header class="rise flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div class="min-w-0">
+          <p class="mono" style="color: var(--v2-gris-texte)">{{ t()("organisations.eyebrow") }}</p>
+          <h1 class="mt-2 text-[30px] font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-[38px]">
+            {{ t()("organisations.title") }}
+          </h1>
+          <p class="mt-2 max-w-2xl text-[16px] font-medium" style="color: var(--v2-gris-texte)">
+            {{ t()("organisations.lead") }}
+          </p>
+        </div>
         @if (store.can("org.manage")) {
-          <button type="button" class="btn btn-primary mt-5" (click)="newOpen.set(true)">
-            {{ t()("cooperatives.fiche.org.add") }}
-            <span class="grid size-9 place-items-center rounded-[12px]" style="background: var(--v2-citron); color: var(--v2-foret)"><ui-icon name="add" [size]="18" /></span>
+          <button type="button" class="btn btn-primary ml-auto" (click)="newOpen.set(true)">
+            {{ t()("cooperatives.fiche.org.add") }}<span class="btn-chip"><ui-icon name="add" [size]="20" /></span>
           </button>
         }
       </header>

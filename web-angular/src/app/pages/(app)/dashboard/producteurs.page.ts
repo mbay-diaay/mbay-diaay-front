@@ -139,10 +139,16 @@ const STATUS = {
             {{ t()("producteurs.index.lead") }}
           </p>
         </div>
-        <button type="button" class="btn btn-primary" (click)="exportOpen.set(true)">
-          {{ t()("producteurs.index.exportCsv") }}
-          <span class="btn-chip"><ui-icon name="download" [size]="20" /></span>
-        </button>
+        <span class="ml-auto flex flex-wrap gap-2">
+          <button type="button" class="btn btn-ghost" (click)="exportOpen.set(true)">
+            <ui-icon name="download" [size]="18" />{{ t()("producteurs.index.exportCsv") }}
+          </button>
+          @if (store.can("dossier.create")) {
+            <button type="button" class="btn btn-primary" (click)="newProducer()">
+              {{ t()("producteurs.index.new") }}<span class="btn-chip"><ui-icon name="add" [size]="20" /></span>
+            </button>
+          }
+        </span>
       </header>
 
       <!-- ───── Statistiques ───── -->
@@ -417,6 +423,11 @@ export default class ProducteursPage {
   protected readonly q = signal(this.queryState().q);
 
   protected readonly exportOpen = signal(false);
+
+  /** Un producteur entre par un dossier : le formulaire de la page Dossiers s'ouvre directement. */
+  protected newProducer(): void {
+    void this.router.navigate(["/dashboard/dossiers"], { queryParams: { nouveau: 1 } });
+  }
   protected readonly filters = signal({
     village: this.queryState().village,
     sexe: this.queryState().sexe,
