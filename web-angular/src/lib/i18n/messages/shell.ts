@@ -35,6 +35,7 @@ export const shell = {
   "nav.group.superadmin": "Super administration",
   "nav.item.superadminRoles": "Rôles et droits",
   "nav.item.superadminComptes": "Attribution des rôles",
+  "nav.item.superadminParametres": "Réglages de la plateforme",
   "nav.item.imports": "Imports",
   "nav.item.donnees": "Sauvegarde & export",
   "nav.item.audit": "Journal d'audit",

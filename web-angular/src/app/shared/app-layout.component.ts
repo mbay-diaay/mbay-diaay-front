@@ -500,6 +500,12 @@ function ensureSessionHydrated(): Promise<void> {
                           <span class="flex-1">{{ t()("nav.item.utilisateurs") }}</span>
                         </a>
                       }
+                      @if (canSee("role.configure")) {
+                        <a class="pop-item" routerLink="/dashboard/super-admin/parametres" (click)="topMenu.set(null)">
+                          <ui-icon name="tune" [size]="20" />
+                          <span class="flex-1">{{ t()("nav.item.superadminParametres") }}</span>
+                        </a>
+                      }
                       @if (canSee("config.manage")) {
                         <a class="pop-item" routerLink="/dashboard/referentiels" (click)="topMenu.set(null)">
                           <ui-icon name="dataset" [size]="20" />
