@@ -3,6 +3,8 @@ import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, RouterLink } from "@angular/router";
 import { map } from "rxjs";
 
+import { isApiMode } from "@/lib/api/config";
+import { inviteUser } from "@/lib/api/users";
 import { memberDues } from "@/lib/contributions";
 import { ageAtMost, fmtDate, fmtDateTime, nf } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
@@ -722,6 +724,11 @@ const initials = (name: string) =>
                 [style.color]="account(manager().state).fg"
                 >{{ t()(account(manager().state).label) }}</span
               >
+            }
+            @if (manager().user && !manager().user!.active && apiMode && store.can("user.manage")) {
+              <button type="button" class="ghost-dark" [disabled]="resending()" (click)="resendManagerLink()">
+                <ui-icon name="mail" [size]="18" />{{ t()("cooperatives.fiche.resendLink") }}
+              </button>
             }
           </div>
         </section>
@@ -1648,6 +1655,25 @@ export default class CooperativeDetailPage {
     const user = managerOf(this.store.state().users, this.id());
     return { user, state: accountOf(user, Date.now()), initials: user ? initials(user.name) : "" };
   });
+
+  protected readonly apiMode = isApiMode();
+  protected readonly resending = signal(false);
+
+  /** Renvoie le lien d'activation au gestionnaire qui n'a pas encore choisi son mot de passe. */
+  protected async resendManagerLink(): Promise<void> {
+    const user = this.manager().user;
+    if (!user || this.resending()) return;
+    this.resending.set(true);
+    try {
+      const result = await inviteUser(user.id);
+      if (result.sent) this.snackbar.success(this.locale.tNow("utilisateurs.toast.inviteSent", { email: user.email }));
+      else this.snackbar.error(this.locale.tNow("utilisateurs.toast.inviteNoMail"));
+    } catch {
+      this.snackbar.error(this.locale.tNow("utilisateurs.v2.apiError"));
+    } finally {
+      this.resending.set(false);
+    }
+  }
 
   protected account(a: AccountState) {
     return ACCOUNT[a];
