@@ -149,7 +149,6 @@ export const admin = {
   "comptes.stat.linkedSub": "Compte et fiche rattachés",
   "comptes.picker.title": "Rapprocher {name}",
   "comptes.picker.description": "Cherchez la fiche producteur de cette personne : par nom, code ou village.",
-  "comptes.picker.none": "Aucune fiche ne correspond, ou elles sont déjà rapprochées.",
   "comptes.picker.choose": "Choisir",
   "comptes.score.aria": "Ressemblance {score} %",
   "comptes.picker.none": "Aucune fiche libre ne correspond.",
