@@ -9,7 +9,7 @@ export const auth = {
   "auth.login.title": "Connexion",
   "auth.login.description":
     "Accédez à votre espace avec votre adresse e-mail. Un code de vérification vous sera envoyé.",
-  "auth.login.footer": "La session expire automatiquement après 30 minutes.",
+  "auth.login.footer": "La session expire automatiquement après 1 heure.",
   "auth.login.email": "Adresse e-mail",
   "auth.login.emailPlaceholder": "prenom.nom@organisation.sn",
   "auth.login.password": "Mot de passe",
