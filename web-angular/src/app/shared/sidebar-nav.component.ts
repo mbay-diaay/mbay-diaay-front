@@ -75,6 +75,7 @@ const SCREEN_ICONS: Record<string, IconName> = {
   "/dashboard/audit": "history",
   "/dashboard/super-admin/roles": "admin_panel_settings",
   "/dashboard/super-admin/comptes": "manage_accounts",
+  "/dashboard/super-admin/parametres": "settings",
 };
 
 /** Menu organisé module par module (note de cadrage), puis les blocs transversaux. */

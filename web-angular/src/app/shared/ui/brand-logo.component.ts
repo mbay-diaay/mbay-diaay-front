@@ -1,6 +1,7 @@
 import { Component, computed, inject, input } from "@angular/core";
 
 import { BRAND } from "@/config/brand";
+import { BrandingService } from "../branding.service";
 import { LocaleService } from "../locale.service";
 
 /**
@@ -17,7 +18,23 @@ import { LocaleService } from "../locale.service";
 @Component({
   selector: "ui-brand-logo",
   host: { class: "inline-flex items-center" },
+  styles: `
+    .custom-chip {
+      border-radius: 14px;
+      background: #ffffff;
+    }
+  `,
   template: `
+    @if (customSrc(); as src) {
+      <!-- Logo choisi par le super administrateur : image complète (symbole et nom), à la hauteur demandée. -->
+      <span
+        class="inline-flex items-center"
+        [class.custom-chip]="onChip()"
+        [style.padding.px]="onChip() ? Math.max(4, size() * 0.12) : 0"
+      >
+        <img [src]="src" [alt]="t()('brand.logoAlt')" [style.height.px]="size()" class="w-auto max-w-[220px] shrink-0 object-contain" />
+      </span>
+    } @else {
     <img
       [src]="symbolSrc()"
       [alt]="wordmark() ? '' : t()('brand.logoAlt')"
@@ -46,6 +63,7 @@ import { LocaleService } from "../locale.service";
         }
       </span>
     }
+    }
   `,
 })
 export class BrandLogoComponent {
@@ -57,6 +75,20 @@ export class BrandLogoComponent {
   readonly signature = input(false);
 
   protected readonly brand = BRAND;
+  private readonly branding = inject(BrandingService);
+
+  /**
+   * Logo choisi dans les réglages. Sur fond foncé sans logo « fond foncé », le logo « fond clair » est posé sur une
+   * pastille blanche pour rester lisible.
+   */
+  protected readonly customSrc = computed(() => {
+    this.branding.branding();
+    if (this.variant() === "color") return this.branding.colorLogo();
+    return this.branding.inverseLogo() ?? this.branding.colorLogo();
+  });
+  protected readonly onChip = computed(
+    () => this.variant() === "inverse" && !this.branding.inverseLogo() && !!this.branding.colorLogo(),
+  );
   protected readonly Math = Math;
   protected readonly t = inject(LocaleService).t;
 

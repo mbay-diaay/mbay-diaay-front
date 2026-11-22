@@ -83,6 +83,7 @@ import notificationsSvg from "@material-symbols/svg-400/rounded/notifications.sv
 import helpSvg from "@material-symbols/svg-400/rounded/help.svg?raw";
 import settingsSvg from "@material-symbols/svg-400/rounded/settings.svg?raw";
 import addSvg from "@material-symbols/svg-400/rounded/add.svg?raw";
+import uploadSvg from "@material-symbols/svg-400/rounded/upload.svg?raw";
 import downloadSvg from "@material-symbols/svg-400/rounded/download.svg?raw";
 import arrowForwardSvg from "@material-symbols/svg-400/rounded/arrow_forward.svg?raw";
 import arrowOutwardSvg from "@material-symbols/svg-400/rounded/arrow_outward.svg?raw";
@@ -190,6 +191,7 @@ const ICONS = {
   help: helpSvg,
   settings: settingsSvg,
   add: addSvg,
+  upload: uploadSvg,
   download: downloadSvg,
   arrow_forward: arrowForwardSvg,
   arrow_outward: arrowOutwardSvg,

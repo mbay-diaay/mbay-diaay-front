@@ -258,6 +258,12 @@ export const NAV: NavGroup[] = [
         icon: KeyRound,
         perm: "role.configure",
       }),
+      entry({
+        to: "/dashboard/super-admin/parametres",
+        labelKey: "nav.item.superadminParametres",
+        icon: KeyRound,
+        perm: "role.configure",
+      }),
     ],
   },
   {
