@@ -140,7 +140,7 @@ export class TextFieldComponent {
   readonly label = input.required<string>();
   readonly value = input("");
   readonly placeholder = input("");
-  readonly type = input<"text" | "email" | "tel" | "date" | "datetime-local" | "number" | null>(null);
+  readonly type = input<"text" | "email" | "tel" | "password" | "date" | "datetime-local" | "number" | null>(null);
   readonly hint = input("");
   readonly error = input("");
   /** Mention « (facultatif) » à côté du libellé. */

@@ -7,7 +7,8 @@ import { isApiMode } from "@/lib/api/config";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { listRolePermissions } from "@/lib/api/roles";
 import { createUser, listUsers } from "@/lib/api/users";
-import { normalizeEmail } from "@/lib/auth/policy";
+import { isPasswordValid, normalizeEmail } from "@/lib/auth/policy";
+import { isSenegalPhone } from "@/lib/phone-sn";
 import { nf } from "@/lib/format";
 import { LOCKED_ROLE, roleAllowsManyScoops, SUPER_ADMIN_ONLY_ROLES, type RoleId } from "@/lib/permissions";
 import type { AppUser } from "@/lib/store";
@@ -35,7 +36,7 @@ import {
 } from "@shared/ui";
 
 const ALL = "tous";
-type NewUserErrors = Partial<Record<"name" | "email" | "phone" | "scoop", string>>;
+type NewUserErrors = Partial<Record<"name" | "email" | "phone" | "password" | "scoop", string>>;
 
 /**
  * Utilisateurs & rôles (charte V2) : comptes de la plateforme (création, rôle, activation, invitation de
@@ -190,7 +191,8 @@ type NewUserErrors = Partial<Record<"name" | "email" | "phone" | "scoop", string
         <div class="grid gap-4 sm:grid-cols-2">
           <ui-text-field class="sm:col-span-2" [label]="t()('utilisateurs.form.name')" preset="firstName" [placeholder]="t()('utilisateurs.form.namePh')" [value]="newName()" [error]="newErrors().name ?? ''" (valueChange)="newName.set($event)" />
           <ui-text-field [label]="t()('utilisateurs.form.email')" preset="email" [hint]="t()('utilisateurs.form.emailHint')" [value]="newEmail()" [error]="newErrors().email ?? ''" (valueChange)="newEmail.set($event)" />
-          <ui-text-field [label]="t()('utilisateurs.form.phone')" preset="phone" [optional]="t()('utilisateurs.v2.optional')" [value]="newPhone()" [error]="newErrors().phone ?? ''" (valueChange)="newPhone.set($event)" />
+          <ui-text-field class="sm:col-span-2" [label]="t()('utilisateurs.form.password')" type="password" autocomplete="new-password" [hint]="t()('utilisateurs.form.passwordHint')" [value]="newPassword()" [error]="newErrors().password ?? ''" (valueChange)="newPassword.set($event)" />
+          <ui-text-field [label]="t()('utilisateurs.form.phone')" preset="phoneSn" [optional]="t()('utilisateurs.v2.optional')" [value]="newPhone()" [error]="newErrors().phone ?? ''" (valueChange)="newPhone.set($event)" />
           <ui-select class="sm:col-span-2" [label]="t()('utilisateurs.form.role')" [options]="assignableRoleOptions()" [value]="newRole()" leadingIcon="admin_panel_settings" (valueChange)="pickNewRole($event)" />
           @if (newRoleScoped()) {
             @if (newManyScoops()) {
@@ -255,6 +257,7 @@ export default class UtilisateursPage {
   protected readonly newName = signal("");
   protected readonly newEmail = signal("");
   protected readonly newPhone = signal("");
+  protected readonly newPassword = signal("");
   protected readonly newRole = signal<RoleId>("gestionnaire");
   protected readonly newScoopIds = signal<string[]>([]);
   private readonly newSubmitted = signal(false);
@@ -352,8 +355,9 @@ export default class UtilisateursPage {
     else if (this.users().some((user) => user.email.toLowerCase() === email))
       errors.email = t("utilisateurs.err.emailTaken");
     const phone = this.newPhone().trim();
-    if (phone && !/^7[0678]\s?\d{3}\s?\d{2}\s?\d{2}$/.test(phone))
-      errors.phone = t("utilisateurs.err.phone");
+    if (phone && !isSenegalPhone(phone)) errors.phone = t("utilisateurs.err.phone");
+    if (!isPasswordValid(this.newPassword(), email ?? typedEmail))
+      errors.password = t("utilisateurs.err.password");
     if (this.newRoleScoped() && !this.newScoopIds().length)
       errors.scoop = t("errors.roles.scoopRequired");
     return errors;
@@ -402,6 +406,7 @@ export default class UtilisateursPage {
     this.newName.set("");
     this.newEmail.set("");
     this.newPhone.set("");
+    this.newPassword.set("");
     this.newRole.set("gestionnaire");
     this.newScoopIds.set([]);
     this.newSubmitted.set(false);
@@ -433,8 +438,9 @@ export default class UtilisateursPage {
           name: payload.name,
           email: payload.email,
           role: payload.role,
-          ...(scoopIds[0] ? { scoopId: scoopIds[0] } : {}),
+          ...(roleAllowsManyScoops(role) && scoopIds.length ? { scoopIds } : scoopIds[0] ? { scoopId: scoopIds[0] } : {}),
           ...(payload.phone ? { phone: payload.phone } : {}),
+          password: this.newPassword(),
         });
         this.store.actions.addUser({
           id: created.id,
