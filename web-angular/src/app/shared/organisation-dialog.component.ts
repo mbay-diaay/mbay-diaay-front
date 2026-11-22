@@ -3,6 +3,7 @@ import { Component, computed, effect, inject, input, model, signal, untracked } 
 import { isApiMode } from "@/lib/api/config";
 import { createOrganisation, orgFromApi, organisationApiError } from "@/lib/api/organisations";
 import type { OrgType } from "@/lib/mock/data";
+import { inScope } from "@/lib/scope";
 
 import { LocaleService } from "./locale.service";
 import { StoreService } from "./store.service";
@@ -27,6 +28,14 @@ const NO_TYPE = "none";
   template: `
     <ui-modal [open]="open()" [title]="t()('orgs.add.title')" [description]="t()('orgs.add.description')" icon="group" [width]="600" [closeLabel]="t()('common.close')" (closed)="open.set(false)">
       <div class="grid gap-5 pb-6 sm:grid-cols-2">
+        @if (!scoopId()) {
+          <div class="sm:col-span-2">
+            <ui-select [label]="t()('roles.dialog.scoop')" [placeholder]="t()('roles.dialog.scoopPh')" leadingIcon="apartment" [options]="scoopOptions()" [value]="chosenScoop()" (valueChange)="chosenScoop.set($event); scoopError.set('')" />
+            @if (scoopError()) {
+              <p class="mt-1.5 text-[13px] font-bold" style="color: var(--v2-erreur-fg)" role="alert">{{ scoopError() }}</p>
+            }
+          </div>
+        }
         <ui-text-field class="sm:col-span-2" preset="scoopName" [label]="t()('orgs.add.name')" [placeholder]="t()('orgs.add.namePh')" [value]="name()" [error]="nameError()" (valueChange)="name.set($event); nameError.set('')" />
         <ui-select [label]="t()('orgs.add.type')" leadingIcon="badge" [options]="typeOptions()" [value]="type()" (valueChange)="type.set($event)" />
         <ui-text-field preset="village" [label]="t()('orgs.add.village')" [value]="village()" (valueChange)="village.set($event)" />
@@ -40,8 +49,8 @@ const NO_TYPE = "none";
 })
 export class OrganisationDialogComponent {
   readonly open = model(false);
-  /** Coopérative dans laquelle l'organisation est créée. */
-  readonly scoopId = input.required<string>();
+  /** Coopérative dans laquelle l'organisation est créée ; sans elle, la personne choisit dans la fenêtre. */
+  readonly scoopId = input<string | null>(null);
 
   private readonly store = inject(StoreService);
   private readonly snackbar = inject(SnackbarService);
@@ -52,6 +61,19 @@ export class OrganisationDialogComponent {
   protected readonly village = signal("");
   protected readonly nameError = signal("");
   protected readonly saving = signal(false);
+  protected readonly chosenScoop = signal("");
+  protected readonly scoopError = signal("");
+
+  /** Coopératives du périmètre qui peuvent recevoir une organisation (hors archivées). */
+  protected readonly scoopOptions = computed<SelectOption[]>(() => {
+    const state = this.store.state();
+    return inScope(
+      state.scoops.filter((scoop) => !scoop.archived).map((scoop) => ({ ...scoop, scoopId: scoop.id })),
+      state.session,
+    )
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((scoop) => ({ value: scoop.id, label: scoop.name, ...(scoop.code ? { hint: scoop.code } : {}) }));
+  });
 
   protected readonly typeOptions = computed<SelectOption[]>(() => [
     ...ORG_TYPES.map((value) => ({ value, label: value })),
@@ -66,6 +88,10 @@ export class OrganisationDialogComponent {
         this.type.set(NO_TYPE);
         this.village.set("");
         this.nameError.set("");
+        this.scoopError.set("");
+        // Une seule coopérative dans le périmètre (gestionnaire) : elle est déjà choisie.
+        const options = this.scoopOptions();
+        this.chosenScoop.set(this.scoopId() ?? (options.length === 1 ? options[0]!.value : ""));
         this.saving.set(false);
       });
     });
@@ -78,20 +104,25 @@ export class OrganisationDialogComponent {
       this.nameError.set(this.t()("orgs.add.err.name"));
       return;
     }
+    const scoopId = this.scoopId() ?? this.chosenScoop();
+    if (!scoopId) {
+      this.scoopError.set(this.t()("errors.roles.scoopRequired"));
+      return;
+    }
     const type = this.type() === NO_TYPE ? null : (this.type() as OrgType);
     const village = this.village().trim();
     this.saving.set(true);
     try {
       if (isApiMode()) {
         const created = await createOrganisation({
-          scoopId: this.scoopId(),
+          scoopId,
           name,
           ...(type && { type }),
           ...(village && { village }),
         });
         this.store.actions.upsertOrgFromApi(orgFromApi(created));
       } else {
-        const result = this.store.actions.addOrg({ scoopId: this.scoopId(), name, type, village });
+        const result = this.store.actions.addOrg({ scoopId, name, type, village });
         if (!result.ok) {
           this.nameError.set(result.error);
           return;
