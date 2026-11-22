@@ -12,6 +12,8 @@ type MeResponse = {
   name: string;
   role: RoleId;
   scoopId: string | null;
+  /** Coopératives du périmètre (vide pour un rôle de réseau). */
+  scoopIds?: string[];
   /** Droits appliqués par le serveur (matrice modifiable par le super administrateur). */
   permissions?: Permission[];
 };
@@ -32,7 +34,7 @@ export async function hydrateSessionFromApi(): Promise<boolean> {
   }
   try {
     const me = await apiFetch<MeResponse>("/me");
-    actions.login(me.name, me.email, me.role, me.permissions);
+    actions.login(me.name, me.email, me.role, me.permissions, me.scoopIds ?? (me.scoopId ? [me.scoopId] : []));
     await loadScoopsFromApi();
     return true;
   } catch {

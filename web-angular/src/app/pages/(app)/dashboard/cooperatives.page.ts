@@ -4,6 +4,7 @@ import { RouterLink } from "@angular/router";
 import { isApiMode } from "@/lib/api/config";
 import { syncImage } from "@/lib/api/media";
 import { fetchAllPages } from "@/lib/api/pagination";
+import { listUsers } from "@/lib/api/users";
 import {
   archiveScoop as archiveScoopApi,
   createScoop as createScoopApi,
@@ -1577,6 +1578,14 @@ export default class CooperativesPage {
       this.store.actions.replaceScoopsFromApi(scoops.map(scoopFromApi));
     } catch {
       this.snackbar.error(this.t()("errors.scoop.loadError"));
+    }
+    // Les comptes gestionnaires (état « invité », « actif »…) viennent du serveur pour qui peut les lister.
+    if (this.store.can("user.manage")) {
+      try {
+        this.store.actions.mergeUsersFromApi(await fetchAllPages((query) => listUsers(query)));
+      } catch {
+        // Silencieux : la liste des coopératives reste affichée.
+      }
     }
   }
 

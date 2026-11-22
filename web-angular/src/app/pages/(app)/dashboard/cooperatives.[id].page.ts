@@ -4,7 +4,8 @@ import { ActivatedRoute, RouterLink } from "@angular/router";
 import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
-import { inviteUser } from "@/lib/api/users";
+import { fetchAllPages } from "@/lib/api/pagination";
+import { inviteUser, listUsers } from "@/lib/api/users";
 import { memberDues } from "@/lib/contributions";
 import { ageAtMost, fmtDate, fmtDateTime, nf } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
@@ -1657,6 +1658,19 @@ export default class CooperativeDetailPage {
   });
 
   protected readonly apiMode = isApiMode();
+
+  constructor() {
+    // Mode API : le gestionnaire de la coopérative est un compte du serveur ; on le charge pour qui peut les lister.
+    if (isApiMode() && this.store.can("user.manage")) void this.loadAccounts();
+  }
+
+  private async loadAccounts(): Promise<void> {
+    try {
+      this.store.actions.mergeUsersFromApi(await fetchAllPages((query) => listUsers(query)));
+    } catch {
+      // Silencieux : la fiche reste affichée, sans le gestionnaire.
+    }
+  }
   protected readonly resending = signal(false);
 
   /** Renvoie le lien d'activation au gestionnaire qui n'a pas encore choisi son mot de passe. */
