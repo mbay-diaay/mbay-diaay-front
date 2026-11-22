@@ -27,6 +27,7 @@ import {
   type StatCard,
 } from "@shared/ui";
 import { GlobalFiltersComponent } from "@shared/global-filters.component";
+import { OrganisationDialogComponent } from "@shared/organisation-dialog.component";
 
 const UNQUALIFIED = "__aucun";
 const ALL = "__tous";
@@ -50,6 +51,7 @@ const typeTone = (type: string | null) =>
     DetailModalComponent,
     PaginationComponent,
     StatCardsComponent,
+    OrganisationDialogComponent,
   ],
   styles: [V2_PAGE_STYLES],
   template: `
@@ -65,6 +67,12 @@ const typeTone = (type: string | null) =>
         <p class="mt-2 max-w-2xl text-[16px] font-medium" style="color: var(--v2-gris-texte)">
           {{ t()("organisations.lead") }}
         </p>
+        @if (store.can("org.manage")) {
+          <button type="button" class="btn btn-primary mt-5" (click)="newOpen.set(true)">
+            {{ t()("cooperatives.fiche.org.add") }}
+            <span class="grid size-9 place-items-center rounded-[12px]" style="background: var(--v2-citron); color: var(--v2-foret)"><ui-icon name="add" [size]="18" /></span>
+          </button>
+        }
       </header>
 
       <!-- ───── Statistiques ───── -->
@@ -208,6 +216,7 @@ const typeTone = (type: string | null) =>
       </section>
 
       <ui-detail-modal [view]="detail()" (closed)="detailId.set(null)" />
+      <app-organisation-dialog [(open)]="newOpen" [scoopId]="scoopFilter() || null" />
     </app-shell>
   `,
 })
@@ -220,6 +229,7 @@ export default class OrganisationsPage {
   protected readonly q = signal("");
   protected readonly type = signal<string>(ALL);
   protected readonly detailId = signal<string | null>(null);
+  protected readonly newOpen = signal(false);
 
   constructor() {
     if (isApiMode()) void this.loadFromApi();
