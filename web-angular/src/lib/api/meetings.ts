@@ -6,8 +6,18 @@ import { ApiError, apiFetch } from "./client";
 import { isApiMode } from "./config";
 import { fetchAllPages, type Page, type PageQuery, withPage } from "./pagination";
 
-/** Réunion telle que l'API la renvoie : même forme que celle du store (dates ISO). */
-export type ApiMeeting = Meeting;
+/** Convocations envoyées par e-mail après une création, une modification ou une annulation. */
+export type MeetingNotified = {
+  /** `queue` : confiées au worker ; `inline` : parties tout de suite ; `off` : envoi d'e-mails non configuré. */
+  mode: "queue" | "inline" | "off";
+  queued: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+};
+
+/** Réunion telle que l'API la renvoie : même forme que celle du store (dates ISO), avec les convocations envoyées. */
+export type ApiMeeting = Meeting & { notified?: MeetingNotified };
 
 export function listMeetings(query: PageQuery = {}) {
   return apiFetch<Page<ApiMeeting>>(withPage("/meetings", query));
@@ -91,28 +101,32 @@ export async function loadMeetingsIntoStore(): Promise<void> {
  * par le serveur, qui garde le dernier mot (droits, périmètre, règles), et rendent le même résultat.
  */
 export const meetingActions = {
-  async create(input: MeetingInput): Promise<ActionResult<{ id: string }>> {
+  async create(input: MeetingInput): Promise<ActionResult<{ id: string; notified?: MeetingNotified }>> {
     if (!isApiMode()) return actions.createMeeting(input);
     return call(
       apiFetch<ApiMeeting>("/meetings", {
         method: "POST",
         body: { ...input, date: new Date(input.date).toISOString() },
       }),
-      (meeting) => ({ id: meeting.id }),
+      (meeting) => ({ id: meeting.id, ...(meeting.notified && { notified: meeting.notified }) }),
     );
   },
-  async update(id: string, patch: MeetingPatch): Promise<ActionResult> {
+  async update(id: string, patch: MeetingPatch): Promise<ActionResult<{ notified?: MeetingNotified }>> {
     if (!isApiMode()) return actions.updateMeeting(id, patch);
     const body = { ...patch, ...(patch.date !== undefined && { date: new Date(patch.date).toISOString() }) };
-    return call(apiFetch<ApiMeeting>(path(id), { method: "PATCH", body }), () => ({}));
+    return call(apiFetch<ApiMeeting>(path(id), { method: "PATCH", body }), (meeting) => ({
+      ...(meeting.notified && { notified: meeting.notified }),
+    }));
   },
   async hold(id: string, presentIds: string[]): Promise<ActionResult> {
     if (!isApiMode()) return actions.holdMeeting(id, presentIds);
     return call(apiFetch<ApiMeeting>(path(id, "/hold"), { method: "POST", body: { presentIds } }), () => ({}));
   },
-  async cancel(id: string, reason: string): Promise<ActionResult> {
+  async cancel(id: string, reason: string): Promise<ActionResult<{ notified?: MeetingNotified }>> {
     if (!isApiMode()) return actions.cancelMeeting(id, reason);
-    return call(apiFetch<ApiMeeting>(path(id, "/cancel"), { method: "POST", body: { reason } }), () => ({}));
+    return call(apiFetch<ApiMeeting>(path(id, "/cancel"), { method: "POST", body: { reason } }), (meeting) => ({
+      ...(meeting.notified && { notified: meeting.notified }),
+    }));
   },
   async saveMinutes(id: string, text: string): Promise<ActionResult> {
     if (!isApiMode()) return actions.saveMinutes(id, text);

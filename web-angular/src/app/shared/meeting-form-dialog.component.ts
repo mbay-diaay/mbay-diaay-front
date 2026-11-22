@@ -6,7 +6,11 @@ import { AccessDeniedError } from "@/lib/store";
 import { MEETING_KINDS, MEETING_MODES, type Meeting, type MeetingKind, type MeetingMode } from "@/lib/mock/cooperative";
 import type { Scoop } from "@/lib/mock/data";
 import { inScope } from "@/lib/scope";
-import { meetingActions } from "@/lib/api/meetings";
+import { isApiMode } from "@/lib/api/config";
+import { meetingActions, type MeetingNotified } from "@/lib/api/meetings";
+import { fetchScoopStaff, type ScoopStaffMember } from "@/lib/api/scoops";
+import { normalizeEmail } from "@/lib/auth/policy";
+import type { MeetingGuest } from "@/lib/mock/cooperative";
 
 import { MEETING_KIND_LABEL } from "./meeting-kinds";
 import { LocaleService } from "./locale.service";
@@ -310,20 +314,28 @@ const MODE_LABEL: Record<MeetingMode, MessageKey> = {
             <ui-check-list class="mt-5 block" [label]="t()('reunions.form.who.staff')" [options]="staffOptions()" [value]="staffIds()" (valueChange)="staffIds.set($event)" />
           }
           <p class="lbl mt-5">{{ t()("reunions.form.who.others") }}</p>
-          @if (others().length) {
+          <p class="mt-1 text-[13px] font-medium" style="color: var(--v2-gris-texte)">{{ t()("reunions.form.who.guestsHint") }}</p>
+          @if (guests().length || legacyOthers().length) {
             <ul class="mt-2 flex flex-wrap gap-2">
-              @for (guest of others(); track $index; let position = $index) {
+              @for (guest of guests(); track guest.email; let position = $index) {
                 <li class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-bold" style="background: var(--v2-sauge); color: var(--v2-foret)">
-                  {{ guest }}
-                  <button type="button" [attr.aria-label]="t()('reunions.form.who.remove', { name: guest })" (click)="removeOther(position)"><ui-icon name="close" [size]="14" /></button>
+                  {{ guest.name }} <span class="font-medium" style="opacity: 0.75">· {{ guest.email }}</span>
+                  <button type="button" [attr.aria-label]="t()('reunions.form.who.remove', { name: guest.name })" (click)="removeGuest(position)"><ui-icon name="close" [size]="14" /></button>
+                </li>
+              }
+              @for (name of legacyOthers(); track name; let position = $index) {
+                <li class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-bold" style="background: var(--v2-lin); color: var(--v2-gris-texte)">
+                  {{ name }} <span class="font-medium">· {{ t()("reunions.form.who.noEmail") }}</span>
+                  <button type="button" [attr.aria-label]="t()('reunions.form.who.remove', { name })" (click)="removeLegacy(position)"><ui-icon name="close" [size]="14" /></button>
                 </li>
               }
             </ul>
           }
-          <div class="mt-2 flex gap-2">
-            <input class="agenda-input" maxlength="80" [placeholder]="t()('reunions.form.who.othersPh')" [attr.aria-label]="t()('reunions.form.who.others')" [value]="otherDraft()" (input)="otherDraft.set($any($event.target).value)" (keydown.enter)="$event.preventDefault(); addOther()" />
-            <button type="button" class="add" style="margin-top: 0" (click)="addOther()"><ui-icon name="add" [size]="18" />{{ t()("reunions.form.who.add") }}</button>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <ui-text-field preset="firstName" [label]="t()('reunions.form.who.guestName')" [placeholder]="t()('reunions.form.who.guestNamePh')" [value]="guestName()" [error]="guestNameError()" (valueChange)="guestName.set($event); guestNameError.set('')" />
+            <ui-text-field preset="email" [label]="t()('reunions.form.who.guestEmail')" [value]="guestEmail()" [error]="guestEmailError()" (valueChange)="guestEmail.set($event); guestEmailError.set('')" />
           </div>
+          <button type="button" class="add" (click)="addGuest()"><ui-icon name="add" [size]="18" />{{ t()("reunions.form.who.add") }}</button>
         }
 
         <!-- Ordre du jour -->
@@ -422,7 +434,9 @@ export class MeetingFormDialogComponent {
 
   /** Personnel de la coopérative choisie : comptes de la coopérative, techniciens compris. */
   protected readonly staffOptions = computed<SelectOption[]>(() =>
-    this.store
+    isApiMode()
+      ? this.apiStaff().map((member) => ({ value: member.id, label: member.name, hint: this.store.roleLabel(member.role) }))
+      : this.store
       .state()
       .users.filter(
         (user) =>
@@ -434,6 +448,8 @@ export class MeetingFormDialogComponent {
       .sort((first, second) => first.name.localeCompare(second.name))
       .map((user) => ({ value: user.id, label: user.name, hint: this.store.roleLabel(user.role) })),
   );
+  /** Mode API : le personnel de la coopérative choisie vient du serveur (le gestionnaire ne peut pas lister tous les comptes). */
+  protected readonly apiStaff = signal<ScoopStaffMember[]>([]);
   protected readonly kind = signal<MeetingKind>("assemblée générale");
   protected readonly title = signal("");
   protected readonly dateLocal = signal("");
@@ -446,8 +462,14 @@ export class MeetingFormDialogComponent {
   protected readonly onlineUrl = signal("");
   protected readonly orgIds = signal<string[]>([]);
   protected readonly staffIds = signal<string[]>([]);
-  protected readonly others = signal<string[]>([]);
-  protected readonly otherDraft = signal("");
+  /** Autres invités avec e-mail : ils reçoivent la convocation. */
+  protected readonly guests = signal<MeetingGuest[]>([]);
+  /** Anciens invités saisis sans e-mail (réunions créées avant) : gardés dans la liste, sans convocation. */
+  protected readonly legacyOthers = signal<string[]>([]);
+  protected readonly guestName = signal("");
+  protected readonly guestEmail = signal("");
+  protected readonly guestNameError = signal("");
+  protected readonly guestEmailError = signal("");
   /** Ordre du jour : un point par ligne de la liste. */
   protected readonly agenda = signal<string[]>([]);
   protected readonly tried = signal(false);
@@ -456,6 +478,18 @@ export class MeetingFormDialogComponent {
     effect(() => {
       if (!this.open()) return;
       untracked(() => this.resetForm());
+    });
+    // Mode API : on charge le personnel de la coopérative choisie, et on retire les convoqués qui n'en font plus partie.
+    effect(() => {
+      const scoopId = this.scoopId();
+      if (!this.open() || !scoopId || !isApiMode()) return;
+      void fetchScoopStaff(scoopId)
+        .then((members) => {
+          this.apiStaff.set(members);
+          const known = new Set(members.map((member) => member.id));
+          this.staffIds.update((ids) => ids.filter((id) => known.has(id)));
+        })
+        .catch(() => this.apiStaff.set([]));
     });
   }
 
@@ -480,8 +514,13 @@ export class MeetingFormDialogComponent {
       this.onlineUrl.set(isJitsi ? "" : (m.onlineUrl ?? ""));
       this.orgIds.set([...(m.audience?.orgIds ?? [])]);
       this.staffIds.set([...(m.audience?.staffIds ?? [])]);
-      this.others.set([...(m.audience?.others ?? [])]);
-      this.otherDraft.set("");
+      const withEmail = m.audience?.guests ?? [];
+      this.guests.set(withEmail.map((guest) => ({ ...guest })));
+      this.legacyOthers.set((m.audience?.others ?? []).filter((name) => !withEmail.some((guest) => guest.name === name)));
+      this.guestName.set("");
+      this.guestEmail.set("");
+      this.guestNameError.set("");
+      this.guestEmailError.set("");
       this.agenda.set([...m.agenda]);
       return;
     }
@@ -498,8 +537,12 @@ export class MeetingFormDialogComponent {
     this.onlineUrl.set("");
     this.orgIds.set([]);
     this.staffIds.set([]);
-    this.others.set([]);
-    this.otherDraft.set("");
+    this.guests.set([]);
+    this.legacyOthers.set([]);
+    this.guestName.set("");
+    this.guestEmail.set("");
+    this.guestNameError.set("");
+    this.guestEmailError.set("");
     this.agenda.set([""]);
   }
 
@@ -537,15 +580,35 @@ export class MeetingFormDialogComponent {
     }
   }
 
-  protected addOther(): void {
-    const name = this.otherDraft().trim();
-    if (!name) return;
-    this.others.update((list) => (list.includes(name) ? list : [...list, name]));
-    this.otherDraft.set("");
+  /** Ajoute l'invité en cours de saisie. Renvoie faux (et le dit sous les champs) si le nom ou l'adresse est invalide. */
+  protected addGuest(): boolean {
+    const name = this.guestName().trim().replace(/\s+/g, " ");
+    const typed = this.guestEmail().trim();
+    // Rien de saisi : rien à ajouter, ce n'est pas une erreur.
+    if (!name && !typed) return true;
+    const email = normalizeEmail(typed);
+    this.guestNameError.set(name.length < 2 ? this.t()("reunions.form.who.guestNameError") : "");
+    this.guestEmailError.set(email ? "" : this.t()("reunions.form.who.guestEmailError"));
+    if (name.length < 2 || !email) return false;
+    this.guests.update((list) => (list.some((guest) => guest.email === email) ? list : [...list, { name, email }]));
+    this.guestName.set("");
+    this.guestEmail.set("");
+    return true;
   }
 
-  protected removeOther(position: number): void {
-    this.others.update((list) => list.filter((_, index) => index !== position));
+  protected removeGuest(position: number): void {
+    this.guests.update((list) => list.filter((_, index) => index !== position));
+  }
+
+  protected removeLegacy(position: number): void {
+    this.legacyOthers.update((list) => list.filter((_, index) => index !== position));
+  }
+
+  /** Phrase de confirmation : dit combien de convocations partent par e-mail. */
+  private mailText(base: MessageKey, withMail: MessageKey, notified: MeetingNotified | undefined): string {
+    const count = notified ? notified.queued + notified.sent : 0;
+    const text = count > 0 ? this.t()(withMail, { count }) : this.t()(base);
+    return notified && notified.failed > 0 ? `${text} ${this.t()("reunions.form.mailFailed", { count: notified.failed })}` : text;
   }
 
   protected setPoint(i: number, value: string): void {
@@ -573,7 +636,8 @@ export class MeetingFormDialogComponent {
   protected async submit(): Promise<void> {
     this.tried.set(true);
     if (this.errTitle() || this.errDate() || this.errPlace() || this.errLink()) return;
-    this.addOther();
+    // Un invité à moitié saisi n'est pas perdu en silence : on l'ajoute, ou on dit ce qui manque.
+    if (!this.addGuest()) return;
 
     const agenda = this.agenda().map((l) => l.trim()).filter(Boolean);
     const m = this.meeting();
@@ -588,13 +652,13 @@ export class MeetingFormDialogComponent {
           agenda,
           mode: this.mode(),
           onlineUrl: this.chosenUrl(),
-          audience: { orgIds: this.orgIds(), staffIds: this.staffIds(), others: this.others() },
+          audience: { orgIds: this.orgIds(), staffIds: this.staffIds(), others: this.legacyOthers(), guests: this.guests() },
         });
         if (!res.ok) {
           this.pushError(res.error as MessageKey);
           return;
         }
-        this.notify.emit({ kind: "success", text: this.t()("reunions.form.saved") });
+        this.notify.emit({ kind: "success", text: this.mailText("reunions.form.saved", "reunions.form.savedMail", res.notified) });
         this.open.set(false);
         this.closed.emit();
         return;
@@ -609,13 +673,13 @@ export class MeetingFormDialogComponent {
         agenda,
         mode: this.mode(),
         onlineUrl: this.chosenUrl(),
-        audience: { orgIds: this.orgIds(), staffIds: this.staffIds(), others: this.others() },
+        audience: { orgIds: this.orgIds(), staffIds: this.staffIds(), others: this.legacyOthers(), guests: this.guests() },
       });
       if (!res.ok) {
         this.pushError(res.error as MessageKey);
         return;
       }
-      this.notify.emit({ kind: "success", text: this.t()("reunions.form.created") });
+      this.notify.emit({ kind: "success", text: this.mailText("reunions.form.created", "reunions.form.createdMail", res.notified) });
       this.open.set(false);
       this.closed.emit();
       void this.router.navigate(["/dashboard/reunions", res.id]);

@@ -726,7 +726,8 @@ export default class ReunionDetailPage {
     return [
       ...m.audience.orgIds.map((id) => state.orgs.find((org) => org.id === id)?.name).filter((name): name is string => !!name),
       ...m.audience.staffIds.map((id) => state.users.find((user) => user.id === id)?.name).filter((name): name is string => !!name),
-      ...m.audience.others,
+      ...(m.audience.guests?.length ? m.audience.guests.map((guest) => `${guest.name} · ${guest.email}`) : []),
+      ...m.audience.others.filter((name) => !(m.audience?.guests ?? []).some((guest) => guest.name === name)),
     ];
   });
 
