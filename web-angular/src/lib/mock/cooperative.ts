@@ -724,10 +724,19 @@ export type MeetingMode = "sur place" | "en ligne" | "mixte";
 export const MEETING_MODES: readonly MeetingMode[] = ["sur place", "en ligne", "mixte"];
 
 /** Qui est convoqué : des GIE entiers, des membres du personnel, et d'autres invités saisis librement. */
+/** Invité extérieur : il reçoit la convocation par e-mail. */
+export interface MeetingGuest {
+  name: string;
+  email: string;
+}
+
 export interface MeetingAudience {
   orgIds: string[];
   staffIds: string[];
+  /** Noms des autres invités (anciennes réunions : saisis sans e-mail). */
   others: string[];
+  /** Autres invités avec leur adresse e-mail : ils reçoivent la convocation. */
+  guests?: MeetingGuest[];
 }
 
 export interface Meeting {

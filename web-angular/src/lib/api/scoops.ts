@@ -1,4 +1,5 @@
 import type { MessageKey } from "../i18n";
+import type { RoleId } from "../permissions";
 import type { Scoop } from "../mock/data";
 import type { ApiUserRow } from "../store";
 import { ApiError, apiFetch } from "./client";
@@ -140,3 +141,9 @@ export function managerRowsFromScoops(items: ApiScoop[]): ApiUserRow[] {
       : [],
   );
 }
+
+/** Personnel de la coopérative (comptes actifs, hors rôles de réseau) : sert à choisir les convoqués d'une réunion. */
+export type ScoopStaffMember = { id: string; name: string; role: RoleId };
+
+export const fetchScoopStaff = (scoopId: string) =>
+  apiFetch<ScoopStaffMember[]>(`/scoops/${encodeURIComponent(scoopId)}/staff`);
