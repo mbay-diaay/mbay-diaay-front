@@ -19,10 +19,11 @@ export type ActionResult<T = object> =
   ({ ok: true } & T) | { ok: false; error: string; issues?: DraftIssue[] };
 
 /**
- * Rôles qui peuvent approuver un dossier qu'ils ont eux-mêmes créé ou soumis. Vide : la matrice des droits M1
- * (DEC 05) remplace l'exception D12, la séparation des tâches est absolue pour tous (« jamais son propre dossier »).
+ * Rôles qui peuvent approuver un dossier qu'ils ont eux-mêmes créé ou soumis. Le gestionnaire de la coopérative peut tout
+ * faire dans sa coopérative : il saisit, soumet et décide. La décision reste tracée « auto-approuvé » ; tous les autres
+ * rôles gardent la séparation des tâches.
  */
-export const SELF_APPROVE_ROLES: readonly RoleId[] = [];
+export const SELF_APPROVE_ROLES: readonly RoleId[] = ["gestionnaire"];
 
 /**
  * Rôles qui décident (approuver ou refuser) : la secrétaire instruit (examen, demande de complément) mais ne décide

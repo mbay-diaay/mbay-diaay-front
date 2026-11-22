@@ -1162,6 +1162,19 @@ export const actions = {
   upsertOrgFromApi(item: Org) {
     set((s) => ({ orgs: s.orgs.some((o) => o.id === item.id) ? s.orgs.map((o) => (o.id === item.id ? item : o)) : [...s.orgs, item] }));
   },
+  /** Démonstration locale : crée une organisation (GIE, section…) dans une coopérative. En mode API, c'est le serveur qui crée. */
+  addOrg(input: { scoopId: string; name: string; type: OrgType | null; village: string }): ActionResult<{ id: string }> {
+    requirePermission("org.manage");
+    const name = input.name.trim().replace(/\s+/g, " ");
+    const taken = state.orgs.some(
+      (org) => org.scoopId === input.scoopId && org.name.trim().toLowerCase() === name.toLowerCase(),
+    );
+    if (taken) return fail("errors.organisation.nameTaken");
+    const id = nextId("o", state.orgs);
+    set((s) => ({ orgs: [...s.orgs, { id, name, type: input.type, scoopId: input.scoopId, village: input.village.trim() }] }));
+    audit("Création organisation", `Organisation ${name}`, input.type ?? "à qualifier", input.scoopId);
+    return { ok: true, id };
+  },
   qualifyOrgs(ids: string[], type: OrgType) {
     requirePermission("org.manage");
     set((s) => ({ orgs: s.orgs.map((o) => (ids.includes(o.id) ? { ...o, type } : o)) }));

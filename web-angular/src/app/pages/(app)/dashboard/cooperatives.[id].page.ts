@@ -24,6 +24,8 @@ import {
   type IconName,
   type Tone,
 } from "@shared/ui";
+import { MemberDialogComponent } from "@shared/member-dialog.component";
+import { OrganisationDialogComponent } from "@shared/organisation-dialog.component";
 import { TechnicianDialogComponent } from "@shared/technician-dialog.component";
 
 type Tab = "apercu" | "gie" | "membres" | "techniciens" | "reunions" | "cotisations";
@@ -126,6 +128,8 @@ const initials = (name: string) =>
     DetailModalComponent,
     PaginationComponent,
     TechnicianDialogComponent,
+    OrganisationDialogComponent,
+    MemberDialogComponent,
   ],
   styles: `
     .mono {
@@ -972,6 +976,14 @@ const initials = (name: string) =>
             <!-- ═════ GIE et organisations ═════ -->
             @if (current === "gie") {
               <section class="card mt-6 overflow-hidden">
+                @if (canManageOrgs()) {
+                  <div class="flex justify-end px-5 pt-5">
+                    <button type="button" class="btn btn-primary" (click)="orgOpen.set(true)">
+                      {{ t()("cooperatives.fiche.org.add") }}
+                      <span class="grid size-9 place-items-center rounded-[12px]" style="background: var(--v2-citron); color: var(--v2-foret)"><ui-icon name="add" [size]="18" /></span>
+                    </button>
+                  </div>
+                }
                 <div class="flex flex-wrap items-center justify-between gap-3 p-5">
                   <label class="search min-w-[240px] flex-1">
                     <ui-icon name="search" [size]="20" />
@@ -1106,6 +1118,14 @@ const initials = (name: string) =>
             <!-- ═════ Adhérents ═════ -->
             @if (current === "membres") {
               <section class="card mt-6 overflow-hidden">
+                @if (canManageMembers()) {
+                  <div class="flex justify-end px-5 pt-5">
+                    <button type="button" class="btn btn-primary" (click)="memberOpen.set(true)">
+                      {{ t()("cooperatives.fiche.member.add") }}
+                      <span class="grid size-9 place-items-center rounded-[12px]" style="background: var(--v2-citron); color: var(--v2-foret)"><ui-icon name="person_add" [size]="18" /></span>
+                    </button>
+                  </div>
+                }
                 <div class="flex flex-wrap items-center justify-between gap-3 p-5">
                   <label class="search min-w-[240px] flex-1">
                     <ui-icon name="search" [size]="20" />
@@ -1553,6 +1573,8 @@ const initials = (name: string) =>
       <!-- ───── Détail (organisation, adhérent, technicien, réunion) : on reste sur la fiche ───── -->
       <ui-detail-modal [view]="detail()" (closed)="closeDetail()" />
       <app-technician-dialog [(open)]="techOpen" [scoopId]="coopId()" />
+      <app-organisation-dialog [(open)]="orgOpen" [scoopId]="coopId()" />
+      <app-member-dialog [(open)]="memberOpen" [scoopId]="coopId()" />
     </app-shell>
   `,
 })
@@ -2074,6 +2096,12 @@ export default class CooperativeDetailPage {
 
   // ── Techniciens : ajout (invitation ou affectation) et retrait de cette coopérative ──
   protected readonly techOpen = signal(false);
+  protected readonly orgOpen = signal(false);
+  protected readonly memberOpen = signal(false);
+  /** Une coopérative archivée ne reçoit plus d'organisation ni d'adhérent. */
+  private readonly canEditCoop = computed(() => !this.scoop()?.archived);
+  protected readonly canManageOrgs = computed(() => this.canEditCoop() && this.store.can("org.manage"));
+  protected readonly canManageMembers = computed(() => this.canEditCoop() && this.store.can("member.manage"));
   protected readonly canManageTech = computed(() => this.store.can("user.manage") || this.store.can("technician.invite"));
   protected readonly coopId = computed(() => this.id());
 
