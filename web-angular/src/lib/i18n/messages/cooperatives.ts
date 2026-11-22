@@ -127,6 +127,7 @@ export const cooperatives = {
   "cooperatives.resend.done": "Invitation renvoyée à {email}",
   "cooperatives.empty.none": "Aucune coopérative n'est rattachée à votre compte.",
   "cooperatives.fiche.area": "Fiche coopérative",
+  "cooperatives.fiche.logoAlt": "Logo de {name}",
   "cooperatives.fiche.notFound.title": "Coopérative introuvable",
   "cooperatives.fiche.notFound.text":
     "Cette coopérative n'existe pas, ou elle n'est pas dans votre périmètre.",

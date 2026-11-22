@@ -1,6 +1,7 @@
 import type { MessageKey } from "../i18n";
 import type { Scoop } from "../mock/data";
 import { ApiError, apiFetch } from "./client";
+import { mediaSrc } from "./media";
 import { type Page, type PageQuery, withPage } from "./pagination";
 
 /** Coopérative telle que l'API la renvoie (`GET /scoops`). */
@@ -69,7 +70,8 @@ export function scoopFromApi(apiScoop: ApiScoop): Scoop {
     ...(apiScoop.region && { region: apiScoop.region }),
     createdAt: apiScoop.createdAt,
     ...(apiScoop.archived && { archived: true }),
-    ...(apiScoop.logoUrl && { logoUrl: apiScoop.logoUrl }),
+    // Lien relatif de l'API (`/v1/media/…`) : on le rend absolu, sinon le navigateur le cherche sur le site.
+    ...(apiScoop.logoUrl && { logoUrl: mediaSrc(apiScoop.logoUrl) ?? apiScoop.logoUrl }),
   };
 }
 
