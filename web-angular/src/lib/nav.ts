@@ -59,6 +59,8 @@ export type NavItem = {
   module?: ModuleId;
   /** Masquée pour un compte d'une seule coopérative : sa fiche coopérative lui sert d'accueil (`cooperativeHomeId`). */
   hiddenWithCooperativeHome?: boolean;
+  /** Entrée masquée partout (menu, palette de commandes, aperçu des rôles) : fonction pas encore ouverte aux équipes. La page reste en place. */
+  hidden?: boolean;
   /** Entrée réservée aux sessions limitées à leurs coopératives (« scoped ») ou en vue consolidée. */
   audience?: "scoped" | "consolidated";
 };
@@ -75,6 +77,7 @@ const soon = (labelKey: MessageKey, icon: typeof Users, module: ModuleId): NavIt
     soon: true,
   });
 export const navAllowed = (session: Session, i: NavItem) =>
+  !i.hidden &&
   !(i.hiddenWithCooperativeHome && cooperativeHomeId(session)) &&
   (i.audience === undefined ||
     (i.audience === "consolidated") === (session.scope.kind === "consolidé")) &&
@@ -187,6 +190,8 @@ export const NAV: NavGroup[] = [
         icon: Wallet,
         perm: "contribution.read",
         module: "administratif",
+        // Masquée pour l'instant : les cotisations ne sont pas branchées sur l'API.
+        hidden: true,
       }),
       entry({
         to: "/dashboard/reunions",
