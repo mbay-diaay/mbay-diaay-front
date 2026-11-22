@@ -19,7 +19,7 @@ export type ApiScoop = {
 
 export type CreatedScoop = ApiScoop & {
   /** Compte gestionnaire créé avec la coopérative : inactif tant qu'il n'a pas choisi son mot de passe. */
-  manager?: { userId: string; activationPending: boolean } | null;
+  manager?: { userId: string; activationPending: boolean; invitationSent?: boolean } | null;
 };
 
 export type ScoopCreateBody = {

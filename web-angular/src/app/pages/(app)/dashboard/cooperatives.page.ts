@@ -1785,7 +1785,10 @@ export default class CooperativesPage {
       );
       this.createOpen.set(false);
       void this.syncLogo(created.id);
-      this.snackbar.success(this.t()("cooperatives.create.done", { email: input.manager.email.trim() }));
+      const email = input.manager.email.trim();
+      if (created.manager && created.manager.invitationSent === false)
+        this.snackbar.error(this.t()("cooperatives.create.noMail", { email }));
+      else this.snackbar.success(this.t()("cooperatives.create.done", { email }));
     } catch (error) {
       this.showApiError(error);
     } finally {

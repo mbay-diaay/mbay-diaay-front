@@ -6,7 +6,7 @@ import { map } from "rxjs";
 import { isApiMode } from "@/lib/api/config";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { listRolePermissions } from "@/lib/api/roles";
-import { createUser, listUsers } from "@/lib/api/users";
+import { createUser, inviteUser, listUsers } from "@/lib/api/users";
 import { isPasswordValid, normalizeEmail } from "@/lib/auth/policy";
 import { isSenegalPhone } from "@/lib/phone-sn";
 import { nf } from "@/lib/format";
@@ -160,6 +160,9 @@ type NewUserErrors = Partial<Record<"name" | "email" | "phone" | "password" | "s
                       </td>
                       <td class="pin-right">
                         <span class="flex justify-end gap-2">
+                          @if (apiMode && !user.active && user.role !== "technicien" && store.can("user.manage")) {
+                            <button type="button" class="act" [title]="t()('utilisateurs.action.invite')" [attr.aria-label]="t()('utilisateurs.action.invite') + ' · ' + user.name" (click)="sendInvitation(user)"><ui-icon name="mail" [size]="18" /></button>
+                          }
                           @if (canEditRole(user)) {
                             <button type="button" class="act" [title]="t()('utilisateurs.v2.changeRole')" [attr.aria-label]="t()('utilisateurs.v2.changeRoleFor', { name: user.name })" (click)="openRole(user)"><ui-icon name="admin_panel_settings" [size]="18" /></button>
                           }
@@ -245,6 +248,7 @@ export default class UtilisateursPage {
 
   protected readonly query = signal("");
   protected readonly roleFilter = signal<string>(ALL);
+  protected readonly apiMode = isApiMode();
   protected readonly loading = signal(isApiMode());
 
   protected readonly techOpen = signal(false);
@@ -395,6 +399,17 @@ export default class UtilisateursPage {
   /** Les comptes administrateur et super administrateur ne se modifient que par un super administrateur. */
   protected canEditRole(user: AppUser): boolean {
     return !SUPER_ADMIN_ONLY_ROLES.includes(user.role as never) || this.store.can("role.configure");
+  }
+
+  /** Envoie (ou renvoie) le lien d'activation à un compte qui n'a pas encore choisi son mot de passe. */
+  protected async sendInvitation(user: AppUser): Promise<void> {
+    try {
+      const result = await inviteUser(user.id);
+      if (result.sent) this.snackbar.success(this.locale.tNow("utilisateurs.toast.inviteSent", { email: user.email }));
+      else this.snackbar.error(this.locale.tNow("utilisateurs.toast.inviteNoMail"));
+    } catch {
+      this.snackbar.error(this.locale.tNow("utilisateurs.v2.apiError"));
+    }
   }
 
   protected openRole(user: AppUser): void {

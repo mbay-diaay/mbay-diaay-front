@@ -31,6 +31,9 @@ export const admin = {
   "utilisateurs.toast.deactivated": "Compte désactivé",
   "utilisateurs.toast.reactivated": "Compte réactivé",
   "utilisateurs.toast.created": "Utilisateur créé",
+  "utilisateurs.action.invite": "Envoyer le lien d'activation par e-mail",
+  "utilisateurs.toast.inviteSent": "Lien d'activation envoyé à {email}",
+  "utilisateurs.toast.inviteNoMail": "L'e-mail n'a pas pu partir : l'envoi d'e-mails n'est pas disponible pour le moment.",
   "utilisateurs.yes": "Oui",
   "utilisateurs.no": "Non",
   "utilisateurs.rolesNote":

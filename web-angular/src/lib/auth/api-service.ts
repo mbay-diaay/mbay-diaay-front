@@ -10,6 +10,12 @@ type TokenResponse = {
   user: { id: string; email: string; name: string; role: RoleId; scoopId: string | null };
 };
 
+/** Code métier d'une erreur 400 : l'API le met dans `details.code` (le code de premier niveau vaut BAD_REQUEST). */
+function detailCode(e: ApiError): string | undefined {
+  const details = e.details;
+  return details && typeof details === "object" && "code" in details ? String((details as { code: unknown }).code) : undefined;
+}
+
 function mapAuthError(e: unknown): never {
   if (e instanceof ApiError) {
     const map: Record<string, ConstructorParameters<typeof AuthError>[0]> = {
@@ -97,12 +103,32 @@ export function createApiAuthService(): AuthService {
       throw new AuthError("unavailable");
     },
 
-    async invitationInfo() {
-      throw new AuthError("invitation_invalid");
+    async invitationInfo(token) {
+      try {
+        return await apiFetch<{ name: string; email: string; maskedEmail: string }>("/auth/invitation/info", {
+          method: "POST",
+          body: { token },
+          auth: false,
+        });
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 400) throw new AuthError("invitation_invalid");
+        mapAuthError(e);
+      }
     },
 
-    async acceptInvitation() {
-      throw new AuthError("invitation_invalid");
+    async acceptInvitation(token, newPassword) {
+      try {
+        return await apiFetch<{ email: string; name: string; role: AuthUser["role"] }>("/auth/invitation/accept", {
+          method: "POST",
+          body: { token, password: newPassword },
+          auth: false,
+        });
+      } catch (e) {
+        // Mot de passe refusé par le serveur (règles de complexité) : message dédié plutôt que « indisponible ».
+        if (e instanceof ApiError && e.status === 400)
+          throw new AuthError(detailCode(e) === "INVITATION_INVALID" ? "invitation_invalid" : "weak_password");
+        mapAuthError(e);
+      }
     },
   };
 }
