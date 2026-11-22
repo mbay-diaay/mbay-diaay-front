@@ -26,6 +26,7 @@ import { CRADESC, LOGIN_PHOTOS } from "@/config/brand";
 import type { RouteMeta } from "@analogjs/router";
 import { siteGateGuard } from "@shared/site-gate.guard";
 import { isApiMode } from "@/lib/api/config";
+import { hydrateSessionFromApi } from "@/lib/api/session";
 import { DEMO_MODE } from "@/lib/auth/config";
 import { authErrorMessage } from "@/lib/auth/messages";
 import { OTP_LENGTH, OTP_TTL_MS, normalizeEmail } from "@/lib/auth/policy";
@@ -816,7 +817,13 @@ export default class LoginPage {
     this.otpBusy.set(true);
     try {
       const user = await this.auth.verifyOtp(current.challengeId, code);
-      this.store.actions.login(user.name, user.email, user.role);
+      // Mode API : le rôle, les droits et les coopératives viennent du serveur (GET /me) ; la démonstration locale
+      // ne calcule le périmètre que depuis ses propres comptes.
+      if (isApiMode()) {
+        if (!(await hydrateSessionFromApi())) throw new Error("session");
+      } else {
+        this.store.actions.login(user.name, user.email, user.role);
+      }
       // Chaque rôle arrive sur son tableau de bord : /dashboard/admin, /dashboard/gestionnaire…
       await this.router.navigate(["/dashboard", user.role]);
     } catch (e) {

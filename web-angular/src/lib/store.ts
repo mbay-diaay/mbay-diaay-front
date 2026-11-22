@@ -730,9 +730,13 @@ function newCustomRoleId(name: string): CustomRoleId {
 const buildSession = (
   { name, email, role, expiresAt }: StoredSession,
   serverPermissions?: readonly Permission[],
+  serverScoopIds?: readonly string[],
 ): Session => {
   const user = state.users.find((u) => u.email === email);
-  const ids = user?.scoopIds ?? (user?.scoopId ? [user.scoopId] : undefined);
+  // Mode API : le périmètre renvoyé par le serveur (GET /me) fait foi, jamais la liste locale ni la démonstration.
+  const ids = serverScoopIds
+    ? [...serverScoopIds]
+    : (user?.scoopIds ?? (user?.scoopId ? [user.scoopId] : undefined));
   const computed = fetchMyPermissions(role, ids, state.rolePermissions, state.customRoles);
   // Mode API : les droits renvoyés par le serveur (GET /me) font foi.
   return {
@@ -751,7 +755,9 @@ function refreshSession() {
   if (!session) return;
   const user = state.users.find((u) => u.email.toLowerCase() === session.email.toLowerCase());
   const role = user && isRole(user.role) ? user.role : session.role;
-  set({ session: buildSession({ ...session, role }) });
+  // Mode API : on garde le périmètre déjà reçu du serveur.
+  const scoopIds = isApiMode() && session.scope.kind === "scoop" ? [...scoopIdsOf(session)] : undefined;
+  set({ session: buildSession({ ...session, role }, undefined, scoopIds) });
 }
 
 // ============ Aides des actions du circuit de validation ============
@@ -1081,10 +1087,16 @@ export const actions = {
       writeSessionRaw(null);
     }
   },
-  login(name: string, email: string, role: RoleId, serverPermissions?: readonly Permission[]) {
+  login(
+    name: string,
+    email: string,
+    role: RoleId,
+    serverPermissions?: readonly Permission[],
+    serverScoopIds?: readonly string[],
+  ) {
     const stored: StoredSession = { name, email, role, expiresAt: Date.now() + TOKEN_MS };
     writeSessionRaw(JSON.stringify(stored));
-    set({ session: buildSession(stored, serverPermissions) });
+    set({ session: buildSession(stored, serverPermissions, serverScoopIds) });
     audit("Connexion", "Session", `Profil ${role}`);
   },
   logout() {
