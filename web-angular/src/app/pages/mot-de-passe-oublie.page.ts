@@ -1,10 +1,16 @@
 import { Component, DestroyRef, computed, inject, signal } from "@angular/core";
+import { ArrowLeft, ArrowRight, CircleAlert, Loader2, LucideAngularModule, RotateCw, ShieldCheck } from "lucide-angular";
 import { Router, RouterLink } from "@angular/router";
 
 import { authErrorMessage } from "@/lib/auth/messages";
 import { OTP_LENGTH, OTP_TTL_MS, isPasswordValid, normalizeEmail } from "@/lib/auth/policy";
 import type { CodeSent } from "@/lib/auth/types";
+import { AUTH_FORM_STYLES } from "@shared/auth-form.styles";
+import { AuthFieldComponent } from "@shared/auth-field.component";
+import { AuthPasswordRulesComponent } from "@shared/auth-password-rules.component";
+import { AuthShellComponent } from "@shared/auth-shell.component";
 import { AuthService } from "@shared/auth.service";
+import { OtpInputComponent } from "@shared/otp-input.component";
 import { LocaleService } from "@shared/locale.service";
 import type { RouteMeta } from "@analogjs/router";
 import { siteGateGuard } from "@shared/site-gate.guard";
@@ -24,211 +30,161 @@ export const routeMeta: RouteMeta = { canActivate: [siteGateGuard] };
  */
 @Component({
   selector: "app-mot-de-passe-oublie-page",
-  imports: [RouterLink],
+  imports: [
+    RouterLink,
+    LucideAngularModule,
+    AuthShellComponent,
+    AuthFieldComponent,
+    AuthPasswordRulesComponent,
+    OtpInputComponent,
+  ],
+  styles: AUTH_FORM_STYLES,
   template: `
-    <div
-      class="flex min-h-screen items-start justify-center px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-8 sm:items-center sm:p-6"
-    >
-      <div class="w-full max-w-sm">
-        <h1 class="text-xl font-semibold">{{ t()("auth.forgot.title") }}</h1>
-        <p class="mt-1 text-muted-foreground">{{ t()("auth.forgot.description") }}</p>
-
-        @switch (step().name) {
-          @case ("email") {
-            <form
-              class="mt-6 space-y-5"
-              novalidate
-              (submit)="$event.preventDefault(); submitEmail()"
-            >
-              <div class="space-y-2">
-                <label for="email" class="text-sm font-medium leading-none">{{
-                  t()("auth.login.email")
-                }}</label>
-                <input
-                  id="email"
-                  type="email"
-                  autocomplete="username"
-                  inputmode="email"
-                  autocapitalize="none"
-                  spellcheck="false"
-                  [placeholder]="t()('auth.login.emailPlaceholder')"
-                  [value]="email()"
-                  (input)="email.set(inputValue($event))"
-                  class="flex h-touch w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm placeholder:text-placeholder focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
-                  autofocus
-                />
-              </div>
-              @if (error()) {
-                <div
-                  role="alert"
-                  class="rounded-md bg-danger-bg px-3 py-2.5 text-sm text-danger-fg"
-                >
-                  {{ error() }}
-                </div>
-              }
-              <button
-                type="submit"
-                class="inline-flex h-touch w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-                [disabled]="busy()"
-              >
-                {{ busy() ? t()("auth.forgot.sending") : t()("auth.forgot.send") }}
-              </button>
-            </form>
-          }
-          @case ("code") {
-            <div class="mt-6 space-y-5">
-              <h2 class="text-lg font-semibold">{{ t()("auth.forgot.codeTitle") }}</h2>
-              <p class="text-sm text-muted-foreground">{{ t()("auth.forgot.step2") }}</p>
-              <form class="space-y-4" (submit)="$event.preventDefault(); submitCode()">
-                <p class="text-sm text-muted-foreground">
-                  {{
-                    t()("auth.otp.sent", {
-                      length: OTP_LENGTH,
-                      email: sentInfo()?.maskedEmail ?? "",
-                      minutes: otpMinutes,
-                    })
-                  }}
-                </p>
-                <div class="space-y-2">
-                  <label for="code" class="text-sm font-medium">{{ t()("auth.otp.code") }}</label>
-                  <input
-                    id="code"
-                    inputmode="numeric"
-                    autocomplete="one-time-code"
-                    maxlength="6"
-                    [value]="code()"
-                    (input)="onCodeInput($event)"
-                    [disabled]="busy()"
-                    class="flex h-9 w-full pointer-coarse:h-touch rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm tabular tracking-[0.5em] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 md:text-sm"
-                  />
-                </div>
-                @if (error()) {
-                  <div
-                    role="alert"
-                    class="rounded-md bg-danger-bg px-3 py-2.5 text-sm text-danger-fg"
-                  >
-                    {{ error() }}
-                  </div>
-                }
-                @if (demoMail(); as mail) {
-                  <div
-                    role="status"
-                    class="rounded-md border border-dashed border-border-strong bg-muted p-3 text-sm"
-                  >
-                    <div
-                      class="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-                    >
-                      {{ t()("auth.mail.title") }}
-                    </div>
-                    <p class="mt-1">
-                      {{ t()("auth.mail.line", { to: mail.to }) }}
-                      {{ t()("auth.mail.code") }}
-                      <span class="font-semibold tabular tracking-widest">{{ mail.code }}</span>
-                    </p>
-                  </div>
-                }
-                <button
-                  type="submit"
-                  class="inline-flex h-touch w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                  [disabled]="busy() || code().length < OTP_LENGTH"
-                >
-                  {{ busy() ? t()("auth.otp.verifying") : t()("auth.forgot.validate") }}
-                </button>
-              </form>
-              <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <button
-                  type="button"
-                  class="font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
-                  [disabled]="busy() || resendWait() > 0"
-                  (click)="resend()"
-                >
-                  {{
-                    resendWait() > 0
-                      ? t()("auth.otp.resendIn", { seconds: resendWait() })
-                      : t()("auth.otp.resend")
-                  }}
-                </button>
-                <button
-                  type="button"
-                  class="text-muted-foreground hover:text-foreground"
-                  (click)="backToEmail()"
-                >
-                  {{ t()("auth.otp.back") }}
-                </button>
-              </div>
-            </div>
-          }
-          @case ("password") {
-            <form
-              class="mt-6 space-y-5"
-              novalidate
-              (submit)="$event.preventDefault(); submitPassword()"
-            >
-              <h2 class="text-lg font-semibold">{{ t()("auth.forgot.newTitle") }}</h2>
-              <p class="text-sm text-muted-foreground">{{ t()("auth.forgot.newDescription") }}</p>
-              <div class="space-y-2">
-                <label for="pw1" class="text-sm font-medium">{{
-                  t()("auth.forgot.newPassword")
-                }}</label>
-                <input
-                  id="pw1"
-                  type="password"
-                  autocomplete="new-password"
-                  [value]="password()"
-                  (input)="password.set(inputValue($event))"
-                  class="flex h-touch w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
-                  autofocus
-                />
-              </div>
-              <div class="space-y-2">
-                <label for="pw2" class="text-sm font-medium">{{
-                  t()("auth.forgot.confirm")
-                }}</label>
-                <input
-                  id="pw2"
-                  type="password"
-                  autocomplete="new-password"
-                  [value]="confirm()"
-                  (input)="confirm.set(inputValue($event))"
-                  class="flex h-touch w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
-                />
-              </div>
-              @if (mismatch()) {
-                <div
-                  role="alert"
-                  class="rounded-md bg-danger-bg px-3 py-2.5 text-sm text-danger-fg"
-                >
-                  {{ t()("auth.forgot.mismatch") }}
-                </div>
-              } @else if (error()) {
-                <div
-                  role="alert"
-                  class="rounded-md bg-danger-bg px-3 py-2.5 text-sm text-danger-fg"
-                >
-                  {{ error() }}
-                </div>
-              }
-              <button
-                type="submit"
-                class="inline-flex h-touch w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                [disabled]="busy() || !canSubmitPassword()"
-              >
-                {{ busy() ? t()("auth.forgot.saving") : t()("auth.forgot.save") }}
-              </button>
-            </form>
-          }
+    <app-auth-shell>
+      <span
+        class="mono inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5"
+        style="background: var(--v2-sauge); color: var(--v2-foret)"
+      >
+        <lucide-angular [img]="icons.shield" [size]="14" />
+        {{ t()("auth.step.progress", { current: stepNumber(), total: "03" }) }}
+      </span>
+      <div class="mt-3 flex max-w-[260px] gap-1.5" aria-hidden="true">
+        @for (index of [1, 2, 3]; track index) {
+          <span
+            class="h-1 flex-1 rounded-full transition-colors"
+            [style.background]="index <= stepIndex() ? 'var(--v2-foret)' : 'var(--v2-lin)'"
+          ></span>
         }
-
-        <p class="mt-8 text-center text-sm">
-          <a
-            routerLink="/login"
-            class="font-semibold text-primary hover:underline pointer-coarse:inline-block pointer-coarse:py-2"
-          >
-            {{ t()("auth.forgot.back") }}
-          </a>
-        </p>
       </div>
-    </div>
+
+      @switch (step().name) {
+        @case ("email") {
+          <h1 class="mt-7 text-[32px] font-extrabold leading-[1.05] tracking-[-0.03em] lg:text-[40px]">
+            {{ t()("auth.forgot.title") }}
+          </h1>
+          <p class="mt-3 text-base font-medium" style="color: var(--v2-gris-texte)">
+            {{ t()("auth.forgot.description") }}
+          </p>
+          <form class="mt-8 space-y-5" novalidate (submit)="$event.preventDefault(); submitEmail()">
+            <app-auth-field
+              id="email"
+              kind="email"
+              autocomplete="username"
+              [label]="t()('auth.login.email')"
+              [placeholder]="t()('auth.login.emailPlaceholder')"
+              [(value)]="email"
+            />
+            @if (error()) {
+              <div role="alert" class="alert"><lucide-angular [img]="icons.alert" [size]="20" />{{ error() }}</div>
+            }
+            <button type="submit" class="btn-primary !mt-7" [disabled]="busy()">
+              <span>{{ busy() ? t()("auth.forgot.sending") : t()("auth.forgot.send") }}</span>
+              <span class="btn-chip" aria-hidden="true">
+                <lucide-angular [img]="busy() ? icons.loader : icons.arrowRight" [size]="22" [class.animate-spin]="busy()" />
+              </span>
+            </button>
+          </form>
+        }
+        @case ("code") {
+          <h1 class="mt-7 text-[32px] font-extrabold leading-[1.05] tracking-[-0.03em] lg:text-[40px]">
+            {{ t()("auth.forgot.codeTitle") }}
+          </h1>
+          <p class="mt-3 text-base font-medium" style="color: var(--v2-gris-texte)">
+            {{ t()("auth.otp.sent", { length: OTP_LENGTH, email: sentInfo()?.maskedEmail ?? "", minutes: otpMinutes }) }}
+          </p>
+          <form class="mt-8 space-y-5" (submit)="$event.preventDefault(); submitCode()">
+            <div class="space-y-2.5">
+              <label id="otp-label" for="otp" class="label">{{ t()("auth.otp.code") }}</label>
+              <app-otp-input
+                fieldId="otp"
+                labelledBy="otp-label"
+                [value]="code()"
+                [disabled]="busy()"
+                (valueChange)="code.set($event)"
+                (complete)="submitCode()"
+              />
+            </div>
+            @if (error()) {
+              <div role="alert" class="alert"><lucide-angular [img]="icons.alert" [size]="20" />{{ error() }}</div>
+            }
+            @if (demoMail(); as mail) {
+              <div role="status" class="note">
+                <span>
+                  <span class="mono block" style="color: var(--v2-gris-texte)">{{ t()("auth.mail.title") }}</span>
+                  <span class="mt-1 block font-medium">
+                    {{ t()("auth.mail.line", { to: mail.to }) }} {{ t()("auth.mail.code") }}
+                    <span class="font-bold tracking-[0.2em]" style="font-family: var(--v2-font-mono)">{{ mail.code }}</span>
+                  </span>
+                </span>
+              </div>
+            }
+            <button type="submit" class="btn-primary" [disabled]="busy() || code().length < OTP_LENGTH">
+              <span>{{ busy() ? t()("auth.otp.verifying") : t()("auth.forgot.validate") }}</span>
+              <span class="btn-chip" aria-hidden="true">
+                <lucide-angular [img]="busy() ? icons.loader : icons.arrowRight" [size]="22" [class.animate-spin]="busy()" />
+              </span>
+            </button>
+            <div class="flex flex-wrap items-center justify-between gap-3 text-[15px]">
+              <button
+                type="button"
+                class="link inline-flex items-center gap-1.5 disabled:no-underline disabled:opacity-60"
+                [disabled]="busy() || resendWait() > 0"
+                (click)="resend()"
+              >
+                <lucide-angular [img]="icons.resend" [size]="16" />
+                {{ resendWait() > 0 ? t()("auth.otp.resendIn", { seconds: resendWait() }) : t()("auth.otp.resend") }}
+              </button>
+              <button type="button" class="ghost inline-flex items-center gap-1.5 font-semibold" style="color: var(--v2-gris-texte)" (click)="backToEmail()">
+                <lucide-angular [img]="icons.arrowLeft" [size]="16" />{{ t()("auth.otp.back") }}
+              </button>
+            </div>
+          </form>
+        }
+        @case ("password") {
+          <h1 class="mt-7 text-[32px] font-extrabold leading-[1.05] tracking-[-0.03em] lg:text-[40px]">
+            {{ t()("auth.forgot.newTitle") }}
+          </h1>
+          <p class="mt-3 text-base font-medium" style="color: var(--v2-gris-texte)">
+            {{ t()("auth.forgot.newDescription") }}
+          </p>
+          <form class="mt-8 space-y-5" novalidate (submit)="$event.preventDefault(); submitPassword()">
+            <app-auth-field
+              id="pw1"
+              kind="password"
+              autocomplete="new-password"
+              [label]="t()('auth.forgot.newPassword')"
+              [(value)]="password"
+            />
+            <app-auth-password-rules [password]="password()" [email]="resetEmail()" />
+            <app-auth-field
+              id="pw2"
+              kind="password"
+              autocomplete="new-password"
+              [label]="t()('auth.forgot.confirm')"
+              [invalid]="mismatch()"
+              [(value)]="confirm"
+            />
+            @if (mismatch()) {
+              <div role="alert" class="alert"><lucide-angular [img]="icons.alert" [size]="20" />{{ t()("auth.forgot.mismatch") }}</div>
+            } @else if (error()) {
+              <div role="alert" class="alert"><lucide-angular [img]="icons.alert" [size]="20" />{{ error() }}</div>
+            }
+            <button type="submit" class="btn-primary !mt-7" [disabled]="busy() || !canSubmitPassword()">
+              <span>{{ busy() ? t()("auth.forgot.saving") : t()("auth.forgot.save") }}</span>
+              <span class="btn-chip" aria-hidden="true">
+                <lucide-angular [img]="busy() ? icons.loader : icons.arrowRight" [size]="22" [class.animate-spin]="busy()" />
+              </span>
+            </button>
+          </form>
+        }
+      }
+
+      <p class="mt-8 text-[15px]">
+        <a routerLink="/login" class="link inline-flex items-center gap-1.5">
+          <lucide-angular [img]="icons.arrowLeft" [size]="16" />{{ t()("auth.forgot.back") }}
+        </a>
+      </p>
+    </app-auth-shell>
   `,
 })
 export default class MotDePasseOubliePage {
@@ -240,7 +196,24 @@ export default class MotDePasseOubliePage {
   protected readonly OTP_LENGTH = OTP_LENGTH;
   protected readonly otpMinutes = Math.round(OTP_TTL_MS / 60000);
 
+  protected readonly icons = {
+    alert: CircleAlert,
+    arrowLeft: ArrowLeft,
+    arrowRight: ArrowRight,
+    loader: Loader2,
+    resend: RotateCw,
+    shield: ShieldCheck,
+  };
+
   protected readonly step = signal<Step>({ name: "email" });
+  /** 1, 2 ou 3 : position dans les trois étapes (adresse, code, nouveau mot de passe). */
+  protected readonly stepIndex = computed(() => ({ email: 1, code: 2, password: 3 })[this.step().name]);
+  protected readonly stepNumber = computed(() => `0${this.stepIndex()}`);
+  /** Adresse du compte en cours de réinitialisation (sert à refuser un mot de passe qui la reprend). */
+  protected readonly resetEmail = computed(() => {
+    const current = this.step();
+    return current.name === "email" ? "" : current.email;
+  });
   protected readonly email = signal("");
   protected readonly code = signal("");
   protected readonly password = signal("");

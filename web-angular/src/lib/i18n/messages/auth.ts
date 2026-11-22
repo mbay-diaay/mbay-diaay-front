@@ -87,10 +87,11 @@ export const auth = {
   "auth.forgot.saving": "Enregistrement en cours",
   "auth.error.invitation_invalid":
     "Ce lien d'invitation n'est plus valable. Demandez-en un nouveau à votre administrateur.",
+  "auth.invitation.badge": "Activation du compte",
   "auth.invitation.title": "Bienvenue",
   "auth.invitation.description":
     "Choisissez le mot de passe de votre compte. Ce lien ne sert qu'une fois.",
-  "auth.invitation.account": "Compte : {email}",
+  "auth.invitation.account": "Compte {email}",
   "auth.invitation.password": "Mot de passe",
   "auth.invitation.confirm": "Confirmer le mot de passe",
   "auth.invitation.mismatch": "Les deux mots de passe ne sont pas identiques.",
