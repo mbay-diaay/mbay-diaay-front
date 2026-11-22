@@ -12,7 +12,8 @@ import { fr, type Messages, type MessageKey } from "./fr";
 export const REVIEWED_WO: readonly MessageKey[] = ["locale.fr", "locale.wo"];
 
 /** Clés volontairement sans entrée wolof : elles s'affichent en français en attendant. */
-export const TO_TRANSLATE: readonly MessageKey[] = [];
+/** `auth.login.footer` : le brouillon disait « 30 minit » ; la session dure maintenant 1 heure, le texte reste en français jusqu'à relecture. */
+export const TO_TRANSLATE: readonly MessageKey[] = ["auth.login.footer"];
 
 /** Texte repère : le français entre crochets, allongé d'environ 30 % ; les `{paramètres}` sont conservés. */
 export const pseudo = (text: string): string => {
@@ -48,7 +49,6 @@ export const BROUILLONS_A_RELIRE: Partial<Messages> = {
   "auth.login.submitting": "Duggu gi mi ngi dem",
   "auth.login.errorEmail": "Bindal adaras e-mail bu baax.",
   "auth.login.errorPassword": "Bindal sa baatu jàll.",
-  "auth.login.footer": "Sa duggu dina jeex boppam ginnaaw 30 minit.",
   "auth.step.credentials": "Say xibaar",
   "auth.step.code": "Wóoral",
   "auth.step.progress": "Tappe {current} / {total}",

@@ -327,7 +327,7 @@ const withMember = (u: AppUser): AppUser => {
   return m ? { ...u, memberId: m.id } : u;
 };
 
-const TOKEN_MS = 30 * 60 * 1000;
+const TOKEN_MS = 60 * 60 * 1000;
 /** Durée de validité du lien d'invitation d'un gestionnaire (hypothèse, à valider). */
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
