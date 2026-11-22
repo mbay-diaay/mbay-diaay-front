@@ -268,6 +268,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<BuiltInRoleId, Permission[]> = {
     "role.assign",
     "technician.invite",
     "subrole.manage",
+    "dossier.create",
+    "dossier.submit",
     "dossier.review",
     "document.read",
     "document.download",
