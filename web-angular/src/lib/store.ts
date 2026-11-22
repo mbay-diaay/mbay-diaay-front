@@ -180,6 +180,7 @@ import {
 } from "./scoops";
 import { canEditMinutes, canMeetingTransition, isMeetingEditable } from "./meetings";
 import { isApiMode } from "./api/config";
+import { mediaSrc } from "./api/media";
 import { clearTokens } from "./api/tokens";
 import { DEMO_MODE } from "./auth/config";
 import { tNow, type MessageKey, type TranslateParams } from "./i18n";
@@ -964,7 +965,7 @@ function appUserFromApi(apiUser: ApiUserRow): AppUser {
     ...(manyScoops && { scoopIds }),
     ...(apiUser.sex && { sex: apiUser.sex }),
     ...(apiUser.age && { age: apiUser.age }),
-    ...(apiUser.photoUrl && { photoUrl: apiUser.photoUrl }),
+    ...(apiUser.photoUrl && { photoUrl: mediaSrc(apiUser.photoUrl) ?? apiUser.photoUrl }),
     active: apiUser.active,
     // Le code lui-même n'est jamais relu : l'API ne garde que son empreinte. Seul « en attente » est connu.
     ...(apiUser.activationPending && {

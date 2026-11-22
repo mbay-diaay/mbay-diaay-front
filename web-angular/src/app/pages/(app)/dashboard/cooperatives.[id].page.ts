@@ -227,6 +227,15 @@ const initials = (name: string) =>
       font-weight: 700;
       transition: transform 0.3s ease;
     }
+    .hero-logo {
+      height: 76px;
+      width: 76px;
+      flex-shrink: 0;
+      border-radius: 22px;
+      background: var(--v2-blanc);
+      object-fit: contain;
+      padding: 4px;
+    }
     .hero:hover .hero-mono {
       transform: rotate(-4deg) scale(1.04);
     }
@@ -608,7 +617,11 @@ const initials = (name: string) =>
 
           <div class="relative mt-6 flex flex-wrap items-start justify-between gap-6">
             <div class="flex min-w-0 items-start gap-5">
-              <span class="hero-mono" aria-hidden="true">{{ mono() }}</span>
+              @if (coop.logoUrl) {
+                <img class="hero-logo" [src]="coop.logoUrl" [alt]="t()('cooperatives.fiche.logoAlt', { name: coop.name })" />
+              } @else {
+                <span class="hero-mono" aria-hidden="true">{{ mono() }}</span>
+              }
               <div class="min-w-0">
                 <h1
                   class="text-[28px] font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-[34px]"
