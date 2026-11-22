@@ -3,7 +3,7 @@ import { actions, getState } from "../store";
 import { apiFetch } from "./client";
 import { isApiMode } from "./config";
 import { fetchAllPages } from "./pagination";
-import { listScoops, scoopFromApi } from "./scoops";
+import { listScoops, managerRowsFromScoops, scoopFromApi } from "./scoops";
 import { clearTokens, getAccessToken } from "./tokens";
 
 type MeResponse = {
@@ -52,6 +52,7 @@ export async function loadScoopsFromApi(): Promise<void> {
   try {
     const scoops = await fetchAllPages((query) => listScoops(query));
     actions.replaceScoopsFromApi(scoops.map(scoopFromApi));
+    actions.mergeUsersFromApi(managerRowsFromScoops(scoops));
   } catch {
     // Silencieux : voir ci-dessus.
   }

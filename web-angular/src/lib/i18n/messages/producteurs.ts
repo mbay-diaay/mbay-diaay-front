@@ -27,6 +27,7 @@ export const producteurs = {
   "producteurs.index.description":
     "{total} producteur(s) trouvé(s). Cliquez sur une ligne pour voir le détail.",
   "producteurs.index.exportCsv": "Exporter CSV",
+  "producteurs.index.new": "Nouveau producteur",
   "producteurs.index.searchPlaceholder": "Nom ou code",
   "producteurs.index.searchLabel": "Rechercher un producteur",
   "producteurs.index.filters": "Filtres",

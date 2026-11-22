@@ -24,20 +24,35 @@ const NO_TYPE = "none";
 @Component({
   selector: "app-organisation-dialog",
   imports: [IconComponent, ModalComponent, SelectComponent, TextFieldComponent],
-  styles: [V2_PAGE_STYLES],
+  styles: [
+    V2_PAGE_STYLES,
+    `
+      .lbl {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--v2-ardoise);
+      }
+    `,
+  ],
   template: `
     <ui-modal [open]="open()" [title]="t()('orgs.add.title')" [description]="t()('orgs.add.description')" icon="group" [width]="600" [closeLabel]="t()('common.close')" (closed)="open.set(false)">
-      <div class="grid gap-5 pb-6 sm:grid-cols-2">
+      <div class="grid gap-4 pb-6 sm:grid-cols-2">
         @if (!scoopId()) {
           <div class="sm:col-span-2">
-            <ui-select [label]="t()('roles.dialog.scoop')" [placeholder]="t()('roles.dialog.scoopPh')" leadingIcon="apartment" [options]="scoopOptions()" [value]="chosenScoop()" (valueChange)="chosenScoop.set($event); scoopError.set('')" />
+            <p class="lbl">{{ t()("roles.dialog.scoop") }}</p>
+            <ui-select class="mt-2 block" [label]="t()('roles.dialog.scoop')" [placeholder]="t()('roles.dialog.scoopPh')" leadingIcon="apartment" [options]="scoopOptions()" [value]="chosenScoop()" (valueChange)="chosenScoop.set($event); scoopError.set('')" />
             @if (scoopError()) {
               <p class="mt-1.5 text-[13px] font-bold" style="color: var(--v2-erreur-fg)" role="alert">{{ scoopError() }}</p>
             }
           </div>
         }
         <ui-text-field class="sm:col-span-2" preset="scoopName" [label]="t()('orgs.add.name')" [placeholder]="t()('orgs.add.namePh')" [value]="name()" [error]="nameError()" (valueChange)="name.set($event); nameError.set('')" />
-        <ui-select [label]="t()('orgs.add.type')" leadingIcon="badge" [options]="typeOptions()" [value]="type()" (valueChange)="type.set($event)" />
+        <div>
+          <p class="lbl">{{ t()("orgs.add.type") }}</p>
+          <ui-select class="mt-2 block" [label]="t()('orgs.add.type')" leadingIcon="badge" [options]="typeOptions()" [value]="type()" (valueChange)="type.set($event)" />
+        </div>
         <ui-text-field preset="village" [label]="t()('orgs.add.village')" [value]="village()" (valueChange)="village.set($event)" />
       </div>
       <button modal-footer type="button" class="btn btn-ghost" (click)="open.set(false)">{{ t()("common.cancel") }}</button>

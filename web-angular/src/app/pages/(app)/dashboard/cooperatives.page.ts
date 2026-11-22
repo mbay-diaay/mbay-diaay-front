@@ -11,6 +11,7 @@ import {
   listScoops,
   restoreScoop as restoreScoopApi,
   scoopApiError,
+  managerRowsFromScoops,
   scoopFromApi,
   updateScoop as updateScoopApi,
 } from "@/lib/api/scoops";
@@ -1576,6 +1577,7 @@ export default class CooperativesPage {
     try {
       const scoops = await fetchAllPages((query) => listScoops(query));
       this.store.actions.replaceScoopsFromApi(scoops.map(scoopFromApi));
+      this.store.actions.mergeUsersFromApi(managerRowsFromScoops(scoops));
     } catch {
       this.snackbar.error(this.t()("errors.scoop.loadError"));
     }

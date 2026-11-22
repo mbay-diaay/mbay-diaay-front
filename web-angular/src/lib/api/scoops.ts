@@ -1,8 +1,20 @@
 import type { MessageKey } from "../i18n";
 import type { Scoop } from "../mock/data";
+import type { ApiUserRow } from "../store";
 import { ApiError, apiFetch } from "./client";
 import { mediaSrc } from "./media";
 import { type Page, type PageQuery, withPage } from "./pagination";
+
+/** Gestionnaire d'une coopérative, tel que `GET /scoops` et `GET /scoops/:id` le renvoient à qui voit la coopérative. */
+export type ApiScoopManager = {
+  userId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  active: boolean;
+  invitationPending: boolean;
+  invitationExpiresAt: string | null;
+};
 
 /** Coopérative telle que l'API la renvoie (`GET /scoops`). */
 export type ApiScoop = {
@@ -15,9 +27,11 @@ export type ApiScoop = {
   createdAt: string;
   /** Lien signé du logo (1 h), `null` sans logo. */
   logoUrl?: string | null;
+  /** Gestionnaire de la coopérative (liste et fiche) ; absent dans la réponse à une création. */
+  manager?: ApiScoopManager | null;
 };
 
-export type CreatedScoop = ApiScoop & {
+export type CreatedScoop = Omit<ApiScoop, "manager"> & {
   /** Compte gestionnaire créé avec la coopérative : inactif tant qu'il n'a pas choisi son mot de passe. */
   manager?: { userId: string; activationPending: boolean; invitationSent?: boolean } | null;
 };
@@ -61,7 +75,7 @@ export function restoreScoop(id: string) {
 }
 
 /** Coopérative de l'API au format du store (région absente = `undefined`, jamais `null`). */
-export function scoopFromApi(apiScoop: ApiScoop): Scoop {
+export function scoopFromApi(apiScoop: Omit<ApiScoop, "manager">): Scoop {
   return {
     id: apiScoop.id,
     name: apiScoop.name,
@@ -101,4 +115,28 @@ export function scoopApiError(error: unknown): { key: MessageKey; field?: "name"
     }
   }
   return { key: "errors.scoop.api" };
+}
+
+/**
+ * Gestionnaires renvoyés avec les coopératives, au format des comptes du store : la fiche, la liste et la barre latérale
+ * retrouvent ainsi le gestionnaire sans que la personne ait le droit de lister tous les comptes de la plateforme.
+ */
+export function managerRowsFromScoops(items: ApiScoop[]): ApiUserRow[] {
+  return items.flatMap((item) =>
+    item.manager
+      ? [
+          {
+            id: item.manager.userId,
+            name: item.manager.name,
+            email: item.manager.email,
+            role: "gestionnaire" as const,
+            scoopId: item.id,
+            phone: item.manager.phone,
+            active: item.manager.active,
+            invitationPending: item.manager.invitationPending,
+            invitationExpiresAt: item.manager.invitationExpiresAt,
+          },
+        ]
+      : [],
+  );
 }

@@ -73,7 +73,7 @@ const NO_ORG = "none";
   ],
   template: `
     <ui-modal [open]="open()" [title]="t()('adherents.add.title')" [description]="t()('adherents.add.description')" icon="person_add" [width]="680" [closeLabel]="t()('common.close')" (closed)="open.set(false)">
-      <div class="grid gap-5 pb-6 sm:grid-cols-2">
+      <div class="grid items-start gap-4 pb-6 sm:grid-cols-2">
         <ui-text-field preset="firstName" [label]="t()('adherents.add.firstName')" [value]="firstName()" [error]="err().firstName ?? ''" (valueChange)="firstName.set($event); clear('firstName')" />
         <ui-text-field preset="lastName" [label]="t()('adherents.add.lastName')" [value]="lastName()" [error]="err().lastName ?? ''" (valueChange)="lastName.set($event); clear('lastName')" />
         <div>
@@ -90,7 +90,10 @@ const NO_ORG = "none";
         <ui-text-field preset="phoneSn" [label]="t()('adherents.add.phone')" [value]="phone()" [error]="err().phone ?? ''" (valueChange)="phone.set($event); clear('phone')" />
         <ui-text-field preset="email" [label]="t()('adherents.add.email')" [optional]="t()('utilisateurs.v2.optional')" [hint]="t()('adherents.add.emailHint')" [value]="email()" [error]="err().email ?? ''" (valueChange)="email.set($event); clear('email')" />
         <ui-text-field preset="village" [label]="t()('adherents.add.village')" [value]="village()" (valueChange)="village.set($event)" />
-        <ui-select [label]="t()('adherents.add.org')" leadingIcon="group" [options]="orgOptions()" [value]="orgId()" (valueChange)="orgId.set($event)" />
+        <div>
+          <p class="lbl">{{ t()("adherents.add.org") }}</p>
+          <ui-select class="mt-2 block" [label]="t()('adherents.add.org')" leadingIcon="group" [options]="orgOptions()" [value]="orgId()" (valueChange)="orgId.set($event)" />
+        </div>
         <div class="sm:col-span-2">
           <p class="lbl">{{ t()("adherents.add.status") }}</p>
           <div class="modes mt-2" role="radiogroup" [attr.aria-label]="t()('adherents.add.status')">
