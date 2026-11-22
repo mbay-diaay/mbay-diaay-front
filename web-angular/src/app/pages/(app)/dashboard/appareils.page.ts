@@ -1,502 +1,223 @@
-import { Component, computed, HostListener, inject, signal } from "@angular/core";
-import { FormsModule } from "@angular/forms";
+import { Component, computed, inject, signal } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
-import { ActivatedRoute, Router, RouterLink } from "@angular/router";
+import { ActivatedRoute, RouterLink } from "@angular/router";
 import { map } from "rxjs";
-import {
-  LucideAngularModule,
-  Ban,
-  Eye,
-  LogOut,
-  MoreVertical,
-  Pencil,
-  RefreshCw,
-  RotateCcw,
-  ScrollText,
-  Search,
-  Smartphone,
-  UserCog,
-  X,
-} from "lucide-angular";
 
-import { fmtDate, fmtDateTime, nf } from "@/lib/format";
-import type { Device } from "@/lib/mock/data";
+import {
+  deviceApiError,
+  fetchDevices,
+  reactivateDeviceOnApi,
+  renameDeviceOnApi,
+  resyncDeviceOnApi,
+  revokeDeviceOnApi,
+  signOutDeviceOnApi,
+  type DevicesOverview,
+} from "@/lib/api/devices";
+import { isApiMode } from "@/lib/api/config";
+import { fmtDateTime, nf } from "@/lib/format";
+import type { MessageKey } from "@/lib/i18n";
+import type { RoleId } from "@/lib/permissions";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
 import { StoreService } from "@shared/store.service";
-import {
-  PaginationComponent,
-  UiDialogComponent,
-  UiPageHeaderComponent,
-  UiPillComponent,
-} from "@shared/ui";
 import { createPager } from "@shared/pager";
+import {
+  IconComponent,
+  initialsOf,
+  ModalComponent,
+  PaginationComponent,
+  SnackbarService,
+  StatCardsComponent,
+  TextFieldComponent,
+  TONE,
+  V2_PAGE_STYLES,
+  type StatCard,
+} from "@shared/ui";
 
-type Filter = "tous" | "actif" | "révoqué";
+type Filter = "tous" | "actifs" | "revoques";
 type ConfirmKind = "revoke" | "reactivate" | "signout";
 
-/** Port de src/routes/appareils.tsx — liste, détail, renommage, confirmations. */
+/** Appareil tel que la page l'affiche, que les données viennent de l'API ou de la démonstration. */
+interface DeviceRow {
+  id: string;
+  userId: string;
+  label: string;
+  platform: string;
+  appVersion: string;
+  registeredAt: string;
+  lastActiveAt: string | null;
+  active: boolean;
+  signedOutPending: boolean;
+}
+
+interface OwnerRef {
+  id: string;
+  name: string;
+  email: string;
+  role: RoleId;
+  scoopLabel: string;
+}
+
+const norm = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Appareils (charte V2) : les téléphones sur lesquels les comptes utilisent l'application mobile. On peut renommer un
+ * appareil, demander une resynchronisation, forcer sa déconnexion, le révoquer ou le réactiver. Les données viennent de
+ * l'API (`/devices`) ; en démonstration locale, du store en mémoire.
+ */
 @Component({
   selector: "app-appareils-page",
-  imports: [
-    PaginationComponent,
-    FormsModule,
-    RouterLink,
-    LucideAngularModule,
-    AppShellComponent,
-    UiDialogComponent,
-    UiPageHeaderComponent,
-    UiPillComponent,
+  imports: [AppShellComponent, IconComponent, ModalComponent, PaginationComponent, RouterLink, StatCardsComponent, TextFieldComponent],
+  styles: [
+    V2_PAGE_STYLES,
+    `
+      .sm {
+        height: 40px;
+        padding: 0 14px;
+        font-size: 14px;
+      }
+    `,
   ],
   template: `
     <app-shell perm="device.manage" [area]="t()('appareils.area')">
-      <ui-page-header
-        [eyebrow]="t()('appareils.eyebrow')"
-        [title]="t()('appareils.title')"
-        [description]="t()('appareils.description')"
-      >
-        <div actions class="flex flex-wrap gap-2">
-          <ui-pill tone="success">{{
-            t()("appareils.count.active", { n: nf.format(activeCount()) })
-          }}</ui-pill>
-          <ui-pill tone="neutral">{{
-            t()("appareils.count.revoked", { n: nf.format(devices().length - activeCount()) })
-          }}</ui-pill>
-        </div>
-      </ui-page-header>
+      <header class="rise">
+        <p class="mono" style="color: var(--v2-gris-texte)">{{ t()("appareils.eyebrow") }}</p>
+        <h1 class="mt-2 text-[30px] font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-[38px]">
+          {{ t()("appareils.title") }}
+        </h1>
+        <p class="mt-2 max-w-2xl text-[16px] font-medium" style="color: var(--v2-gris-texte)">
+          {{ t()("appareils.description") }}
+        </p>
+      </header>
 
-      @if (flash()) {
-        <p class="mb-3 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm">
-          {{ flash() }}
+      <ui-stat-cards class="rise mt-8" [stats]="stats()" />
+
+      <div class="toolbar card mt-6">
+        <label class="search">
+          <ui-icon name="search" [size]="20" />
+          <input
+            type="search"
+            [placeholder]="t()('appareils.search')"
+            [attr.aria-label]="t()('appareils.search')"
+            [value]="q()"
+            (input)="q.set($any($event.target).value)"
+          />
+        </label>
+        <div class="seg" role="radiogroup" [attr.aria-label]="t()('appareils.state.aria')">
+          @for (option of filterOptions(); track option.key) {
+            <button
+              type="button"
+              role="radio"
+              [class.on]="filter() === option.key"
+              [attr.aria-checked]="filter() === option.key"
+              (click)="filter.set(option.key)"
+            >
+              {{ option.label }}<span class="n" [class.zero]="!option.count">{{ nf.format(option.count) }}</span>
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (filteredOwner(); as owner) {
+        <p class="sub mt-4 flex flex-wrap items-center gap-2">
+          {{ t()("appareils.filter.of") }} <strong>{{ owner.name }}</strong>
+          <a class="link font-bold" style="color: var(--v2-foret-clair)" routerLink="/dashboard/appareils">{{ t()("appareils.filter.all") }}</a>
         </p>
       }
 
-      @if (filterUser(); as filteredUser) {
-        <div
-          class="mb-3 flex flex-wrap items-center gap-2 rounded-md bg-info-bg px-3 py-2 text-sm text-info-fg"
-        >
-          {{ t()("appareils.filter.of") }} <strong>{{ filteredUser.name }}</strong>
-          <button
-            type="button"
-            class="ml-auto inline-flex items-center gap-1 text-xs font-semibold hover:underline"
-            (click)="clearUserFilter()"
-          >
-            <lucide-angular [img]="icons.x" class="size-3.5" />
-            {{ t()("appareils.filter.all") }}
-          </button>
-        </div>
-      }
-
-      <div class="surface mb-3 flex flex-wrap items-center gap-3 p-3">
-        <div class="flex flex-wrap gap-1 rounded-md border bg-muted/40 p-1">
-          @for (option of filterOptions; track option.value) {
-            <button
-              type="button"
-              class="rounded px-2.5 py-1 text-xs font-medium"
-              [class.bg-background]="filter() === option.value"
-              [class.shadow-sm]="filter() === option.value"
-              (click)="filter.set(option.value)"
-            >
-              {{ option.label }}
-            </button>
-          }
-        </div>
-        <div class="relative">
-          <lucide-angular
-            [img]="icons.search"
-            class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <input
-            class="flex h-9 w-64 rounded-md border border-input bg-background pl-8 pr-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            [attr.aria-label]="t()('appareils.search')"
-            [placeholder]="t()('appareils.search')"
-            [ngModel]="q()"
-            (ngModelChange)="q.set($event)"
-          />
-        </div>
-      </div>
-
-      <div class="surface" [class.overflow-x-auto]="!deviceMenuOpenId()">
-        @if (rows().length) {
-          <table class="w-full text-sm">
-            <thead class="border-b bg-muted text-left text-xs text-muted-foreground">
-              <tr>
-                <th class="py-3 pl-4 font-semibold">{{ t()("appareils.col.device") }}</th>
-                <th class="font-semibold">{{ t()("appareils.col.user") }}</th>
-                <th class="hidden font-semibold md:table-cell">
-                  {{ t()("appareils.col.registered") }}
-                </th>
-                <th class="font-semibold">{{ t()("appareils.col.lastActive") }}</th>
-                <th class="font-semibold">{{ t()("appareils.col.status") }}</th>
-                <th class="w-12 pr-4" aria-hidden="true"></th>
-              </tr>
-            </thead>
-            <tbody class="divide-y">
-              @for (device of pager.items(); track device.id) {
-                <tr class="cursor-pointer hover:bg-muted/40" (click)="openDetail(device.id)">
-                  <td class="py-2.5 pl-4">
-                    <span class="flex items-center gap-2 font-medium">
-                      <lucide-angular [img]="icons.phone" class="size-4 text-muted-foreground" />
-                      {{ device.label }}
-                    </span>
-                  </td>
-                  <td>
-                    @if (user(device.userId); as owner) {
-                      <a
-                        [routerLink]="['/dashboard/utilisateurs']"
-                        [queryParams]="{ q: owner.name }"
-                        (click)="$event.stopPropagation()"
-                        class="font-medium hover:text-primary hover:underline"
-                      >
-                        {{ owner.name }}
-                      </a>
-                      <div class="text-xs text-muted-foreground">
-                        {{ store.roleLabel(owner.role) }}
-                      </div>
-                    } @else {
-                      {{ t()("appareils.unknown") }}
-                    }
-                  </td>
-                  <td class="hidden whitespace-nowrap text-muted-foreground md:table-cell">
-                    {{ fmtDate(device.registeredAt) }}
-                  </td>
-                  <td class="whitespace-nowrap text-muted-foreground">
-                    {{ fmtDate(device.lastActiveAt) }}
-                  </td>
-                  <td>
-                    @if (device.active) {
-                      <ui-pill tone="success">{{ t()("appareils.state.active") }}</ui-pill>
-                    } @else {
-                      <ui-pill tone="neutral">{{ t()("appareils.state.revoked") }}</ui-pill>
-                    }
-                  </td>
-                  <td
-                    class="relative pr-4 text-right"
-                    data-device-menu
-                    (click)="$event.stopPropagation()"
-                  >
-                    <button
-                      type="button"
-                      class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted pointer-coarse:size-touch focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      [attr.aria-expanded]="deviceMenuOpenId() === device.id"
-                      [attr.aria-label]="t()('appareils.action.menu')"
-                      (click)="toggleDeviceMenu(device.id, $event)"
-                    >
-                      <lucide-angular [img]="icons.more" class="size-4" />
-                    </button>
-                    @if (deviceMenuOpenId() === device.id) {
-                      <div
-                        class="absolute right-4 z-20 mt-1 min-w-56 rounded-md border bg-popover p-1 text-left text-sm shadow-md"
-                        data-device-menu
-                      >
-                        <button
-                          type="button"
-                          class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
-                          (click)="openDetail(device.id); deviceMenuOpenId.set(null)"
-                        >
-                          <lucide-angular [img]="icons.eye" class="size-4 shrink-0" />
-                          {{ t()("appareils.action.detail") }}
-                        </button>
-                        <button
-                          type="button"
-                          class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
-                          (click)="openRename(device); deviceMenuOpenId.set(null)"
-                        >
-                          <lucide-angular [img]="icons.pencil" class="size-4 shrink-0" />
-                          {{ t()("appareils.action.rename") }}
-                        </button>
-                        @if (device.active) {
-                          <button
-                            type="button"
-                            class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
-                            (click)="resync(device); deviceMenuOpenId.set(null)"
-                          >
-                            <lucide-angular [img]="icons.refresh" class="size-4 shrink-0" />
-                            {{ t()("appareils.action.resync") }}
-                          </button>
-                        }
-                        @if (store.can("user.manage")) {
-                          <a
-                            [routerLink]="['/dashboard/utilisateurs']"
-                            [queryParams]="{ q: user(device.userId)?.name ?? '' }"
-                            class="flex w-full items-center gap-2 rounded px-2 py-1.5 hover:bg-muted"
-                            (click)="deviceMenuOpenId.set(null)"
-                          >
-                            <lucide-angular [img]="icons.userCog" class="size-4 shrink-0" />
-                            {{ t()("appareils.action.user") }}
-                          </a>
-                        }
-                        @if (store.can("audit.read")) {
-                          <a
-                            [routerLink]="['/dashboard/audit']"
-                            [queryParams]="{ q: device.label }"
-                            class="flex w-full items-center gap-2 rounded px-2 py-1.5 hover:bg-muted"
-                            (click)="deviceMenuOpenId.set(null)"
-                          >
-                            <lucide-angular [img]="icons.scroll" class="size-4 shrink-0" />
-                            {{ t()("appareils.action.audit") }}
-                          </a>
-                        }
-                        @if (device.active) {
-                          <button
-                            type="button"
-                            class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-danger-fg hover:bg-muted"
-                            (click)="askConfirm('signout', device); deviceMenuOpenId.set(null)"
-                          >
-                            <lucide-angular [img]="icons.logOut" class="size-4 shrink-0" />
-                            {{ t()("appareils.action.signout") }}
-                          </button>
-                        }
-                        @if (device.active) {
-                          <button
-                            type="button"
-                            class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-danger-fg hover:bg-muted"
-                            (click)="askConfirm('revoke', device); deviceMenuOpenId.set(null)"
-                          >
-                            <lucide-angular [img]="icons.ban" class="size-4 shrink-0" />
-                            {{ t()("appareils.action.revoke") }}
-                          </button>
-                        } @else {
-                          <button
-                            type="button"
-                            class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
-                            (click)="askConfirm('reactivate', device); deviceMenuOpenId.set(null)"
-                          >
-                            <lucide-angular [img]="icons.rotate" class="size-4 shrink-0" />
-                            {{ t()("appareils.action.reactivate") }}
-                          </button>
-                        }
-                      </div>
-                    }
-                  </td>
+      <section class="card mt-4 overflow-hidden">
+        @if (loading()) {
+          <div class="p-10 text-center" role="status"><p class="sub">{{ t()("shell.loading") }}</p></div>
+        } @else if (shown().length) {
+          <div class="overflow-x-auto">
+            <table class="tbl min-w-[900px]">
+              <thead>
+                <tr>
+                  <th>{{ t()("appareils.col.device") }}</th>
+                  <th>{{ t()("appareils.col.user") }}</th>
+                  <th>{{ t()("appareils.col.registered") }}</th>
+                  <th>{{ t()("appareils.col.lastActive") }}</th>
+                  <th>{{ t()("appareils.col.status") }}</th>
+                  <th class="text-right">&nbsp;</th>
                 </tr>
-              }
-            </tbody>
-          </table>
-          <ui-pagination class="px-4 pb-4" [pager]="pager" />
+              </thead>
+              <tbody>
+                @for (device of pager.items(); track device.id) {
+                  <tr>
+                    <td class="max-w-[260px]">
+                      <span class="block truncate font-bold">{{ device.label }}</span>
+                      <span class="sub block truncate">{{ platformLabel(device) }}</span>
+                    </td>
+                    <td class="max-w-[240px]">
+                      @if (owner(device.userId); as person) {
+                        <span class="flex items-center gap-3">
+                          <span class="grid size-9 shrink-0 place-items-center rounded-full text-[12px] font-extrabold" style="background: var(--v2-sauge); color: var(--v2-foret)">{{ initials(person.name) }}</span>
+                          <span class="min-w-0">
+                            <span class="block truncate font-bold">{{ person.name }}</span>
+                            <span class="sub block truncate">{{ store.roleLabel(person.role) }}</span>
+                          </span>
+                        </span>
+                      } @else {
+                        <span class="sub">{{ t()("appareils.unknown") }}</span>
+                      }
+                    </td>
+                    <td class="font-medium tabular-nums">{{ fmtDateTime(device.registeredAt) }}</td>
+                    <td class="font-medium tabular-nums">{{ device.lastActiveAt ? fmtDateTime(device.lastActiveAt) : t()("appareils.neverSeen") }}</td>
+                    <td>
+                      <span class="badge" [style.background]="device.active ? toneSuccess.bg : toneNeutral.bg" [style.color]="device.active ? toneSuccess.fg : toneNeutral.fg">{{ device.active ? t()("appareils.state.active") : t()("appareils.state.revoked") }}</span>
+                    </td>
+                    <td>
+                      <span class="flex flex-wrap items-center justify-end gap-2">
+                        <button type="button" class="act" [title]="t()('appareils.action.rename')" [attr.aria-label]="t()('appareils.action.rename') + ' · ' + device.label" (click)="openRename(device)"><ui-icon name="edit" [size]="18" /></button>
+                        @if (device.active) {
+                          <button type="button" class="act" [title]="t()('appareils.action.resync')" [attr.aria-label]="t()('appareils.action.resync') + ' · ' + device.label" [disabled]="busy()" (click)="resync(device)"><ui-icon name="refresh" [size]="18" /></button>
+                          <button type="button" class="act" [title]="t()('appareils.action.signout')" [attr.aria-label]="t()('appareils.action.signout') + ' · ' + device.label" (click)="ask(device, 'signout')"><ui-icon name="logout" [size]="18" /></button>
+                          <button type="button" class="btn btn-ghost sm" (click)="ask(device, 'revoke')">{{ t()("appareils.action.revoke") }}</button>
+                        } @else {
+                          <button type="button" class="btn btn-primary sm" (click)="ask(device, 'reactivate')">{{ t()("appareils.action.reactivate") }}</button>
+                        }
+                      </span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <ui-pagination class="px-5 pb-5" [pager]="pager" />
         } @else {
-          <div class="px-4 py-10 text-center text-muted-foreground">
-            <lucide-angular [img]="icons.phone" class="mx-auto mb-2 size-10 opacity-50" />
-            <div class="font-semibold text-foreground">{{ t()("appareils.empty.title") }}</div>
-            <p class="mt-1 text-sm">{{ t()("appareils.empty.desc") }}</p>
+          <div class="flex flex-col items-center gap-3 p-10 text-center">
+            <span class="grid size-14 place-items-center rounded-[16px]" style="background: var(--v2-sauge); color: var(--v2-foret)"><ui-icon name="search" [size]="26" /></span>
+            <p class="text-[16px] font-extrabold">{{ t()("appareils.empty.title") }}</p>
+            <p class="sub max-w-md">{{ t()("appareils.empty.desc") }}</p>
           </div>
         }
-      </div>
+      </section>
 
-      @if (detailDevice(); as detail) {
-        <div class="fixed inset-0 z-40 flex justify-end">
-          <div class="absolute inset-0 bg-black/40" (click)="closeDetail()"></div>
-          <aside
-            class="relative z-50 flex h-full w-full max-w-md flex-col overflow-y-auto border-l bg-card p-5 shadow-lg"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <h2 class="flex items-center gap-2 text-lg font-semibold">
-                <lucide-angular [img]="icons.phone" class="size-5 text-primary" />
-                {{ detail.label }}
-              </h2>
-              <button
-                type="button"
-                class="rounded-md p-1 text-muted-foreground hover:bg-muted"
-                [attr.aria-label]="t()('common.close')"
-                (click)="closeDetail()"
-              >
-                <lucide-angular [img]="icons.x" class="size-5" />
-              </button>
-            </div>
-            <div class="mt-2">
-              @if (detail.active) {
-                <ui-pill tone="success">{{ t()("appareils.state.active") }}</ui-pill>
-              } @else {
-                <ui-pill tone="neutral">{{ t()("appareils.state.revoked") }}</ui-pill>
-              }
-            </div>
-            <dl class="mt-5 grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <dt class="text-xs text-muted-foreground">{{ t()("appareils.col.user") }}</dt>
-                <dd class="mt-0.5">
-                  @if (user(detail.userId); as detailOwner) {
-                    <a
-                      [routerLink]="['/dashboard/utilisateurs']"
-                      [queryParams]="{ q: detailOwner.name }"
-                      class="text-primary hover:underline"
-                    >
-                      {{ detailOwner.name }}
-                    </a>
-                  } @else {
-                    {{ t()("appareils.unknown") }}
-                  }
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs text-muted-foreground">{{ t()("appareils.detail.role") }}</dt>
-                <dd class="mt-0.5">
-                  @if (user(detail.userId); as detailOwner) {
-                    {{ store.roleLabel(detailOwner.role) }}
-                  } @else {
-                    {{ t()("appareils.unknown") }}
-                  }
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs text-muted-foreground">{{ t()("appareils.col.registered") }}</dt>
-                <dd class="mt-0.5">{{ fmtDate(detail.registeredAt) }}</dd>
-              </div>
-              <div>
-                <dt class="text-xs text-muted-foreground">{{ t()("appareils.col.lastActive") }}</dt>
-                <dd class="mt-0.5">{{ fmtDate(detail.lastActiveAt) }}</dd>
-              </div>
-              <div class="col-span-2">
-                <dt class="text-xs text-muted-foreground">{{ t()("appareils.detail.id") }}</dt>
-                <dd class="mt-0.5 font-mono text-xs">{{ detail.id }}</dd>
-              </div>
-            </dl>
-            <div class="mt-5 flex flex-wrap gap-2">
-              <button
-                type="button"
-                class="inline-flex h-8 items-center gap-1.5 rounded-md border border-input px-2 text-xs font-medium"
-                (click)="openRename(detail)"
-              >
-                <lucide-angular [img]="icons.pencil" class="size-4" />
-                {{ t()("appareils.detail.rename") }}
-              </button>
-              @if (detail.active) {
-                <button
-                  type="button"
-                  class="inline-flex h-8 items-center gap-1.5 rounded-md border border-input px-2 text-xs font-medium"
-                  (click)="resync(detail)"
-                >
-                  <lucide-angular [img]="icons.refresh" class="size-4" />
-                  {{ t()("appareils.detail.resync") }}
-                </button>
-              }
-              @if (detail.active) {
-                <button
-                  type="button"
-                  class="inline-flex h-8 items-center gap-1.5 rounded-md border border-input px-2 text-xs font-medium text-danger-fg"
-                  (click)="askConfirm('revoke', detail)"
-                >
-                  <lucide-angular [img]="icons.ban" class="size-4" />
-                  {{ t()("appareils.detail.revoke") }}
-                </button>
-              } @else {
-                <button
-                  type="button"
-                  class="inline-flex h-8 items-center gap-1.5 rounded-md border border-input px-2 text-xs font-medium"
-                  (click)="askConfirm('reactivate', detail)"
-                >
-                  <lucide-angular [img]="icons.rotate" class="size-4" />
-                  {{ t()("appareils.detail.reactivate") }}
-                </button>
-              }
-            </div>
-            <div class="mt-6">
-              <div class="eyebrow mb-2">{{ t()("appareils.history") }}</div>
-              @if (detailHistory().length) {
-                <ul class="divide-y text-sm">
-                  @for (event of detailHistory(); track event.id) {
-                    <li class="py-2">
-                      <div class="font-medium">{{ event.action }}</div>
-                      <div class="text-xs text-muted-foreground">
-                        {{ event.user }} · {{ fmtDateTime(event.at) }}
-                      </div>
-                    </li>
-                  }
-                </ul>
-              } @else {
-                <p class="text-sm text-muted-foreground">{{ t()("appareils.history.empty") }}</p>
-              }
-              <a
-                [routerLink]="['/dashboard/audit']"
-                [queryParams]="{ q: detail.label }"
-                class="mt-2 inline-block text-xs font-semibold text-primary hover:underline"
-              >
-                {{ t()("appareils.history.open") }}
-              </a>
-            </div>
-          </aside>
-        </div>
+      <!-- ───── Renommer ───── -->
+      @if (renaming(); as device) {
+        <ui-modal [open]="true" icon="edit" [title]="t()('appareils.rename.title')" [description]="t()('appareils.rename.desc')" [width]="540" [closeLabel]="t()('common.close')" (closed)="renaming.set(null)">
+          <div class="pb-6">
+            <ui-text-field [label]="t()('appareils.rename.field')" [placeholder]="t()('appareils.rename.placeholder')" [value]="renameLabel()" [error]="renameError()" (valueChange)="renameLabel.set($event); renameError.set('')" />
+          </div>
+          <button modal-footer type="button" class="btn btn-ghost" (click)="renaming.set(null)">{{ t()("comptes.cancel") }}</button>
+          <button modal-footer type="button" class="btn btn-primary" [disabled]="busy()" (click)="saveRename(device)">{{ t()("appareils.rename.submit") }}</button>
+        </ui-modal>
       }
 
-      <ui-dialog
-        [open]="renameOpen()"
-        (openChange)="onRenameOpen($event)"
-        [title]="t()('appareils.rename.title')"
-      >
-        <p class="mb-3 text-sm text-muted-foreground">{{ t()("appareils.rename.desc") }}</p>
-        <label class="block text-sm font-medium">{{ t()("appareils.rename.field") }}</label>
-        <input
-          class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          [(ngModel)]="renameLabel"
-          [placeholder]="t()('appareils.rename.placeholder')"
-        />
-        <button
-          actions
-          type="button"
-          class="inline-flex h-9 items-center rounded-md border px-4 text-sm"
-          (click)="renameOpen.set(false)"
-        >
-          {{ t()("common.cancel") }}
-        </button>
-        <button
-          actions
-          type="button"
-          class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
-          [disabled]="!canSubmitRename()"
-          (click)="submitRename()"
-        >
-          {{ t()("appareils.rename.submit") }}
-        </button>
-      </ui-dialog>
-
-      @if (confirm(); as confirmation) {
-        <ui-dialog [open]="true" (openChange)="onConfirmOpen($event)" [title]="confirmTitle()">
-          <p class="text-sm">
-            {{ t()("appareils.confirm.device") }}
-            <span class="font-semibold">{{ confirmation.device.label }}</span>
-            {{ t()("appareils.confirm.of") }}
-            {{ user(confirmation.device.userId)?.name ?? t()("appareils.unknown") }}.
-            @if (confirmation.kind === "revoke") {
-              {{ t()("appareils.confirm.revoke.note") }}
-            }
-            @if (confirmation.kind === "reactivate") {
-              {{ t()("appareils.confirm.reactivate.note") }}
-            }
-            @if (confirmation.kind === "signout") {
-              {{ t()("appareils.confirm.signout.note") }}
-            }
-          </p>
-          <p class="mt-3 rounded-md bg-warning-bg p-3 text-sm text-warning-fg">
-            {{ t()("appareils.confirm.demo") }}
-          </p>
-          <p class="mt-2 text-xs text-muted-foreground">{{ t()("appareils.confirm.desc") }}</p>
-          <button
-            actions
-            type="button"
-            class="inline-flex h-9 items-center rounded-md border px-4 text-sm"
-            (click)="confirm.set(null)"
-          >
-            {{ t()("common.cancel") }}
-          </button>
-          @if (confirmation.kind === "reactivate") {
-            <button
-              actions
-              type="button"
-              class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              (click)="runConfirm()"
-            >
-              {{ confirmSubmitLabel() }}
-            </button>
-          } @else {
-            <button
-              actions
-              type="button"
-              class="inline-flex h-9 items-center rounded-md bg-destructive px-4 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
-              (click)="runConfirm()"
-            >
-              {{ confirmSubmitLabel() }}
-            </button>
-          }
-        </ui-dialog>
+      <!-- ───── Confirmation : révoquer, réactiver, déconnecter ───── -->
+      @if (confirmation(); as pending) {
+        <ui-modal [open]="true" [tone]="pending.kind === 'reactivate' ? 'default' : 'danger'" [icon]="pending.kind === 'reactivate' ? 'check' : pending.kind === 'signout' ? 'logout' : 'block'" [title]="confirmTitle(pending.kind)" [description]="t()('appareils.confirm.desc')" [width]="540" [closeLabel]="t()('common.close')" (closed)="confirmation.set(null)">
+          <div class="pb-6">
+            <p class="text-[15px] font-semibold">
+              {{ t()("appareils.confirm.device") }} <strong>{{ pending.device.label }}</strong>
+              @if (owner(pending.device.userId); as person) { {{ t()("appareils.confirm.of") }} {{ person.name }} }
+            </p>
+            <p class="sub mt-2">{{ confirmNote(pending.kind) }}</p>
+          </div>
+          <button modal-footer type="button" class="btn btn-ghost" (click)="confirmation.set(null)">{{ t()("comptes.cancel") }}</button>
+          <button modal-footer type="button" class="btn" [class.btn-danger]="pending.kind !== 'reactivate'" [class.btn-primary]="pending.kind === 'reactivate'" [disabled]="busy()" (click)="runConfirmed(pending)">{{ confirmSubmit(pending.kind) }}</button>
+        </ui-modal>
       }
     </app-shell>
   `,
@@ -504,205 +225,214 @@ type ConfirmKind = "revoke" | "reactivate" | "signout";
 export default class AppareilsPage {
   protected readonly store = inject(StoreService);
   protected readonly locale = inject(LocaleService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly snackbar = inject(SnackbarService);
   protected readonly t = this.locale.t;
   protected readonly nf = nf;
-  protected readonly fmtDate = fmtDate;
   protected readonly fmtDateTime = fmtDateTime;
-  protected readonly icons = {
-    search: Search,
-    phone: Smartphone,
-    x: X,
-    more: MoreVertical,
-    eye: Eye,
-    pencil: Pencil,
-    refresh: RefreshCw,
-    rotate: RotateCcw,
-    userCog: UserCog,
-    scroll: ScrollText,
-    logOut: LogOut,
-    ban: Ban,
-  };
-
-  private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
-
-  private readonly userParam = toSignal(this.route.queryParamMap.pipe(map((m) => m.get("user"))), {
-    initialValue: null as string | null,
-  });
+  protected readonly initials = initialsOf;
+  protected readonly toneSuccess = TONE.succes;
+  protected readonly toneNeutral = TONE.neutre;
 
   protected readonly q = signal("");
   protected readonly filter = signal<Filter>("tous");
-  protected readonly detailId = signal<string | undefined>(undefined);
-  protected readonly renameOpen = signal(false);
-  protected readonly renameId = signal<string | null>(null);
-  protected renameLabel = "";
-  protected readonly confirm = signal<{ kind: ConfirmKind; device: Device } | null>(null);
-  protected readonly deviceMenuOpenId = signal<string | null>(null);
-  protected readonly flash = signal<string | null>(null);
+  protected readonly busy = signal(false);
+  protected readonly loading = signal(isApiMode());
+  /** Réponse de l'API (`/devices`) ; vide en démonstration locale. */
+  private readonly overview = signal<DevicesOverview | null>(null);
 
-  protected readonly filterOptions = [
-    { value: "tous" as const, label: "" },
-    { value: "actif" as const, label: "" },
-    { value: "révoqué" as const, label: "" },
-  ];
+  protected readonly renaming = signal<DeviceRow | null>(null);
+  protected readonly renameLabel = signal("");
+  protected readonly renameError = signal("");
+  protected readonly confirmation = signal<{ device: DeviceRow; kind: ConfirmKind } | null>(null);
+
+  private readonly userFilter = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get("user") ?? "")),
+    { initialValue: "" },
+  );
 
   constructor() {
-    const t = this.t();
-    this.filterOptions[0].label = t("appareils.seg.all");
-    this.filterOptions[1].label = t("appareils.seg.active");
-    this.filterOptions[2].label = t("appareils.seg.revoked");
+    if (isApiMode()) void this.reload();
   }
 
-  protected readonly devices = computed(() => this.store.state().devices);
+  // ───── Données ─────
 
-  protected readonly activeCount = computed(() => this.devices().filter((d) => d.active).length);
-
-  protected readonly filterUser = computed(() => {
-    const id = this.userParam();
-    if (!id) return undefined;
-    return this.store.state().users.find((u) => u.id === id);
-  });
-
-  protected readonly rows = computed(() => {
-    const uid = this.userParam();
-    const f = this.filter();
-    const needle = this.q().trim().toLowerCase();
-    const users = this.store.state().users;
-    return this.devices()
-      .filter((d) => !uid || d.userId === uid)
-      .filter((d) => (f === "tous" ? true : f === "actif" ? d.active : !d.active))
-      .filter((d) => {
-        if (!needle) return true;
-        const u = users.find((x) => x.id === d.userId);
-        return `${d.label} ${u?.name ?? ""}`.toLowerCase().includes(needle);
-      });
-  });
-
-  protected readonly detailDevice = computed(() => {
-    const id = this.detailId();
-    if (!id) return undefined;
-    return this.store.state().devices.find((d) => d.id === id);
-  });
-
-  protected readonly detailHistory = computed(() => {
-    const detail = this.detailDevice();
-    if (!detail) return [];
-    return this.store.state().audit.filter((a) => a.detail.includes(detail.label));
-  });
-
-  @HostListener("document:click", ["$event"])
-  onDocumentClick(ev: MouseEvent): void {
-    const t = ev.target as HTMLElement;
-    if (!t.closest("[data-device-menu]")) this.deviceMenuOpenId.set(null);
+  private scoopLabel(ids: readonly string[]): string {
+    if (!ids.length) return this.t()("comptes.scopeAll");
+    const scoops = this.store.state().scoops;
+    return ids.map((id) => scoops.find((scoop) => scoop.id === id)?.name ?? id).join(", ");
   }
 
-  user(userId: string) {
-    return this.store.state().users.find((u) => u.id === userId);
-  }
-
-  clearUserFilter(): void {
-    void this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { user: null },
-      queryParamsHandling: "merge",
-      replaceUrl: true,
-    });
-  }
-
-  openDetail(id: string): void {
-    this.detailId.set(id);
-  }
-
-  closeDetail(): void {
-    this.detailId.set(undefined);
-  }
-
-  toggleDeviceMenu(id: string, ev: Event): void {
-    ev.stopPropagation();
-    this.deviceMenuOpenId.update((cur) => (cur === id ? null : id));
-  }
-
-  openRename(d: Device): void {
-    this.renameId.set(d.id);
-    this.renameLabel = d.label;
-    this.renameOpen.set(true);
-  }
-
-  onRenameOpen(open: boolean): void {
-    this.renameOpen.set(open);
-    if (!open) {
-      this.renameId.set(null);
-      this.renameLabel = "";
+  private async reload(): Promise<void> {
+    try {
+      this.overview.set(await fetchDevices());
+    } catch {
+      this.snackbar.error(this.t()("appareils.loadError"));
+    } finally {
+      this.loading.set(false);
     }
   }
 
-  canSubmitRename(): boolean {
-    const id = this.renameId();
-    if (!id) return false;
-    const trimmed = this.renameLabel.trim();
-    if (trimmed.length < 3) return false;
-    const cur = this.store.state().devices.find((d) => d.id === id)?.label;
-    return trimmed !== cur;
+  protected readonly devices = computed<DeviceRow[]>(() => {
+    if (isApiMode()) {
+      return (this.overview()?.devices ?? []).map((device) => ({
+        id: device.id,
+        userId: device.userId,
+        label: device.label,
+        platform: device.platform,
+        appVersion: device.appVersion,
+        registeredAt: device.registeredAt,
+        lastActiveAt: device.lastActiveAt,
+        active: device.active,
+        signedOutPending: !!device.signOutRequestedAt,
+      }));
+    }
+    return this.store.state().devices.map((device) => ({
+      id: device.id,
+      userId: device.userId,
+      label: device.label,
+      platform: "",
+      appVersion: "",
+      registeredAt: device.registeredAt,
+      lastActiveAt: device.lastActiveAt,
+      active: device.active,
+      signedOutPending: false,
+    }));
+  });
+
+  protected owner(userId: string): OwnerRef | undefined {
+    if (isApiMode()) {
+      const owner = this.overview()?.owners.find((item) => item.id === userId);
+      return owner ? { id: owner.id, name: owner.name, email: owner.email, role: owner.role, scoopLabel: this.scoopLabel(owner.scoopIds) } : undefined;
+    }
+    const user = this.store.state().users.find((item) => item.id === userId);
+    return user
+      ? { id: user.id, name: user.name, email: user.email, role: user.role, scoopLabel: this.scoopLabel(user.scoopIds ?? (user.scoopId ? [user.scoopId] : [])) }
+      : undefined;
   }
 
-  submitRename(): void {
-    const id = this.renameId();
-    if (!id || !this.canSubmitRename()) return;
-    this.store.actions.renameDevice(id, this.renameLabel.trim());
-    this.flash.set(this.t()("appareils.toast.renamed"));
-    this.renameOpen.set(false);
-    this.renameId.set(null);
-    this.renameLabel = "";
+  protected readonly filteredOwner = computed(() => {
+    const id = this.userFilter();
+    return id ? this.owner(id) : undefined;
+  });
+
+  protected platformLabel(device: DeviceRow): string {
+    const t = this.t();
+    const platform = device.platform === "android" ? t("appareils.platform.android") : device.platform === "ios" ? t("appareils.platform.ios") : "";
+    return [platform, device.appVersion && `v${device.appVersion}`].filter(Boolean).join(" · ") || "—";
   }
 
-  askConfirm(kind: ConfirmKind, device: Device): void {
-    this.confirm.set({ kind, device });
+  // ───── Filtres ─────
+
+  private readonly searched = computed(() => {
+    const needle = norm(this.q().trim());
+    const owner = this.userFilter();
+    return this.devices().filter((device) => {
+      if (owner && device.userId !== owner) return false;
+      if (!needle) return true;
+      const person = this.owner(device.userId);
+      return norm(`${device.label} ${person?.name ?? ""} ${person?.email ?? ""}`).includes(needle);
+    });
+  });
+
+  protected readonly shown = computed(() => {
+    const filter = this.filter();
+    return this.searched().filter((device) => filter === "tous" || (filter === "actifs" ? device.active : !device.active));
+  });
+
+  protected readonly filterOptions = computed(() => {
+    const t = this.t();
+    const all = this.searched();
+    return [
+      { key: "tous" as const, label: t("appareils.seg.all"), count: all.length },
+      { key: "actifs" as const, label: t("appareils.seg.active"), count: all.filter((device) => device.active).length },
+      { key: "revoques" as const, label: t("appareils.seg.revoked"), count: all.filter((device) => !device.active).length },
+    ];
+  });
+
+  protected readonly pager = createPager(() => this.shown());
+
+  protected readonly stats = computed<StatCard[]>(() => {
+    const t = this.t();
+    const all = this.devices();
+    const active = all.filter((device) => device.active).length;
+    const recent = all.filter((device) => device.lastActiveAt && Date.now() - new Date(device.lastActiveAt).getTime() < WEEK_MS).length;
+    return [
+      { label: t("appareils.stat.devices"), value: nf.format(all.length), sub: t("appareils.stat.devicesSub", { count: nf.format(new Set(all.map((device) => device.userId)).size) }), icon: "manage_accounts", bg: "", fg: "" },
+      { label: t("appareils.stat.active"), value: nf.format(active), sub: t("appareils.stat.activeSub"), icon: "check", ...TONE.succes },
+      { label: t("appareils.stat.revoked"), value: nf.format(all.length - active), sub: t("appareils.stat.revokedSub"), icon: "block", ...TONE.neutre },
+      { label: t("appareils.stat.recent"), value: nf.format(recent), sub: t("appareils.stat.recentSub"), icon: "history", ...TONE.info },
+    ];
+  });
+
+  // ───── Actions ─────
+
+  /** Exécute l'action sur l'API (puis relit la liste) ou dans le store de démonstration, et le dit à la personne. */
+  private async apply(onApi: () => Promise<unknown>, onDemo: () => void, success: MessageKey): Promise<boolean> {
+    if (this.busy()) return false;
+    this.busy.set(true);
+    try {
+      if (isApiMode()) {
+        await onApi();
+        await this.reload();
+      } else {
+        onDemo();
+      }
+      this.snackbar.success(this.t()(success));
+      return true;
+    } catch (error) {
+      this.snackbar.error(this.t()(deviceApiError(error)));
+      if (isApiMode()) await this.reload();
+      return false;
+    } finally {
+      this.busy.set(false);
+    }
   }
 
-  onConfirmOpen(open: boolean): void {
-    if (!open) this.confirm.set(null);
+  protected ask(device: DeviceRow, kind: ConfirmKind): void {
+    this.confirmation.set({ device, kind });
   }
 
-  confirmTitle(): string {
-    const c = this.confirm();
-    if (!c) return "";
-    if (c.kind === "revoke") return this.t()("appareils.confirm.revoke.title");
-    if (c.kind === "reactivate") return this.t()("appareils.confirm.reactivate.title");
-    return this.t()("appareils.confirm.signout.title");
-  }
-
-  confirmSubmitLabel(): string {
-    const c = this.confirm();
-    if (!c) return "";
-    if (c.kind === "revoke") return this.t()("appareils.confirm.revoke.submit");
-    if (c.kind === "reactivate") return this.t()("appareils.confirm.reactivate.submit");
-    return this.t()("appareils.confirm.signout.submit");
-  }
-
-  runConfirm(): void {
-    const c = this.confirm();
-    if (!c) return;
-    const { kind, device } = c;
-    if (kind === "revoke") this.store.actions.revokeDevice(device.id);
-    if (kind === "reactivate") this.store.actions.reactivateDevice(device.id);
-    if (kind === "signout") this.store.actions.signOutDevice(device.id);
-    const msg =
+  protected async runConfirmed(pending: { device: DeviceRow; kind: ConfirmKind }): Promise<void> {
+    const { device, kind } = pending;
+    const done =
       kind === "revoke"
-        ? this.t()("appareils.toast.revoked")
+        ? await this.apply(() => revokeDeviceOnApi(device.id), () => this.store.actions.revokeDevice(device.id), "appareils.ok.revoked")
         : kind === "reactivate"
-          ? this.t()("appareils.toast.reactivated")
-          : this.t()("appareils.toast.signedOut");
-    this.flash.set(`${msg} — ${this.t()("appareils.toast.audited")}`);
-    this.confirm.set(null);
+          ? await this.apply(() => reactivateDeviceOnApi(device.id), () => this.store.actions.reactivateDevice(device.id), "appareils.ok.reactivated")
+          : await this.apply(() => signOutDeviceOnApi(device.id), () => this.store.actions.signOutDevice(device.id), "appareils.ok.signedOut");
+    if (done) this.confirmation.set(null);
   }
 
-  resync(d: Device): void {
-    this.store.actions.resyncDevice(d.id);
-    this.flash.set(
-      `${this.t()("appareils.toast.resync")} — ${this.t()("appareils.toast.resyncDesc")}`,
-    );
+  protected resync(device: DeviceRow): void {
+    void this.apply(() => resyncDeviceOnApi(device.id), () => this.store.actions.resyncDevice(device.id), "appareils.ok.resync");
   }
 
-  /** Pagination (rows) : mêmes règles que l'API (?page=&limit=). */
-  protected readonly pager = createPager(() => this.rows());
+  protected openRename(device: DeviceRow): void {
+    this.renaming.set(device);
+    this.renameLabel.set(device.label);
+    this.renameError.set("");
+  }
+
+  protected async saveRename(device: DeviceRow): Promise<void> {
+    const label = this.renameLabel().trim().replace(/\s+/g, " ");
+    if (label.length < 2) {
+      this.renameError.set(this.t()("appareils.rename.placeholder"));
+      return;
+    }
+    const done = await this.apply(() => renameDeviceOnApi(device.id, label), () => this.store.actions.renameDevice(device.id, label), "appareils.toast.renamed");
+    if (done) this.renaming.set(null);
+  }
+
+  protected confirmTitle(kind: ConfirmKind): string {
+    return this.t()(kind === "revoke" ? "appareils.confirm.revoke.title" : kind === "reactivate" ? "appareils.confirm.reactivate.title" : "appareils.confirm.signout.title");
+  }
+
+  protected confirmNote(kind: ConfirmKind): string {
+    return this.t()(kind === "revoke" ? "appareils.confirm.revoke.note" : kind === "reactivate" ? "appareils.confirm.reactivate.note" : "appareils.confirm.signout.note");
+  }
+
+  protected confirmSubmit(kind: ConfirmKind): string {
+    return this.t()(kind === "revoke" ? "appareils.confirm.revoke.submit" : kind === "reactivate" ? "appareils.confirm.reactivate.submit" : "appareils.confirm.signout.submit");
+  }
 }
