@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>Données CRADESC avant import</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+  /* Mise en page : une colonne de lecture, verdict d'abord, puis la réponse à la question, puis les détails chiffrés. */
+  :root {
+    --foret: #0f3d2a;
+    --foret-doux: #1f5a3f;
+    --citron: #c6f05a;
+    --fond: #f6f5f0;
+    --carte: #ffffff;
+    --texte: #14201a;
+    --gris: #5b6660;
+    --trait: #e3e1d8;
+    --sauge: #eaf1df;
+    --ok: #2f7a4a;
+    --attention: #a86a00;
+    --attention-fond: #fbf0d9;
+    --refus: #b3261e;
+    --refus-fond: #fbe6e4;
+    --sur-foret: #ffffff;
+    --f-titre: "Poppins", "Segoe UI", system-ui, sans-serif;
+    --f-texte: "Inter", "Segoe UI", system-ui, sans-serif;
+    --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --foret: #173f2d; --foret-doux: #2a6648; --citron: #c6f05a; --fond: #0e1512; --carte: #16201b;
+      --texte: #e8ede9; --gris: #9fada5; --trait: #2a3630; --sauge: #1c2b22; --ok: #7fd19c;
+      --attention: #f0b54a; --attention-fond: #33280f; --refus: #ff8a80; --refus-fond: #3a1c1a; --sur-foret: #ffffff;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --foret: #173f2d; --foret-doux: #2a6648; --citron: #c6f05a; --fond: #0e1512; --carte: #16201b;
+    --texte: #e8ede9; --gris: #9fada5; --trait: #2a3630; --sauge: #1c2b22; --ok: #7fd19c;
+    --attention: #f0b54a; --attention-fond: #33280f; --refus: #ff8a80; --refus-fond: #3a1c1a; --sur-foret: #ffffff;
+    color-scheme: dark;
+  }
+  body { background: var(--fond); color: var(--texte); font: 400 15.5px/1.6 var(--f-texte); }
+  .page { max-width: 980px; margin: 0 auto; padding-block: 28px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 28px; }
+  h1, h2, h3 { font-family: var(--f-titre); text-wrap: balance; margin: 0; letter-spacing: -0.02em; }
+  h1 { font-size: clamp(28px, 4.4vw, 40px); line-height: 1.08; font-weight: 800; }
+  h2 { font-size: 22px; font-weight: 700; }
+  h3 { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+  p { margin: 0; }
+  .eyebrow { font: 500 12px/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--gris); }
+  .mesure { max-width: 68ch; }
+  .sub { color: var(--gris); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  header.intro { display: grid; gap: 12px; }
+  .statut { display: inline-flex; align-items: center; gap: 8px; width: fit-content; padding: 6px 12px; border-radius: 999px;
+    background: var(--attention-fond); color: var(--attention); font-weight: 600; font-size: 13px; }
+
+  .verdict { background: var(--foret); color: var(--sur-foret); border-radius: 24px; padding: 26px; display: grid; gap: 18px; }
+  .verdict .eyebrow { color: var(--citron); }
+  .verdict-grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .v-bloc { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); border-radius: 18px; padding: 16px; display: grid; gap: 6px; align-content: start; }
+  .v-bloc p { color: rgba(255,255,255,0.82); font-size: 14.5px; }
+  .pastille { display: inline-flex; width: fit-content; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+  .p-oui { background: var(--citron); color: #0f3d2a; }
+  .p-non { background: #ffd9d4; color: #7a1610; }
+  .p-plus-tard { background: rgba(255,255,255,0.18); color: #ffffff; }
+
+  section { display: grid; gap: 14px; }
+  .carte { background: var(--carte); border: 1px solid var(--trait); border-radius: 20px; padding: 20px; }
+
+  .reponse { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .colonne { display: grid; gap: 10px; align-content: start; min-width: 0; }
+  .colonne header { display: grid; gap: 4px; padding-bottom: 10px; border-bottom: 1px solid var(--trait); }
+  .colonne ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+  .colonne li::marker { color: var(--gris); }
+  .tag { font: 500 11px/1 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+  .t-import { color: var(--ok); } .t-web { color: var(--attention); } .t-non { color: var(--refus); }
+
+  .pourquoi { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .pourquoi .carte { display: grid; gap: 8px; align-content: start; }
+  .pourquoi ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
+
+  .tableau { overflow-x: auto; border: 1px solid var(--trait); border-radius: 16px; background: var(--carte); }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14.5px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--trait); vertical-align: top; }
+  th { font: 500 11.5px/1.2 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--gris); background: var(--sauge); }
+  tr:last-child td { border-bottom: 0; }
+  td code { font: 500 12.5px var(--f-mono); }
+  .q { display: inline-flex; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .q-bon { background: var(--sauge); color: var(--ok); }
+  .q-moyen { background: var(--attention-fond); color: var(--attention); }
+  .q-faible { background: var(--refus-fond); color: var(--refus); }
+
+  .chiffres { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .chiffre { background: var(--carte); border: 1px solid var(--trait); border-radius: 16px; padding: 14px 16px; display: grid; gap: 2px; }
+  .chiffre strong { font: 700 26px/1.1 var(--f-titre); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .chiffre span { font-size: 13px; color: var(--gris); }
+
+  .barres { display: grid; gap: 9px; }
+  .barre { display: grid; grid-template-columns: minmax(120px, 190px) 1fr 44px; gap: 12px; align-items: center; font-size: 14px; }
+  .barre .rail { height: 12px; border-radius: 99px; background: var(--sauge); overflow: hidden; }
+  .barre .rempli { height: 100%; border-radius: 99px; background: var(--foret-doux); }
+  .barre b { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .ecarts { display: grid; gap: 10px; }
+  .ecart { display: grid; grid-template-columns: 1fr; gap: 4px; padding: 14px 16px; border-radius: 14px; background: var(--carte); border: 1px solid var(--trait); }
+
+  ol.etapes { margin: 0; padding: 0; list-style: none; counter-reset: e; display: grid; gap: 10px; }
+  ol.etapes li { counter-increment: e; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start;
+    background: var(--carte); border: 1px solid var(--trait); border-radius: 16px; padding: 14px 16px; }
+  ol.etapes li::before { content: counter(e); display: grid; place-items: center; width: 30px; height: 30px; border-radius: 99px;
+    background: var(--citron); color: #0f3d2a; font: 700 14px var(--f-titre); }
+  ol.etapes li div { display: grid; gap: 3px; min-width: 0; }
+
+  .questions { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+  .confid { background: var(--sauge); border-radius: 16px; padding: 16px 18px; display: grid; gap: 6px; }
+  footer { font-size: 13px; color: var(--gris); }
+
+  .fichier { background: var(--carte); border: 1px solid var(--trait); border-radius: 20px; padding: 20px; display: grid; gap: 16px; min-width: 0; }
+  .fichier-tete { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .fichier-tete > div { display: grid; gap: 4px; min-width: 0; }
+  .fichier-nom { font: 500 12.5px/1.4 var(--f-mono); color: var(--gris); overflow-wrap: anywhere; }
+  .fichier-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--gris); }
+  .fichier-meta b { color: var(--texte); font-weight: 600; }
+  .sous-titre { font: 500 11.5px/1 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--gris); }
+  .bloc { display: grid; gap: 8px; min-width: 0; }
+  .bloc ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
+  .tableau.leger { border-radius: 12px; }
+  .tableau.leger table { min-width: 560px; font-size: 13.5px; }
+  .tableau.leger th, .tableau.leger td { padding: 8px 12px; }
+  .deux { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .arbre { margin: 0; padding: 14px 16px; border-radius: 12px; background: var(--sauge); font: 500 13px/1.7 var(--f-mono); overflow-x: auto; white-space: pre; color: var(--texte); }
+  .lien-ok { color: var(--ok); font-weight: 700; }
+  .lien-faible { color: var(--attention); font-weight: 700; }
+  .lien-non { color: var(--refus); font-weight: 700; }
+  .usage { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--trait); font-size: 14px; }
+  td.r, th.r { text-align: right; }
+  tr.total td { font-weight: 700; background: var(--sauge); }
+  @media (max-width: 520px) { .barre { grid-template-columns: 1fr 44px; } .barre .rail { grid-column: 1 / -1; grid-row: 2; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="intro">
+    <p class="eyebrow">Mbay Diaay · Analyse des fichiers reçus du CRADESC · 22 novembre 2026</p>
+    <h1>Peut-on charger les données du CRADESC dans la plateforme ?</h1>
+    <p class="mesure sub">Analyse faite en local, sans rien envoyer à l'extérieur. Les chiffres ci-dessous sont des comptages : aucune donnée personnelle n'est reprise sur cette page.</p>
+    <p class="statut">Analyse validée : import en préparation.</p>
+  </header>
+
+  <section class="verdict" aria-labelledby="t-verdict">
+    <p class="eyebrow">En bref</p>
+    <h2 id="t-verdict">Oui pour la base Kobo apurée, non pour le fichier consolidé en l'état</h2>
+    <div class="verdict-grille">
+      <div class="v-bloc">
+        <span class="pastille p-oui">À importer</span>
+        <h3>Base Kobo apurée</h3>
+        <p>1 317 producteurs, 1 534 parcelles, 1 941 cultures, 11 SCOOP. Déjà nettoyée par le CRADESC, identifiants stables, qualité indiquée fiche par fiche.</p>
+      </div>
+      <div class="v-bloc">
+        <span class="pastille p-plus-tard">Second lot</span>
+        <h3>Parcelles, cultures et photos</h3>
+        <p>Les données sont bonnes, mais la plateforme n'a pas encore de table pour les parcelles et leurs contours. Il faut la créer avant.</p>
+      </div>
+      <div class="v-bloc">
+        <span class="pastille p-non">Pas en l'état</span>
+        <h3>Base consolidée SCOOP</h3>
+        <p>9 868 membres, mais 4 498 doublons probables, 25 % de téléphones, 6 % de CNI. À nettoyer avant tout chargement.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-question">
+    <p class="eyebrow">Votre question</p>
+    <h2 id="t-question">Faut-il nettoyer avant, ou tout importer et corriger sur le web ?</h2>
+    <p class="mesure">Ni l'un ni l'autre en entier. La règle proposée : <strong>ce qu'une machine peut corriger, on le corrige pendant l'import ; ce qui demande quelqu'un du terrain, on le corrige sur le web.</strong> Ce qui est trop abîmé n'entre pas.</p>
+    <div class="reponse">
+      <div class="carte colonne">
+        <header><span class="tag t-import">Corrigé à l'import</span><h3>Automatique, sans intervention</h3></header>
+        <ul>
+          <li>Rattacher chaque producteur à la bonne SCOOP (table de correspondance des 11 noms)</li>
+          <li>Séparer le nom complet en prénom et nom</li>
+          <li>Écrire le sexe, le téléphone et la CNI au format de la plateforme</li>
+          <li>Créer les OP une seule fois, sans doublon</li>
+          <li>Reprendre le statut « Validée » ou « À vérifier »</li>
+          <li>Ne rien créer deux fois si l'import est relancé</li>
+        </ul>
+      </div>
+      <div class="carte colonne">
+        <header><span class="tag t-web">Corrigé sur le web</span><h3>Par le gestionnaire ou le CRADESC</h3></header>
+        <ul>
+          <li>Les 74 fiches producteurs « À vérifier »</li>
+          <li>Les 609 alertes : rendements, GPS, âges manquants…</li>
+          <li>Les 20 noms d'un seul mot (prénom ou nom à compléter)</li>
+          <li>Les 53 téléphones partagés entre plusieurs producteurs</li>
+          <li>Chaque correction est gardée dans l'historique de la fiche</li>
+        </ul>
+      </div>
+      <div class="carte colonne">
+        <header><span class="tag t-non">N'entre pas</span><h3>Trop incomplet pour la base</h3></header>
+        <ul>
+          <li>Le fichier consolidé SCOOP tant qu'il n'est pas nettoyé</li>
+          <li>L'export geojson brut : il fait doublon avec la base apurée</li>
+          <li>Les liens photo vers Kobo : ils demandent une connexion, on utilise les fichiers reçus</li>
+        </ul>
+      </div>
+    </div>
+    <div class="pourquoi">
+      <div class="carte">
+        <h3>Pourquoi ne pas tout importer puis corriger ?</h3>
+        <ul>
+          <li>4 498 doublons à fusionner à la main, fiche par fiche, c'est des semaines de travail.</li>
+          <li>Tant qu'ils sont en base, les tableaux de bord, les effectifs et les rapports sont faux.</li>
+          <li>Un mauvais rattachement de SCOOP touche des centaines de fiches d'un coup : on le corrige mieux une fois, avant.</li>
+          <li>Retirer un import raté de la production est plus risqué que de ne pas le faire.</li>
+        </ul>
+      </div>
+      <div class="carte">
+        <h3>Pourquoi ne pas tout nettoyer avant ?</h3>
+        <ul>
+          <li>Les alertes restantes ne se règlent pas au bureau : il faut appeler le producteur ou l'enquêteur.</li>
+          <li>La plateforme sait déjà marquer une fiche « à vérifier » et garder l'historique des corrections.</li>
+          <li>Les gestionnaires corrigent leurs propres producteurs, chacun dans sa SCOOP.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-fichiers">
+    <p class="eyebrow">Inventaire</p>
+    <h2 id="t-fichiers">Ce que contient le dossier</h2>
+    <p class="mesure sub">Cinq éléments, de nature très différente. La base Kobo et ses photos décrivent les producteurs enquêtés ; le fichier consolidé liste les adhérents déclarés par les coopératives ; les documents sont des textes de gouvernance.</p>
+    <div class="tableau">
+      <table>
+        <thead><tr><th>Fichier</th><th>En une phrase</th><th>Nombre de données</th><th>Qualité</th><th>Usage proposé</th></tr></thead>
+        <tbody>
+          <tr><td><a href="#f-kobo">Base Kobo apurée</a></td><td>Les producteurs enquêtés, leurs parcelles et leurs cultures</td><td class="num"><strong>1 317</strong> producteurs<br><strong>1 534</strong> parcelles<br><strong>1 941</strong> cultures<br>609 alertes · 2 673 corrections</td><td><span class="q q-bon">Très bonne</span></td><td>Import, lot 1 puis lot 2</td></tr>
+          <tr><td><a href="#f-photos">Photos Kobo</a></td><td>Les photos prises pendant l'enquête</td><td class="num"><strong>2 589</strong> photos<br>pour 1 294 producteurs<br>570 Mo</td><td><span class="q q-bon">Bonne</span></td><td>Avec les fiches</td></tr>
+          <tr><td><a href="#f-geojson">Export geojson</a></td><td>Les points GPS bruts des entretiens</td><td class="num"><strong>1 210</strong> points<br>37 champs par point</td><td><span class="q q-moyen">Redondant</span></td><td>Aucun</td></tr>
+          <tr><td><a href="#f-consolide">Base consolidée SCOOP</a></td><td>Les listes d'adhérents compilées depuis plusieurs fichiers</td><td class="num"><strong>9 868</strong> membres<br><strong>2 318</strong> parcelles<br>dont environ 4 500 doublons probables</td><td><span class="q q-faible">Médiocre</span></td><td>Après nettoyage</td></tr>
+          <tr><td><a href="#f-docs">Documents des coopératives</a></td><td>Statuts, règlement intérieur, rapport d'AG</td><td class="num"><strong>3</strong> documents<br>2 Word · 1 PDF</td><td><span class="q q-bon">Documents</span></td><td>Module Documents</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ───── Base Kobo ───── -->
+    <article class="fichier" id="f-kobo">
+      <div class="fichier-tete">
+        <div>
+          <h3>Base Kobo apurée : les producteurs</h3>
+          <p class="fichier-nom">CRADESC_Base_Niayes_Collecte_SocioEco_Parcelles.xlsx</p>
+        </div>
+        <span class="q q-bon">Très bonne</span>
+      </div>
+      <div class="fichier-meta num"><span><b>2 Mo</b> · 10 feuilles</span><span>Collecte : <b>27 juillet – 2 septembre 2026</b></span><span>Apurée le <b>05/10/2026</b></span><span>Source : formulaire KoboToolbox, 22 comptes enquêteurs</span></div>
+      <div class="bloc">
+        <p class="mesure">C'est l'enquête socio-économique et la cartographie des parcelles faites auprès des producteurs des 11 SCOOP de l'USCN. <strong>Une fiche = un producteur</strong>, avec ses parcelles et ses cultures. C'est un échantillon : 1 317 producteurs enquêtés pour un objectif de 1 000, et non la totalité des adhérents. Le CRADESC l'a déjà nettoyée : 1 337 fiches brutes ramenées à 1 317, doublons fusionnés, chaque correction tracée.</p>
+      </div>
+      <div class="bloc">
+        <p class="sous-titre">Les feuilles</p>
+        <div class="tableau leger">
+          <table>
+            <thead><tr><th>Feuille</th><th class="r">Lignes</th><th class="r">Colonnes</th><th>Contenu</th></tr></thead>
+            <tbody class="num">
+              <tr><td>Producteurs</td><td class="r">1 317</td><td class="r">63</td><td>Une ligne par producteur</td></tr>
+              <tr><td>Parcelles</td><td class="r">1 534</td><td class="r">45</td><td>Une ligne par parcelle, contour GPS au format WKT</td></tr>
+              <tr><td>Cultures</td><td class="r">1 941</td><td class="r">52</td><td>Une ligne par culture sur une parcelle, récoltes de deux campagnes (CHN et CS)</td></tr>
+              <tr><td>Alertes à vérifier</td><td class="r">609</td><td class="r">11</td><td>Points à confirmer, statut de vérification vide</td></tr>
+              <tr><td>Journal corrections</td><td class="r">2 673</td><td class="r">8</td><td>Valeur initiale, valeur corrigée, règle appliquée</td></tr>
+              <tr><td>Doublons traités</td><td class="r">19</td><td class="r">14</td><td>Fiches fusionnées et sort de leurs parcelles</td></tr>
+              <tr><td>Enquêteurs</td><td class="r">25</td><td class="r">15</td><td>Volume et qualité par enquêteur</td></tr>
+              <tr><td>Synthèse</td><td class="r">—</td><td class="r">—</td><td>Tableaux par SCOOP et par zone, calculés par formules</td></tr>
+              <tr><td>Dictionnaire</td><td class="r">160</td><td class="r">6</td><td>Définition, unité et taux de remplissage de chaque variable</td></tr>
+              <tr><td>Lisez-moi</td><td class="r">—</td><td class="r">—</td><td>Projet, période, conventions d'identifiants, confidentialité</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="deux">
+        <div class="bloc">
+          <p class="sous-titre">Ce que contient une fiche producteur</p>
+          <ul>
+            <li><strong>Identité</strong> : nom, sexe, âge, téléphone, CNI, photo, handicap</li>
+            <li><strong>Rattachement</strong> : zone, SCOOP, OP, village, enquêteur</li>
+            <li><strong>Profil</strong> : niveau d'instruction, smartphone, ancienneté, jeune, femme cheffe d'exploitation</li>
+            <li><strong>Exploitation</strong> : nombre de parcelles, superficie totale et cultivée, cultures pratiquées</li>
+            <li><strong>Socio-économique</strong> : difficultés (eau, intrants, foncier, ravageurs, marché, main-d'œuvre, financement), besoins d'appui, fonds rotatif</li>
+            <li><strong>Qualité</strong> : « Validée » ou « À vérifier », alertes, observations</li>
+          </ul>
+        </div>
+        <div class="bloc">
+          <p class="sous-titre">Parcelles et cultures</p>
+          <ul>
+            <li><strong>Parcelle</strong> : centroïde GPS, contour (1 102 valides, 432 réparés), superficie recalculée, périmètre, statut foncier, document foncier, source d'eau, infrastructures (clôture, bassin, goutte-à-goutte, motopompe, solaire…), photos</li>
+            <li><strong>Culture</strong> : part de la parcelle, variété, rendement potentiel, pratiques agroécologiques, quantités récoltées, rendement réel, prix, valeur et destination de la production (autoconsommation, vente, transformation, pertes)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="bloc">
+        <p class="sous-titre">Répartition par SCOOP</p>
+        <div class="tableau leger">
+          <table>
+            <thead><tr><th>Zone</th><th>SCOOP</th><th class="r">Producteurs</th><th class="r">dont femmes</th><th class="r">Parcelles</th><th class="r">Superficie (ha)</th></tr></thead>
+            <tbody class="num">
+              <tr><td>Nord</td><td>Bamtare Thiepp-Lompoul</td><td class="r">106</td><td class="r">6</td><td class="r">143</td><td class="r">109,8</td></tr>
+              <tr><td>Nord</td><td>SCOOP Agro-sylvo-pastorale (CASP)</td><td class="r">117</td><td class="r">16</td><td class="r">119</td><td class="r">101,0</td></tr>
+              <tr><td>Nord</td><td>SCOOP Développement de Gandiol</td><td class="r">128</td><td class="r">30</td><td class="r">136</td><td class="r">55,3</td></tr>
+              <tr><td>Nord</td><td>SOCOOPAN Niayam Potou</td><td class="r">177</td><td class="r">30</td><td class="r">211</td><td class="r">79,9</td></tr>
+              <tr><td>Centre</td><td>COOPADIN</td><td class="r">103</td><td class="r">15</td><td class="r">106</td><td class="r">138,5</td></tr>
+              <tr><td>Centre</td><td>COOPHAZONI</td><td class="r">66</td><td class="r">28</td><td class="r">79</td><td class="r">76,5</td></tr>
+              <tr><td>Centre</td><td>SOCOOT Thialy</td><td class="r">100</td><td class="r">9</td><td class="r">119</td><td class="r">89,0</td></tr>
+              <tr><td>Sud</td><td>And Sam Luniou Bokk (ASLB)</td><td class="r">96</td><td class="r">21</td><td class="r">104</td><td class="r">29,6</td></tr>
+              <tr><td>Sud</td><td>COPROFEL</td><td class="r">218</td><td class="r">22</td><td class="r">275</td><td class="r">219,4</td></tr>
+              <tr><td>Sud</td><td>KABADIE (Kayar Bayakh Diender)</td><td class="r">79</td><td class="r">12</td><td class="r">97</td><td class="r">98,1</td></tr>
+              <tr><td>Sud</td><td>SCAPTC</td><td class="r">127</td><td class="r">3</td><td class="r">145</td><td class="r">175,4</td></tr>
+              <tr class="total"><td></td><td>Total, 11 SCOOP</td><td class="r">1 317</td><td class="r">192</td><td class="r">1 534</td><td class="r">1 172,4</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="sub">14,6 % de femmes et 22,9 % de jeunes de moins de 35 ans. Statut dans l'OP : 1 117 membres actifs, 90 au bureau (dont 28 présidents), 110 « autre ».</p>
+      </div>
+      <div class="deux">
+        <div class="bloc">
+          <p class="sous-titre">Comment les données sont reliées</p>
+<pre class="arbre">SCOOP              code : CPF, SPN…
+ └─ Producteur     NIA-S-CPF-012
+     ├─ Parcelle   NIA-S-CPF-012-P1
+     │   └─ Culture NIA-S-CPF-012-P1-C1
+     └─ Photos     dossier Kobo_UUID</pre>
+        </div>
+        <div class="bloc">
+          <p class="sous-titre">Vérification des liens</p>
+          <ul class="num">
+            <li>Parcelle → producteur : <span class="lien-ok">1 534 / 1 534</span></li>
+            <li>Culture → parcelle et producteur : <span class="lien-ok">1 941 / 1 941</span></li>
+            <li>Producteurs sans parcelle : <span class="lien-ok">0</span> ; parcelles sans culture : 6</li>
+            <li>Alerte → fiche concernée : <span class="lien-ok">609 / 609</span></li>
+            <li>Correction → producteur : <span class="lien-ok">2 595 / 2 595</span></li>
+            <li>Doublon → producteur gardé : <span class="lien-ok">19 / 19</span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="bloc">
+        <p class="sous-titre">Ce que ça donne dans la plateforme</p>
+        <ul>
+          <li><strong>Entre directement</strong> dans la table des producteurs : identité, SCOOP, OP, village, statut, qualité, cultures, enquêteur.</li>
+          <li><strong>N'a pas encore de place</strong> : le profil et le socio-économique (instruction, smartphone, difficultés, besoins, fonds rotatif). À ajouter en champs ou dans un bloc « enquête » de la fiche, sinon ils seraient perdus.</li>
+          <li><strong>Second lot</strong> : parcelles et cultures, avec une nouvelle table et l'écran de cartographie.</li>
+        </ul>
+      </div>
+      <div class="usage"><span class="pastille p-oui">À importer</span><span>Producteurs, OP et photos d'abord ; parcelles et cultures ensuite.</span></div>
+    </article>
+
+    <!-- ───── Photos ───── -->
+    <article class="fichier" id="f-photos">
+      <div class="fichier-tete">
+        <div>
+          <h3>Photos Kobo</h3>
+          <p class="fichier-nom">Dossier Kobo/annZgVAbPtRUkaisSoQXvC_2026_08_19_21_53_12 (1).zip · samba_cradesc/attachments/</p>
+        </div>
+        <span class="q q-bon">Bonne</span>
+      </div>
+      <div class="fichier-meta num"><span><b>570 Mo</b> compressés</span><span><b>2 589</b> photos JPEG</span><span>Export du <b>19/08/2026</b></span><span>Déjà décompressé dans le dossier</span></div>
+      <div class="deux">
+        <div class="bloc">
+          <p class="sous-titre">Contenu</p>
+          <ul>
+            <li>Un dossier par fiche Kobo, nommé par l'identifiant de la fiche (Kobo_UUID)</li>
+            <li>Photo du producteur, de ses parcelles et des documents fonciers, de 1 à 4 photos par fiche</li>
+          </ul>
+        </div>
+        <div class="bloc">
+          <p class="sous-titre">Liens</p>
+          <ul class="num">
+            <li>Producteur → son dossier de photos : <span class="lien-ok">1 294 / 1 317</span></li>
+            <li>Les liens photo de l'Excel pointent vers le serveur Kobo, qui demande une connexion : on se sert des fichiers reçus</li>
+            <li>L'export date du 19 août : les fiches du rattrapage SCAPTC (jusqu'au 2 septembre) peuvent manquer, d'où les 23 producteurs sans photos</li>
+          </ul>
+        </div>
+      </div>
+      <div class="usage"><span class="pastille p-oui">À importer</span><span>Dans le stockage de fichiers, rattachées aux fiches producteurs.</span></div>
+    </article>
+
+    <!-- ───── Geojson ───── -->
+    <article class="fichier" id="f-geojson">
+      <div class="fichier-tete">
+        <div>
+          <h3>Export geojson brut</h3>
+          <p class="fichier-nom">Dossier Kobo/CRADESC_-_Collecte_socio-économique_et_cartographie_des_parcelles_…_2026-11-02.geojson</p>
+        </div>
+        <span class="q q-moyen">Redondant</span>
+      </div>
+      <div class="fichier-meta num"><span><b>3 Mo</b></span><span><b>1 210</b> points</span><span><b>37</b> propriétés par point</span><span>Export du <b>02/11/2026</b></span></div>
+      <div class="bloc">
+        <ul class="num">
+          <li>Un point GPS par entretien, avec les réponses brutes du formulaire, avant nettoyage</li>
+          <li>Pas de contours de parcelles : ce ne sont que des points</li>
+          <li>Relié aux producteurs par l'identifiant unique de la fiche (<code>_uuid</code> = <code>Kobo_UUID</code>) : <span class="lien-ok">1 195 / 1 210</span>. Contrôle sur ces 1 195 : même téléphone pour 1 195, même nom pour 1 194 (le dernier diffère seulement par l'écriture)</li>
+          <li>15 points sans producteur : 14 ont un téléphone présent dans la base Kobo, probablement des fiches en double écartées lors de l'apurement</li>
+          <li>122 producteurs de la base Kobo n'ont pas de point, dont 88 de COPROFEL : l'export est incomplet</li>
+          <li>La colonne <code>Kobo_ID</code> de l'Excel est enregistrée en notation scientifique et a perdu ses derniers chiffres : pour relier les fichiers, il faut passer par l'UUID</li>
+          <li>Tout ce qu'il contient se retrouve, nettoyé, dans la base Kobo apurée</li>
+        </ul>
+      </div>
+      <div class="usage"><span class="pastille p-plus-tard" style="background:var(--sauge);color:var(--gris)">Non utilisé</span><span>Utile seulement pour revenir à la saisie d'origine en cas de doute.</span></div>
+    </article>
+
+    <!-- ───── Consolidé ───── -->
+    <article class="fichier" id="f-consolide">
+      <div class="fichier-tete">
+        <div>
+          <h3>Base consolidée SCOOP : les adhérents</h3>
+          <p class="fichier-nom">Base_de_donnees_consolidee_SCOOP (2).xlsx</p>
+        </div>
+        <span class="q q-faible">Médiocre</span>
+      </div>
+      <div class="fichier-meta num"><span><b>1,2 Mo</b> · 2 feuilles</span><span>Compilation de listes fournies par les coopératives</span></div>
+      <div class="bloc">
+        <p class="mesure">Ce n'est pas une enquête : c'est l'assemblage de listes d'adhérents et de fichiers de cartographie venus de chaque coopérative, chacun avec son propre format. Il couvre beaucoup plus de monde que Kobo, mais avec très peu d'informations par personne.</p>
+      </div>
+      <div class="bloc">
+        <p class="sous-titre">Les feuilles</p>
+        <div class="tableau leger">
+          <table>
+            <thead><tr><th>Feuille</th><th class="r">Lignes</th><th class="r">Colonnes</th><th>Contenu</th></tr></thead>
+            <tbody class="num">
+              <tr><td>Membres</td><td class="r">9 868</td><td class="r">23</td><td>SCOOP, section ou OP, prénom, nom, sexe, âge, téléphone, CNI, commune, village, fonction, date d'adhésion, cotisation, enquêteur ADC</td></tr>
+              <tr><td>Cartographie</td><td class="r">2 318</td><td class="r">24</td><td>Exploitant, culture principale, variété, superficie, coordonnées, statut foncier, destination de la production</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="deux">
+        <div class="bloc">
+          <p class="sous-titre">Membres par SCOOP</p>
+          <ul class="num">
+            <li>COOPADIN : 2 846</li>
+            <li>Bamtare Thieppe Lompoul : 1 699</li>
+            <li>Niayam de Potou : 1 251, plus 492 sous « Potou Niayam »</li>
+            <li>Développement de Gandiol : 899</li>
+            <li>SOCOOT Thiatly : 833</li>
+            <li>SCAPTC : 498</li>
+            <li>CASP Rao : 485 ; KABADIE : 415 ; COOPROFEL : 395</li>
+            <li>Sans SCOOP : 55</li>
+          </ul>
+          <p class="sub">COOPHAZONI et ASLB n'y figurent pas.</p>
+        </div>
+        <div class="bloc">
+          <p class="sous-titre">Taux de remplissage</p>
+          <ul class="num">
+            <li>Sexe : 98 % (écrit de 9 façons différentes)</li>
+            <li>Commune : 70 %</li>
+            <li>Âge : 47 %, dont un tiers seulement sont de vrais âges</li>
+            <li>Date d'adhésion : 46 %</li>
+            <li>Section, GIE ou OP : 45 %</li>
+            <li>Téléphone : 25 %</li>
+            <li>Fonction : 7 % ; CNI : 6 % ; cotisation : 1 %</li>
+            <li>Date de naissance, profilage, cartographie faite : 0 %</li>
+          </ul>
+        </div>
+      </div>
+      <div class="deux">
+        <div class="bloc">
+          <p class="sous-titre">La feuille Cartographie</p>
+          <ul class="num">
+            <li>Issue de 6 fichiers sources différents, pour 6 SCOOP</li>
+            <li>Coordonnées GPS pour 28 % des parcelles, contour pour 6 %</li>
+            <li>Superficie pour 86 %, culture principale pour 58 %</li>
+            <li>La colonne « Statut foncier » contient souvent la source d'eau (forage, puits)</li>
+          </ul>
+        </div>
+        <div class="bloc">
+          <p class="sous-titre">Liens</p>
+          <ul class="num">
+            <li>Aucun identifiant de membre</li>
+            <li>Parcelle → membre : <span class="lien-faible">par le nom seulement</span> (1 937 / 2 318 ; numéro d'exploitant pour 693)</li>
+            <li>Avec la base Kobo : <span class="lien-non">aucune clé commune</span> ; 239 téléphones et 81 CNI en commun</li>
+            <li>Noms de SCOOP écrits autrement que dans Kobo</li>
+          </ul>
+        </div>
+      </div>
+      <div class="usage"><span class="pastille p-non">Pas en l'état</span><span>Après nettoyage, comme liste des adhérents recensés, rapprochée des producteurs Kobo par téléphone et CNI.</span></div>
+    </article>
+
+    <!-- ───── Documents ───── -->
+    <article class="fichier" id="f-docs">
+      <div class="fichier-tete">
+        <div>
+          <h3>Documents des coopératives</h3>
+          <p class="fichier-nom">Documents Coopératives/</p>
+        </div>
+        <span class="q q-bon">Documents</span>
+      </div>
+      <div class="tableau leger">
+        <table>
+          <thead><tr><th>Fichier</th><th>Format</th><th class="r">Taille</th></tr></thead>
+          <tbody class="num">
+            <tr><td>Statuts</td><td>Word</td><td class="r">48 Ko</td></tr>
+            <tr><td>Projet de règlement intérieur</td><td>Word</td><td class="r">212 Ko</td></tr>
+            <tr><td>Rapport des activités, AGO de l'USCN 2022-2026</td><td>PDF</td><td class="r">1,2 Mo</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="sub">Textes de gouvernance de l'Union, sans lien avec les données. Pas encore lus en détail.</p>
+      <div class="usage"><span class="pastille p-plus-tard" style="background:var(--sauge);color:var(--ok)">Module Documents</span><span>À déposer à la main, rattachés à l'USCN ou à une SCOOP.</span></div>
+    </article>
+  </section>
+
+  <section aria-labelledby="t-kobo">
+    <p class="eyebrow">Fichier à importer</p>
+    <h2 id="t-kobo">La base Kobo apurée en chiffres</h2>
+    <div class="chiffres">
+      <div class="chiffre"><strong>1 317</strong><span>producteurs, dont 1 243 validés et 74 à vérifier</span></div>
+      <div class="chiffre"><strong>1 534</strong><span>parcelles, toutes avec contour GPS, dont 88 à vérifier</span></div>
+      <div class="chiffre"><strong>1 941</strong><span>lignes de cultures</span></div>
+      <div class="chiffre"><strong>11</strong><span>SCOOP, réparties en zones Nord, Centre et Sud</span></div>
+      <div class="chiffre"><strong>114</strong><span>OP distinctes, dont « Individuel » pour 124 producteurs</span></div>
+      <div class="chiffre"><strong>99,7 %</strong><span>de téléphones valides ; 898 CNI renseignées</span></div>
+    </div>
+    <div class="carte" style="display:grid;gap:14px">
+      <h3>Les 609 alertes laissées à vérifier par le CRADESC</h3>
+      <div class="barres" role="list">
+        <div class="barre" role="listitem"><span>Rendement aberrant</span><div class="rail"><div class="rempli" style="width:100%"></div></div><b>434</b></div>
+        <div class="barre" role="listitem"><span>Précision GPS ou contour</span><div class="rail"><div class="rempli" style="width:18.4%"></div></div><b>80</b></div>
+        <div class="barre" role="listitem"><span>Entretien de moins de 10 min</span><div class="rail"><div class="rempli" style="width:8.3%"></div></div><b>36</b></div>
+        <div class="barre" role="listitem"><span>Âge manquant</span><div class="rail"><div class="rempli" style="width:6%"></div></div><b>26</b></div>
+        <div class="barre" role="listitem"><span>Téléphone ou CNI</span><div class="rail"><div class="rempli" style="width:3.2%"></div></div><b>14</b></div>
+        <div class="barre" role="listitem"><span>Superficie</span><div class="rail"><div class="rempli" style="width:2.8%"></div></div><b>12</b></div>
+        <div class="barre" role="listitem"><span>Autres</span><div class="rail"><div class="rempli" style="width:1.6%"></div></div><b>7</b></div>
+      </div>
+      <p class="sub">434 alertes portent sur les cultures, 98 sur les parcelles, 77 sur les producteurs. Aucune n'a encore de statut de vérification dans le fichier.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-consolide">
+    <p class="eyebrow">Fichier à nettoyer</p>
+    <h2 id="t-consolide">Pourquoi le fichier consolidé ne peut pas entrer tel quel</h2>
+    <div class="tableau">
+      <table>
+        <thead><tr><th>Problème</th><th>Ampleur</th></tr></thead>
+        <tbody class="num">
+          <tr><td>Doublons probables (même prénom, nom et SCOOP)</td><td>4 498 lignes sur 9 868</td></tr>
+          <tr><td>Nom complet écrit dans la colonne « Prénom »</td><td>3 256 lignes</td></tr>
+          <tr><td>Téléphone renseigné</td><td>25 % des membres</td></tr>
+          <tr><td>CNI renseignée</td><td>6 % des membres</td></tr>
+          <tr><td>Colonne « Âge » qui mélange âges, lettres A/J, tranches et noms de village</td><td>1 537 âges réels sur 4 643 valeurs</td></tr>
+          <tr><td>Dates d'adhésion au format brut d'Excel</td><td>la plupart des 4 613 valeurs</td></tr>
+          <tr><td>Noms de SCOOP incohérents (une même SCOOP écrite de deux façons)</td><td>10 noms, à rapprocher des 11 SCOOP Kobo</td></tr>
+          <tr><td>Recoupement avec la base Kobo</td><td>239 téléphones et 81 CNI en commun</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-ecarts">
+    <p class="eyebrow">Côté plateforme</p>
+    <h2 id="t-ecarts">Ce qu'il faut adapter chez nous</h2>
+    <div class="ecarts">
+      <div class="ecart"><h3>Correspondance des SCOOP</h3><p class="sub">Les 11 noms Kobo sont déjà ceux du jeu de démonstration de la plateforme (coopératives s1 à s11). Reste à vérifier en production que s1 et s2 portent bien ces noms, et à faire confirmer la liste par le CRADESC.</p></div>
+      <div class="ecart"><h3>Producteurs sans OP</h3><p class="sub">La plateforme exige une OP pour chaque producteur. 124 sont « Individuels » : il faut décider s'ils vont dans une OP « Individuels » par SCOOP, ou si l'OP devient facultative.</p></div>
+      <div class="ecart"><h3>Prénom et nom</h3><p class="sub">Kobo n'a qu'un champ. La séparation est sûre pour 1 157 noms de deux mots ; 140 noms de trois mots ou plus et 20 d'un seul mot seront signalés.</p></div>
+      <div class="ecart"><h3>Parcelles et cultures</h3><p class="sub">Pas encore de table parcelles dans l'API : contour, superficie, statut foncier, source d'eau, cultures et rendements. C'est le chantier du second lot, avec l'écran de cartographie.</p></div>
+      <div class="ecart"><h3>Photos</h3><p class="sub">Environ 570 Mo à déposer dans le stockage de fichiers de la plateforme, à partir des fichiers reçus.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-impact">
+    <p class="eyebrow">Conséquences sur notre base</p>
+    <h2 id="t-impact">Charger Kobo, photos et geojson : ce que ça change chez nous</h2>
+    <p class="mesure">Point clé découvert en comparant avec notre code : <strong>la base actuelle contient déjà un jeu de démonstration qui est le « jumeau fictif » de la base Kobo.</strong> Mêmes 11 SCOOP, même nombre de producteurs par SCOOP, mêmes codes producteur, mais des noms, téléphones et CNI inventés.</p>
+    <div class="tableau">
+      <table>
+        <thead><tr><th>Comparaison</th><th>Jeu de démonstration en base</th><th>Base Kobo réelle</th></tr></thead>
+        <tbody class="num">
+          <tr><td>Producteurs</td><td>1 317</td><td>1 317</td></tr>
+          <tr><td>Codes producteur (<code>NIA-…</code>)</td><td colspan="2"><span class="lien-ok">1 317 codes identiques</span>, chacun dans la même SCOOP des deux côtés</td></tr>
+          <tr><td>Téléphones et CNI communs</td><td colspan="2"><span class="lien-ok">0</span> : aucune donnée réelle n'est aujourd'hui en base</td></tr>
+          <tr><td>SCOOP</td><td>s1 à s11, mêmes noms que Kobo</td><td>11 SCOOP</td></tr>
+          <tr><td>OP</td><td>112 OP fictives (<code>o1</code>…)</td><td>114 OP réelles</td></tr>
+          <tr><td>Qualité</td><td>1 234 validés, 73 à vérifier, 10 doublons</td><td>1 243 validés, 74 à vérifier</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="deux">
+      <div class="carte bloc">
+        <h3>Ce que ça implique</h3>
+        <ul>
+          <li><strong>L'import est un remplacement, pas un ajout.</strong> Le code producteur est unique en base : chaque fiche fictive est remplacée par la fiche réelle qui porte le même code. On n'aura jamais 2 634 producteurs.</li>
+          <li><strong>Les SCOOP s1 à s11 sont gardées</strong> : mêmes identifiants, donc les comptes gestionnaires, droits et périmètres déjà attribués restent valables.</li>
+          <li><strong>Les OP fictives disparaissent</strong>, remplacées par les 114 OP réelles. Les producteurs sont rattachés aux nouvelles.</li>
+          <li><strong>Ce qui est rattaché aux producteurs fictifs</strong> (7 dossiers d'adhésion, demandes de correction, quelques adhérents de démonstration) n'a plus de sens : à supprimer ou à archiver avec eux.</li>
+          <li><strong>Ce que vous avez créé vous-même</strong> en production (la coopérative s12, ses comptes, GIE, réunions) n'est pas touché : l'import ne travaille que sur s1 à s11.</li>
+          <li><strong>Les tableaux de bord changent</strong> : effectifs, femmes, jeunes, superficies deviennent les vrais chiffres.</li>
+        </ul>
+      </div>
+      <div class="carte bloc">
+        <h3>Fichier par fichier</h3>
+        <ul>
+          <li><strong>Base Kobo</strong> : remplace les 1 317 fiches et les OP. Le profil socio-économique demande d'abord une place dans la fiche (sinon perdu).</li>
+          <li><strong>Photos</strong> : notre base n'accepte <strong>qu'une photo par producteur</strong>. On charge la photo du producteur (1 064 fiches en ont une) ; les photos de parcelles et de documents fonciers attendent le lot 2. Il faut encore repérer, dans chaque dossier, quel fichier est la photo du producteur.</li>
+          <li><strong>Geojson</strong> : il se relie bien (1 195 points), mais il n'apporte rien de nouveau. Le point GPS de l'entretien est déjà dans la base Kobo (1 197 producteurs) et notre base n'a pas de champ pour lui. Je propose de le garder comme archive, pas de le charger.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="margin-top:6px">Doublons et données orphelines : ce que je propose</h3>
+    <p class="mesure sub">Principe : rien n'est supprimé en silence. Chaque cas est soit importé avec un signalement à traiter sur le web, soit écarté et listé dans le rapport d'import.</p>
+    <div class="tableau">
+      <table>
+        <thead><tr><th>Cas</th><th class="r">Nombre</th><th>Proposition</th><th>Où ça se règle</th></tr></thead>
+        <tbody class="num">
+          <tr><td>Doublons déjà fusionnés par le CRADESC</td><td class="r">19</td><td>On importe la fiche gardée. On note dans son historique les fiches fusionnées, pour la traçabilité.</td><td><span class="q q-bon">Import</span></td></tr>
+          <tr><td>Même CNI sur deux fiches</td><td class="r">10</td><td>Importées en « doublon possible », liées l'une à l'autre. Une CNI est personnelle : c'est presque sûrement la même personne ou une erreur de saisie.</td><td><span class="q q-moyen">Web, gestionnaire</span></td></tr>
+          <tr><td>Même téléphone sur plusieurs fiches</td><td class="r">53</td><td>Importées normalement, avec un signalement. C'est souvent un téléphone de famille : pas un doublon en soi.</td><td><span class="q q-moyen">Web, à vérifier</span></td></tr>
+          <tr><td>Producteur déjà créé à la main en production</td><td class="r">à mesurer</td><td>Avant d'écrire, on cherche par téléphone et CNI. Si une fiche existe, on n'en crée pas une deuxième : on propose une fusion.</td><td><span class="q q-moyen">Web, fusion</span></td></tr>
+          <tr><td>Producteurs « Individuels », sans OP</td><td class="r">124</td><td>Une OP « Producteurs individuels » par SCOOP, comme le fait déjà le jeu de démonstration.</td><td><span class="q q-bon">Import</span></td></tr>
+          <tr><td>Fiches « À vérifier » et alertes</td><td class="r">74 / 609</td><td>Importées avec le statut « à vérifier » et le texte de l'alerte dans l'historique de la fiche.</td><td><span class="q q-moyen">Web, gestionnaire</span></td></tr>
+          <tr><td>Producteurs sans photo</td><td class="r">23</td><td>Importés sans photo. La photo pourra être ajoutée depuis la fiche.</td><td><span class="q q-moyen">Web</span></td></tr>
+          <tr><td>Dossiers de photos sans producteur</td><td class="r">19</td><td>Pas importés. Probablement les fiches écartées comme doublons : gardés en archive et listés.</td><td><span class="q q-faible">Écartés</span></td></tr>
+          <tr><td>Points geojson sans producteur</td><td class="r">15</td><td>Pas importés (le geojson n'est pas chargé). 14 ont un téléphone connu : ce sont des fiches ressaisies.</td><td><span class="q q-faible">Écartés</span></td></tr>
+          <tr><td>Parcelles sans culture</td><td class="r">6</td><td>Importées au lot 2, signalées.</td><td><span class="q q-moyen">Lot 2</span></td></tr>
+          <tr><td>Fiches fictives liées (dossiers, corrections, adhérents de démo)</td><td class="r">à mesurer</td><td>Supprimées avec les producteurs fictifs, ou archivées si vous préférez garder une trace.</td><td><span class="q q-faible">À décider</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="statut">Avant tout import : un comptage en lecture seule de la base de production, pour chiffrer les deux lignes « à mesurer ».</p>
+  </section>
+
+  <section aria-labelledby="t-plan">
+    <p class="eyebrow">Proposition</p>
+    <h2 id="t-plan">Déroulé proposé, une fois validé</h2>
+    <ol class="etapes">
+      <li><div><h3>Faire valider la correspondance des SCOOP et le cas des « Individuels »</h3><p class="sub">Un tableau de 11 lignes à envoyer au CRADESC.</p></div></li>
+      <li><div><h3>Écrire le script d'import et le lancer à blanc en local</h3><p class="sub">Il produit un rapport : ce qui entre, ce qui est signalé, ce qui est refusé. Rien n'est écrit en ligne.</p></div></li>
+      <li><div><h3>Importer en staging et vérifier les écrans</h3><p class="sub">Listes de producteurs, fiches, effectifs des SCOOP et tableaux de bord.</p></div></li>
+      <li><div><h3>Importer en production les producteurs, OP et photos</h3><p class="sub">Les 74 fiches « À vérifier » gardent ce statut et se corrigent sur le web.</p></div></li>
+      <li><div><h3>Second lot : parcelles et cultures</h3><p class="sub">Après la création des tables et de l'écran de cartographie.</p></div></li>
+      <li><div><h3>Fichier consolidé, si le CRADESC le nettoie</h3><p class="sub">Comme liste de membres recensés, rapprochée des producteurs déjà en base.</p></div></li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="t-questions">
+    <p class="eyebrow">À trancher</p>
+    <h2 id="t-questions">Questions pour le CRADESC</h2>
+    <ol class="questions mesure">
+      <li>Validez-vous la correspondance entre les 11 SCOOP de la collecte et celles de la plateforme ?</li>
+      <li>Où placer les 124 producteurs « Individuels » ?</li>
+      <li>Le fichier consolidé sera-t-il nettoyé de votre côté, ou faut-il le prévoir dans notre travail ?</li>
+      <li>Les producteurs ont-ils été informés que leurs données et photos seraient dans la plateforme ?</li>
+    </ol>
+  </section>
+
+  <section class="confid" aria-labelledby="t-confid">
+    <h3 id="t-confid">Données personnelles</h3>
+    <p class="mesure">Les fichiers contiennent des noms, téléphones, CNI et photos de personnes réelles. Le fichier du CRADESC précise lui-même que l'usage est limité au projet. Ces données n'entrent jamais dans le dépôt de code ; l'import se fait d'abord en local, puis en staging, et seulement après en production. L'accès aux CNI reste soumis au droit dédié et à l'audit.</p>
+  </section>
+
+  <footer>Source : fichiers reçus du CRADESC, analysés localement le 22 novembre 2026. Tous les chiffres sont des comptages sur ces fichiers.</footer>
+</main>
+
+</body></html>
