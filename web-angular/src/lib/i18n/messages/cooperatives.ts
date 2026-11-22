@@ -99,6 +99,7 @@ export const cooperatives = {
     "Renseignez la coopérative, puis la personne qui la gérera. Son compte est créé tout de suite, mais ne sera actif qu'après son invitation.",
   "cooperatives.create.submit": "Créer et inviter",
   "cooperatives.create.done": "Coopérative créée, invitation envoyée à {email}",
+  "cooperatives.create.noMail": "Coopérative créée, mais l'e-mail d'invitation à {email} n'est pas parti. Renvoyez-le depuis la page Utilisateurs.",
   "cooperatives.edit.title": "Modifier la coopérative",
   "cooperatives.edit.description":
     "Changez le nom, la commune, le code ou la région. Le gestionnaire ne change pas.",

@@ -102,3 +102,8 @@ export function regenerateTechnicianCode(scoopId: string, userId: string) {
 export function isTechnicalEmail(email: string): boolean {
   return email.endsWith("@technicien.mbaydiaay.local");
 }
+
+/** Envoie (ou renvoie) le lien d'activation par e-mail à un compte qui n'a pas encore de mot de passe. */
+export function inviteUser(id: string) {
+  return apiFetch<{ sent: boolean; expiresAt: string }>(`/users/${id}/invite`, { method: "POST", body: {} });
+}
