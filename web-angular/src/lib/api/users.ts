@@ -18,6 +18,9 @@ export type ApiUser = {
   photoUrl?: string | null;
   /** Technicien : vrai tant qu'il n'a pas utilisé son code temporaire pour choisir son mot de passe. */
   activationPending?: boolean;
+  /** Gestionnaire invité : n'a pas encore choisi son mot de passe avec le lien reçu par e-mail. */
+  invitationPending?: boolean;
+  invitationExpiresAt?: string | null;
 };
 
 /** Une page d'utilisateurs (tri par nom). */

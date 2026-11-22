@@ -949,6 +949,9 @@ export interface ApiUserRow {
   photoUrl?: string | null | undefined;
   /** Technicien qui n'a pas encore utilisé son code temporaire. */
   activationPending?: boolean | undefined;
+  /** Gestionnaire invité par e-mail, qui n'a pas encore choisi son mot de passe. */
+  invitationPending?: boolean | undefined;
+  invitationExpiresAt?: string | null | undefined;
 }
 
 function appUserFromApi(apiUser: ApiUserRow): AppUser {
@@ -970,6 +973,10 @@ function appUserFromApi(apiUser: ApiUserRow): AppUser {
     // Le code lui-même n'est jamais relu : l'API ne garde que son empreinte. Seul « en attente » est connu.
     ...(apiUser.activationPending && {
       activation: { code: "", issuedAt: "", expiresAt: "", failedAttempts: 0 },
+    }),
+    // Lien d'activation envoyé par e-mail : sans date connue, le lien est considéré expiré (on peut le renvoyer).
+    ...(apiUser.invitationPending && {
+      invited: { sentAt: "", expiresAt: apiUser.invitationExpiresAt ?? new Date(0).toISOString() },
     }),
   };
 }
@@ -3632,7 +3639,7 @@ export const actions = {
    */
   createScoop(
     input: ScoopInput & { region?: string; createdAt?: string },
-  ): ActionResult<{ scoopId: string; userId: string; memberId: string }> {
+  ): ActionResult<{ scoopId: string; userId: string }> {
     const who = actor();
     if (!who?.session.permissions.includes("scoop.manage")) return fail("errors.scoop.notAllowed");
     // Code court généré à partir du nom quand il n'est pas fourni (jamais saisi à la main dans l'écran).
@@ -3657,37 +3664,19 @@ export const actions = {
       ...(input.logoUrl && { logoUrl: input.logoUrl }),
     };
     const m = input.manager;
-    const member: Member = {
-      id: nextId("m", state.members),
-      scoopId: scoop.id,
-      orgId: null,
-      firstName: m.firstName.trim(),
-      lastName: m.lastName.trim(),
-      sex: "H",
-      phone: "",
-      email: m.email.trim(),
-      age: null,
-      handicap: false,
-      village: scoop.commune,
-      status: "membre",
-      joinedAt: at,
-      producerId: null,
-      history: [{ at, by: who.name, action: `créé avec la coopérative ${scoop.name}` }],
-    };
+    // Le gestionnaire n'est pas un adhérent : il a un compte, pas de fiche de membre (les adhérents s'ajoutent à part).
     const user: AppUser = {
       id: nextId("u", state.users),
-      name: `${member.firstName} ${member.lastName}`,
-      email: member.email,
+      name: `${m.firstName.trim()} ${m.lastName.trim()}`,
+      email: m.email.trim(),
       phone: "",
       role: "gestionnaire",
       scoopId: scoop.id,
-      memberId: member.id,
       active: false,
       invited: { sentAt: at, expiresAt: new Date(Date.now() + INVITATION_TTL_MS).toISOString() },
     };
     set((s) => ({
       scoops: [...s.scoops, scoop],
-      members: [...s.members, member],
       users: [...s.users, user],
     }));
     audit("Coopérative créée", `SCOOP ${scoop.name}`, `code ${scoop.code}`, scoop.id);
@@ -3698,7 +3687,7 @@ export const actions = {
       scoop.id,
     );
     audit("Invitation envoyée", `Utilisateur ${user.name}`, user.email, scoop.id);
-    return { ok: true, scoopId: scoop.id, userId: user.id, memberId: member.id };
+    return { ok: true, scoopId: scoop.id, userId: user.id };
   },
   updateScoop(
     id: string,
