@@ -2,6 +2,7 @@ import { Injectable, inject } from "@angular/core";
 
 import { isApiMode } from "@/lib/api/config";
 import { ApiError } from "@/lib/api/client";
+import { fetchAllPlots } from "@/lib/api/plots";
 import {
   approveDossierOnApi,
   attachDocumentOnApi,
@@ -56,7 +57,10 @@ export class ProducerWorkflow {
 
   // ------------------------------------------------------------- Chargement
 
-  /** Mode API : charge les producteurs, dossiers et corrections du périmètre du compte (ce que son rôle permet de lire). */
+  /**
+   * Mode API : charge les producteurs, dossiers et corrections du périmètre du compte (ce que son rôle permet de lire),
+   * puis les parcelles (import Kobo) une fois les producteurs rangés : la campagne d'une parcelle vient de son producteur.
+   */
   async hydrate(): Promise<void> {
     if (!isApiMode()) return;
     const [producers, dossiers, corrections] = await Promise.allSettled([
@@ -67,6 +71,12 @@ export class ProducerWorkflow {
     if (producers.status === "fulfilled") this.actions.setProducersFromApi(producers.value);
     if (dossiers.status === "fulfilled") this.actions.setDossiersFromApi(dossiers.value);
     if (corrections.status === "fulfilled" && corrections.value) this.actions.setCorrectionsFromApi(corrections.value);
+    if (producers.status !== "fulfilled" || !this.store.can("producer.read")) return;
+    try {
+      this.actions.setPlotsFromApi(await fetchAllPlots());
+    } catch {
+      // Parcelles indisponibles (API plus ancienne, réseau) : l'écran garde la liste locale.
+    }
   }
 
   // ---------------------------------------------------------------- Dossiers

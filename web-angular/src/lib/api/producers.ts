@@ -1,4 +1,10 @@
-import type { CorrectionChange, CorrectionRequest, CorrectionStatus, Producer } from "../mock/data";
+import type {
+  CorrectionChange,
+  CorrectionRequest,
+  CorrectionStatus,
+  Producer,
+  ProducerSurvey,
+} from "../mock/data";
 import type {
   DossierDecision,
   DossierDraft,
@@ -40,6 +46,10 @@ export type ApiProducer = {
   history: Producer["history"];
   mergedInto: string | null;
   photoUrl: string | null;
+  /** Fiche Kobo d'origine (import Kobo) ; absent sur une API plus ancienne. */
+  koboUuid?: string | null;
+  /** Enquête socio-économique Kobo (import Kobo). */
+  survey?: ProducerSurvey | null;
 };
 
 /**
@@ -69,6 +79,21 @@ export function producerFromApi(row: ApiProducer): Producer {
     history: row.history,
     ...(row.mergedInto && { mergedInto: row.mergedInto }),
     ...(photoUrl && { photoUrl }),
+    ...(row.koboUuid && { koboUuid: row.koboUuid }),
+    ...(row.survey && { survey: surveyFromApi(row.survey) }),
+  };
+}
+
+/** Listes de l'enquête toujours présentes (une API ancienne ou une ligne incomplète peut les omettre). */
+function surveyFromApi(survey: ProducerSurvey): ProducerSurvey {
+  return {
+    ...survey,
+    cropsPracticed: survey.cropsPracticed ?? [],
+    difficulties: survey.difficulties ?? [],
+    needs: survey.needs ?? [],
+    alerts: survey.alerts ?? [],
+    needsText: survey.needsText ?? "",
+    observations: survey.observations ?? "",
   };
 }
 

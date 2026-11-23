@@ -1312,6 +1312,26 @@ export const actions = {
         : [...s.producers, item],
     }));
   },
+  /**
+   * Remplace les parcelles par celles du périmètre du compte, lues sur l'API (import Kobo). L'API ne porte pas de
+   * campagne par parcelle : on reprend celle des cultures du producteur, sinon la première campagne connue.
+   * Appelée seulement en mode API : le mode démonstration garde les parcelles de la fixture.
+   */
+  setPlotsFromApi(items: Plot[]) {
+    set((s) => {
+      const campaignOfProducer = new Map(
+        s.producers.map((producer) => [producer.id, producer.crops[0]?.campaign ?? ""]),
+      );
+      const fallbackCampaign = s.campaigns[0]?.name ?? "";
+      return {
+        plots: items.map((plot) =>
+          plot.campaign
+            ? plot
+            : { ...plot, campaign: campaignOfProducer.get(plot.producerId) || fallbackCampaign },
+        ),
+      };
+    });
+  },
   /** CNI ou téléphone révélés par l'API : le clair remplace le masque, le temps de la session. */
   revealProducerFromApi(id: string, secret: { cni?: string; phone?: string }) {
     set((s) => ({ producers: s.producers.map((p) => (p.id === id ? { ...p, ...secret } : p)) }));
