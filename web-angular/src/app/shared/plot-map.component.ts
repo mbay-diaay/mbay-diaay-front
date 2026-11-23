@@ -157,6 +157,8 @@ export class PlotMapComponent implements OnDestroy {
     for (const p of this.plots()) {
       const sel = p.id === selected;
       const ring = p.repaired ?? p.raw;
+      // Parcelle importée sans contour (relevé incomplet) : rien à dessiner, son centre suffit au cadrage.
+      if (!ring.length) continue;
       if (sel && p.repaired) {
         L.polygon(p.raw, {
           renderer: ar,
@@ -182,7 +184,12 @@ export class PlotMapComponent implements OnDestroy {
     const L = this.L;
     const p = this.plots().find((x) => x.id === id);
     if (!p || !L || !this.map) return;
-    this.map.fitBounds(L.latLngBounds(p.repaired ?? p.raw), {
+    const ring = p.repaired ?? p.raw;
+    if (!ring.length) {
+      if (p.centroid) this.map.setView([p.centroid.lat, p.centroid.lng], 16);
+      return;
+    }
+    this.map.fitBounds(L.latLngBounds(ring), {
       maxZoom: 16,
       padding: [80, 80],
     });

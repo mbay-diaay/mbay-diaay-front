@@ -110,6 +110,9 @@ import taskAltSvg from "@material-symbols/svg-400/rounded/task_alt.svg?raw";
 import supportAgentSvg from "@material-symbols/svg-400/rounded/support_agent.svg?raw";
 import openInNewSvg from "@material-symbols/svg-400/rounded/open_in_new.svg?raw";
 import accountCircleSvg from "@material-symbols/svg-400/rounded/account_circle.svg?raw";
+import photoLibrarySvg from "@material-symbols/svg-400/rounded/photo_library.svg?raw";
+import waterDropSvg from "@material-symbols/svg-400/rounded/water_drop.svg?raw";
+import schoolSvg from "@material-symbols/svg-400/rounded/school.svg?raw";
 
 const ICONS = {
   agriculture,
@@ -218,6 +221,9 @@ const ICONS = {
   support_agent: supportAgentSvg,
   open_in_new: openInNewSvg,
   account_circle: accountCircleSvg,
+  photo_library: photoLibrarySvg,
+  water_drop: waterDropSvg,
+  school: schoolSvg,
 } as const;
 
 export type IconName = keyof typeof ICONS;

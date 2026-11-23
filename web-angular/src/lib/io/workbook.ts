@@ -118,14 +118,17 @@ export function exchangeRows(
     headers(entity),
     ...d.plots.map((p) => {
       const ring = p.repaired ?? p.raw;
-      const lat = ring.reduce((s, x) => s + x[0]!, 0) / ring.length;
-      const lng = ring.reduce((s, x) => s + x[1]!, 0) / ring.length;
-      const geo = JSON.stringify({
-        type: "Polygon",
-        coordinates: [
-          [...ring, ring[0]!].map(([la, ln]) => [Number(ln.toFixed(6)), Number(la.toFixed(6))]),
-        ],
-      });
+      // Parcelle importée sans contour : le centre relevé tient lieu de position, pas de géométrie.
+      const lat = ring.length ? ring.reduce((s, x) => s + x[0]!, 0) / ring.length : (p.centroid?.lat ?? 0);
+      const lng = ring.length ? ring.reduce((s, x) => s + x[1]!, 0) / ring.length : (p.centroid?.lng ?? 0);
+      const geo = ring.length
+        ? JSON.stringify({
+            type: "Polygon",
+            coordinates: [
+              [...ring, ring[0]!].map(([la, ln]) => [Number(ln.toFixed(6)), Number(la.toFixed(6))]),
+            ],
+          })
+        : "";
       return [
         p.code,
         prodCode.get(p.producerId) ?? "",

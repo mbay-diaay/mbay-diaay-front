@@ -24,7 +24,11 @@ import {
   XCircle,
 } from "lucide-angular";
 
+import { ApiError } from "@/lib/api/client";
+import { isApiMode } from "@/lib/api/config";
+import { fetchKoboReport, type ApiKoboReport } from "@/lib/api/plots";
 import { downloadCsv, fmtDateTime, nf } from "@/lib/format";
+import type { MessageKey } from "@/lib/i18n";
 import { readFile, sha } from "@/lib/io/parse";
 import { autoMap, detectEntity, ENTITY_ORDER, SCHEMA, type EntityKey } from "@/lib/io/schema";
 import {
@@ -54,6 +58,21 @@ const SCRIPT = "import-web-1.0";
 const IGNORE = "__ignore";
 const NONE = "__none";
 const ENTITY_ORDER_ARR = [...ENTITY_ORDER];
+/** Nombre d'éléments montrés d'emblée dans chaque liste d'orphelins du rapport Kobo. */
+const ORPHAN_PREVIEW = 60;
+/** Libellés connus des compteurs du lot Kobo ; une clé inconnue s'affiche telle quelle. */
+const KOBO_COUNT_KEYS: Record<string, MessageKey> = {
+  scoops: "imports.kobo.count.scoops",
+  organisations: "imports.kobo.count.organisations",
+  producers: "imports.kobo.count.producers",
+  plots: "imports.kobo.count.plots",
+  plotCrops: "imports.kobo.count.plotCrops",
+  photos: "imports.kobo.count.photos",
+  rows: "imports.kobo.count.rows",
+  geojson: "imports.kobo.count.geojson",
+  alerts: "imports.kobo.count.alerts",
+};
+type OrphanList = "geojson" | "photoFolders" | "plotsWithoutCrop" | "producersWithoutPhoto";
 const STEPS = ["depot", "colonnes", "rapport", "termine"] as const;
 type Step = (typeof STEPS)[number];
 
@@ -128,6 +147,284 @@ interface Loaded {
         <p class="mb-3 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm">
           {{ flash() }}
         </p>
+      }
+
+      @if (koboMode) {
+        <section class="mb-8 space-y-4" aria-labelledby="kobo-report-title">
+          <div class="flex flex-wrap items-center gap-2">
+            <lucide-angular [img]="icons.sheet" class="size-5 text-primary" />
+            <h2 id="kobo-report-title" class="font-semibold">{{ t()("imports.kobo.title") }}</h2>
+            @if (koboReport(); as report) {
+              <span class="text-sm text-muted-foreground">
+                {{
+                  t()("imports.kobo.batch", {
+                    id: report.batch.id,
+                    date: fmtDateTime(report.batch.importedAt),
+                  })
+                }}
+              </span>
+            }
+          </div>
+          <p class="text-sm text-muted-foreground">{{ t()("imports.kobo.intro") }}</p>
+
+          @if (koboState() === "loading") {
+            <p class="surface flex items-center gap-2 p-4 text-sm">
+              <lucide-angular [img]="icons.loader" class="size-4 animate-spin text-primary" />
+              {{ t()("imports.kobo.loading") }}
+            </p>
+          } @else if (koboState() === "error") {
+            <div class="flex flex-wrap items-center gap-3 rounded-md bg-danger-bg p-3 text-sm text-danger-fg">
+              <lucide-angular [img]="icons.x" class="size-4 shrink-0" />
+              <span class="flex-1">{{ t()("imports.kobo.error") }}</span>
+              <ui-button variant="outline" size="sm" (click)="loadKoboReport()">
+                <lucide-angular [img]="icons.reset" class="size-4" />
+                {{ t()("imports.kobo.retry") }}
+              </ui-button>
+            </div>
+          } @else if (koboState() === "empty") {
+            <p class="surface p-4 text-sm text-muted-foreground">{{ t()("imports.kobo.empty") }}</p>
+          }
+
+          @if (koboReport(); as report) {
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
+              @for (count of koboCounts(); track count.key) {
+                <ui-kpi-tile [label]="count.label" [value]="nf.format(count.value)" />
+              }
+            </div>
+
+            <div class="grid gap-4 lg:grid-cols-2">
+              <div class="surface overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead class="border-b bg-muted text-left text-xs text-muted-foreground">
+                    <tr>
+                      <th class="px-4 py-2.5 font-semibold">{{ t()("imports.kobo.sheet") }}</th>
+                      <th class="pr-4 text-right font-semibold">{{ t()("imports.kobo.rows") }}</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y">
+                    @for (sheet of report.sheets; track sheet.sheet) {
+                      <tr>
+                        <td class="px-4 py-2 font-medium">{{ sheet.sheet }}</td>
+                        <td class="pr-4 text-right tabular">{{ nf.format(sheet.rows) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="grid grid-cols-2 content-start gap-3">
+                <ui-kpi-tile
+                  [label]="t()('imports.kobo.orphans.geojson')"
+                  [value]="nf.format(report.orphans.geojsonPoints.length)"
+                  [tone]="report.orphans.geojsonPoints.length ? 'warning' : 'neutral'"
+                />
+                <ui-kpi-tile
+                  [label]="t()('imports.kobo.orphans.photoFolders')"
+                  [value]="nf.format(report.orphans.photoFolders.length)"
+                  [tone]="report.orphans.photoFolders.length ? 'warning' : 'neutral'"
+                />
+                <ui-kpi-tile
+                  [label]="t()('imports.kobo.orphans.unidentified')"
+                  [value]="nf.format(report.orphans.unidentifiedPhotos)"
+                  [sub]="t()('imports.kobo.orphans.unidentifiedSub')"
+                  [tone]="report.orphans.unidentifiedPhotos ? 'warning' : 'neutral'"
+                />
+                <ui-kpi-tile
+                  [label]="t()('imports.kobo.orphans.plotsWithoutCrop')"
+                  [value]="nf.format(report.orphans.plotsWithoutCrop.length)"
+                  [tone]="report.orphans.plotsWithoutCrop.length ? 'warning' : 'neutral'"
+                />
+                <ui-kpi-tile
+                  [label]="t()('imports.kobo.orphans.producersWithoutPhoto')"
+                  [value]="nf.format(report.orphans.producersWithoutPhoto.length)"
+                  [tone]="report.orphans.producersWithoutPhoto.length ? 'warning' : 'neutral'"
+                />
+                <ui-kpi-tile
+                  [label]="t()('imports.kobo.orphans.sharedCni')"
+                  [value]="nf.format(report.orphans.sharedCni.length)"
+                  [sub]="t()('imports.kobo.orphans.groupsSub')"
+                  [tone]="report.orphans.sharedCni.length ? 'danger' : 'neutral'"
+                />
+                <ui-kpi-tile
+                  [label]="t()('imports.kobo.orphans.sharedPhone')"
+                  [value]="nf.format(report.orphans.sharedPhone.length)"
+                  [sub]="t()('imports.kobo.orphans.groupsSub')"
+                  [tone]="report.orphans.sharedPhone.length ? 'danger' : 'neutral'"
+                />
+              </div>
+            </div>
+
+            <h3 class="pt-2 font-semibold">{{ t()("imports.kobo.orphans") }}</h3>
+
+            <!-- Points GeoJSON sans producteur -->
+            <details class="surface p-4" [open]="report.orphans.geojsonPoints.length > 0">
+              <summary class="cursor-pointer font-medium">
+                {{ t()("imports.kobo.orphans.geojson") }} ({{
+                  nf.format(report.orphans.geojsonPoints.length)
+                }})
+              </summary>
+              @if (report.orphans.geojsonPoints.length) {
+                <div class="mt-3 max-h-96 overflow-auto">
+                  <table class="w-full text-sm">
+                    <thead class="sticky top-0 bg-card text-left text-xs text-muted-foreground">
+                      <tr>
+                        <th class="py-2 pr-3 font-semibold">
+                          {{ t()("imports.kobo.orphans.geojsonRef") }}
+                        </th>
+                        <th class="font-semibold">{{ t()("imports.kobo.orphans.geojsonData") }}</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                      @for (point of visibleOrphans("geojson", report.orphans.geojsonPoints); track $index) {
+                        <tr>
+                          <td class="py-1.5 pr-3 font-mono text-xs">{{ point.ref || "—" }}</td>
+                          <td class="max-w-[40rem] truncate font-mono text-xs text-muted-foreground">
+                            {{ summarize(point.data) }}
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+                @if (hiddenCount("geojson", report.orphans.geojsonPoints.length); as hidden) {
+                  <ui-button variant="ghost" size="sm" class="mt-2" (click)="showAll('geojson')">
+                    {{ t()("imports.kobo.orphans.more", { count: nf.format(hidden) }) }}
+                  </ui-button>
+                }
+              } @else {
+                <p class="mt-2 text-sm text-muted-foreground">{{ t()("imports.kobo.orphans.none") }}</p>
+              }
+            </details>
+
+            <!-- Dossiers photo sans producteur -->
+            <details class="surface p-4" [open]="report.orphans.photoFolders.length > 0">
+              <summary class="cursor-pointer font-medium">
+                {{ t()("imports.kobo.orphans.photoFolders") }} ({{
+                  nf.format(report.orphans.photoFolders.length)
+                }})
+              </summary>
+              @if (report.orphans.photoFolders.length) {
+                <div class="mt-3 max-h-96 overflow-auto">
+                  <table class="w-full text-sm">
+                    <thead class="sticky top-0 bg-card text-left text-xs text-muted-foreground">
+                      <tr>
+                        <th class="py-2 pr-3 font-semibold">{{ t()("imports.kobo.orphans.folder") }}</th>
+                        <th class="text-right font-semibold">{{ t()("imports.kobo.orphans.files") }}</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                      @for (folder of visibleOrphans("photoFolders", report.orphans.photoFolders); track folder.folder) {
+                        <tr>
+                          <td class="py-1.5 pr-3 font-mono text-xs">{{ folder.folder }}</td>
+                          <td class="text-right tabular">{{ nf.format(folder.files) }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+                @if (hiddenCount("photoFolders", report.orphans.photoFolders.length); as hidden) {
+                  <ui-button variant="ghost" size="sm" class="mt-2" (click)="showAll('photoFolders')">
+                    {{ t()("imports.kobo.orphans.more", { count: nf.format(hidden) }) }}
+                  </ui-button>
+                }
+              } @else {
+                <p class="mt-2 text-sm text-muted-foreground">{{ t()("imports.kobo.orphans.none") }}</p>
+              }
+            </details>
+
+            <!-- Parcelles sans culture -->
+            <details class="surface p-4" [open]="report.orphans.plotsWithoutCrop.length > 0">
+              <summary class="cursor-pointer font-medium">
+                {{ t()("imports.kobo.orphans.plotsWithoutCrop") }} ({{
+                  nf.format(report.orphans.plotsWithoutCrop.length)
+                }})
+              </summary>
+              @if (report.orphans.plotsWithoutCrop.length) {
+                <div class="mt-3 flex flex-wrap gap-2">
+                  @for (plotId of visibleOrphans("plotsWithoutCrop", report.orphans.plotsWithoutCrop); track plotId) {
+                    <a
+                      class="rounded-full border px-3 py-1 font-mono text-xs hover:bg-muted"
+                      [routerLink]="['/dashboard/producteurs', producerOfPlot(plotId)]"
+                      [attr.aria-label]="t()('imports.kobo.openProducer', { code: producerOfPlot(plotId) })"
+                      >{{ plotId }}</a
+                    >
+                  }
+                </div>
+                @if (hiddenCount("plotsWithoutCrop", report.orphans.plotsWithoutCrop.length); as hidden) {
+                  <ui-button variant="ghost" size="sm" class="mt-2" (click)="showAll('plotsWithoutCrop')">
+                    {{ t()("imports.kobo.orphans.more", { count: nf.format(hidden) }) }}
+                  </ui-button>
+                }
+              } @else {
+                <p class="mt-2 text-sm text-muted-foreground">{{ t()("imports.kobo.orphans.none") }}</p>
+              }
+            </details>
+
+            <!-- Producteurs sans photo -->
+            <details class="surface p-4">
+              <summary class="cursor-pointer font-medium">
+                {{ t()("imports.kobo.orphans.producersWithoutPhoto") }} ({{
+                  nf.format(report.orphans.producersWithoutPhoto.length)
+                }})
+              </summary>
+              @if (report.orphans.producersWithoutPhoto.length) {
+                <div class="mt-3 flex flex-wrap gap-2">
+                  @for (code of visibleOrphans("producersWithoutPhoto", report.orphans.producersWithoutPhoto); track code) {
+                    <a
+                      class="rounded-full border px-3 py-1 font-mono text-xs hover:bg-muted"
+                      [routerLink]="['/dashboard/producteurs', code]"
+                      [attr.aria-label]="t()('imports.kobo.openProducer', { code })"
+                      >{{ code }}</a
+                    >
+                  }
+                </div>
+                @if (hiddenCount("producersWithoutPhoto", report.orphans.producersWithoutPhoto.length); as hidden) {
+                  <ui-button variant="ghost" size="sm" class="mt-2" (click)="showAll('producersWithoutPhoto')">
+                    {{ t()("imports.kobo.orphans.more", { count: nf.format(hidden) }) }}
+                  </ui-button>
+                }
+              } @else {
+                <p class="mt-2 text-sm text-muted-foreground">{{ t()("imports.kobo.orphans.none") }}</p>
+              }
+            </details>
+
+            <!-- CNI et téléphones partagés : seulement les codes producteurs, jamais la valeur -->
+            @for (
+              shared of [
+                { label: t()("imports.kobo.orphans.sharedCni"), groups: report.orphans.sharedCni },
+                { label: t()("imports.kobo.orphans.sharedPhone"), groups: report.orphans.sharedPhone },
+              ];
+              track shared.label
+            ) {
+              <details class="surface p-4" [open]="shared.groups.length > 0">
+                <summary class="cursor-pointer font-medium">
+                  {{ shared.label }} ({{ nf.format(shared.groups.length) }})
+                </summary>
+                @if (shared.groups.length) {
+                  <ul class="mt-3 divide-y text-sm">
+                    @for (group of shared.groups; track $index; let groupIndex = $index) {
+                      <li class="flex flex-wrap items-center gap-2 py-2">
+                        <span class="w-24 text-xs font-semibold text-muted-foreground">
+                          {{ t()("imports.kobo.orphans.group", { index: groupIndex + 1 }) }}
+                        </span>
+                        @for (code of group; track code) {
+                          <a
+                            class="rounded-full border px-3 py-1 font-mono text-xs hover:bg-muted"
+                            [routerLink]="['/dashboard/producteurs', code]"
+                            [attr.aria-label]="t()('imports.kobo.openProducer', { code })"
+                            >{{ code }}</a
+                          >
+                        }
+                      </li>
+                    }
+                  </ul>
+                } @else {
+                  <p class="mt-2 text-sm text-muted-foreground">{{ t()("imports.kobo.orphans.none") }}</p>
+                }
+              </details>
+            }
+          }
+        </section>
       }
 
       <ol
@@ -733,6 +1030,67 @@ export default class ImportsPage {
   protected readonly sessionReports = new Map<string, Issue[]>();
 
   protected readonly batches = computed(() => this.store.state().imports);
+
+  // ---------------------------------------------------- Rapport de l'import Kobo (mode API)
+
+  /** En mode API, la page affiche d'abord le rapport du dernier import Kobo chargé sur le serveur. */
+  protected readonly koboMode = isApiMode();
+  protected readonly koboReport = signal<ApiKoboReport | null>(null);
+  protected readonly koboState = signal<"idle" | "loading" | "error" | "empty" | "ready">("idle");
+  private readonly expandedOrphans = signal<ReadonlySet<OrphanList>>(new Set());
+
+  constructor() {
+    if (this.koboMode && isPlatformBrowser(this.platformId)) void this.loadKoboReport();
+  }
+
+  protected async loadKoboReport(): Promise<void> {
+    this.koboState.set("loading");
+    try {
+      const report = await fetchKoboReport();
+      this.koboReport.set(report);
+      this.koboState.set("ready");
+    } catch (error) {
+      this.koboReport.set(null);
+      // 404 : aucun lot Kobo sur le serveur ; toute autre erreur est un échec de chargement.
+      this.koboState.set(error instanceof ApiError && error.status === 404 ? "empty" : "error");
+    }
+  }
+
+  protected readonly koboCounts = computed(() => {
+    const counts = this.koboReport()?.batch.counts ?? {};
+    const translate = this.t();
+    return Object.entries(counts).map(([key, value]) => ({
+      key,
+      value,
+      label: KOBO_COUNT_KEYS[key] ? translate(KOBO_COUNT_KEYS[key]) : key,
+    }));
+  });
+
+  protected visibleOrphans<T>(list: OrphanList, items: readonly T[]): readonly T[] {
+    return this.expandedOrphans().has(list) ? items : items.slice(0, ORPHAN_PREVIEW);
+  }
+
+  protected hiddenCount(list: OrphanList, total: number): number {
+    return this.expandedOrphans().has(list) ? 0 : Math.max(total - ORPHAN_PREVIEW, 0);
+  }
+
+  protected showAll(list: OrphanList): void {
+    this.expandedOrphans.update((current) => new Set([...current, list]));
+  }
+
+  /** Producteur d'une parcelle : lu dans le store, sinon déduit du code (`<code producteur>-P<n>`). */
+  protected producerOfPlot(plotId: string): string {
+    return (
+      this.store.state().plots.find((plot) => plot.id === plotId)?.producerId ??
+      plotId.replace(/-P\d+$/, "")
+    );
+  }
+
+  /** Aperçu d'une ligne de propriétés brutes (point GeoJSON), sur une ligne. */
+  protected summarize(data: Record<string, unknown>): string {
+    const text = JSON.stringify(data ?? {});
+    return text.length > 240 ? `${text.slice(0, 240)}…` : text;
+  }
 
   protected readonly filteredBatches = computed(() => {
     const n = this.historyQ().trim().toLowerCase();

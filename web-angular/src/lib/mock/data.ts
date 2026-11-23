@@ -65,7 +65,89 @@ export interface Producer {
   mergedInto?: string | undefined;
   /** Photo : aperçu local (`data:`) ou lien signé de l'API. */
   photoUrl?: string | undefined;
+  /** Identifiant de la fiche Kobo d'origine (`_uuid`) ; absent hors import Kobo. */
+  koboUuid?: string | undefined;
+  /** Enquête socio-économique Kobo ; absente pour les fiches de démonstration ou saisies sur le web. */
+  survey?: ProducerSurvey | undefined;
 }
+
+/** Enquête Kobo d'un producteur (contrat d'import, `ProducerSurvey`). */
+export interface ProducerSurvey {
+  source: "kobo";
+  batch: string;
+  surveyedAt: string | null;
+  phase: string;
+  durationMin: number | null;
+  zone: "Nord" | "Centre" | "Sud";
+  supervisor: string;
+  opStatus: string;
+  ageGroup: string | null;
+  youth: boolean | null;
+  youthDeclared: boolean | null;
+  womanHead: boolean | null;
+  education: string | null;
+  smartphone: boolean | null;
+  mobileApps: string | null;
+  seniorityYears: number | null;
+  plotCount: number | null;
+  totalAreaHa: number | null;
+  cultivatedAreaHa: number | null;
+  cropsPracticed: string[];
+  difficulties: string[];
+  needs: string[];
+  needsText: string;
+  rotatingFund: boolean | null;
+  interviewGps: { lat: number; lng: number; precisionM: number | null } | null;
+  phoneValid: boolean | null;
+  cniFormatValid: boolean | null;
+  qualityStatus: "Validée" | "À vérifier";
+  alerts: string[];
+  observations: string;
+  consent: string | null;
+}
+
+/** Production d'une culture sur une saison (CHN ou contre-saison). */
+export interface PlotSeason {
+  produced: boolean;
+  quantityKg: number | null;
+  yieldKgHa: number | null;
+  pricePerKg: number | null;
+  valueFcfa: number | null;
+  destinations: string[];
+}
+
+/** Culture détaillée d'une parcelle (import Kobo). */
+export interface PlotCropDetail {
+  id: string;
+  plotId: string;
+  crop: string;
+  cropRaw: string;
+  sharePct: number | null;
+  areaHa: number | null;
+  variety: string;
+  potentialYieldKgHa: number | null;
+  potentialProductionKg: number | null;
+  agroecologyUsed: boolean | null;
+  agroecology: string[];
+  seasons: { chn: PlotSeason | null; cs: PlotSeason | null };
+  difficulties: string[];
+  alerts: string[];
+  observations: string;
+}
+
+export type PhotoRole = "producteur" | "parcelle" | "document_foncier" | "non_identifiee";
+
+/** Photo Kobo d'un producteur ou d'une parcelle (lien signé, valable 1 h). */
+export interface KoboPhoto {
+  id: string;
+  producerId: string | null;
+  plotId: string | null;
+  role: PhotoRole;
+  takenAt: string | null;
+  sizeBytes: number;
+  url: string;
+}
+
 export interface Plot {
   id: string;
   code: string;
@@ -80,6 +162,32 @@ export interface Plot {
   campaign: string;
   versions: { at: string; label: string }[];
   reason?: string | undefined;
+  // Champs de l'import Kobo (mode API) : tous facultatifs, les parcelles de démonstration ne les ont pas.
+  scoopId?: string | undefined;
+  orgId?: string | undefined;
+  number?: number | undefined;
+  landmark?: string | undefined;
+  village?: string | undefined;
+  centroid?: { lat: number; lng: number; precisionM: number | null } | null | undefined;
+  /** Superficie déclarée connue (sinon `declared` reprend la superficie mesurée). */
+  declaredKnown?: boolean | undefined;
+  areaGapPct?: number | null | undefined;
+  cultivatedAreaHa?: number | null | undefined;
+  perimeterM?: number | null | undefined;
+  contourPoints?: number | null | undefined;
+  contourPrecisionM?: number | null | undefined;
+  contourValid?: boolean | undefined;
+  contourRepaired?: boolean | undefined;
+  distanceNeighbourKm?: number | null | undefined;
+  landStatus?: string | undefined;
+  landDocument?: boolean | null | undefined;
+  waterSource?: string | undefined;
+  exploitationState?: string | undefined;
+  infrastructures?: string[] | undefined;
+  alerts?: string[] | undefined;
+  observations?: string | undefined;
+  cropDetails?: PlotCropDetail[] | undefined;
+  photos?: KoboPhoto[] | undefined;
 }
 export type CaseStatus =
   | "à examiner"
