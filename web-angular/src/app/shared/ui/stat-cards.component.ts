@@ -52,6 +52,16 @@ export interface StatCard {
         grid-template-columns: repeat(5, minmax(0, 1fr));
       }
     }
+    @media (min-width: 1280px) {
+      .six {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+    @media (min-width: 1700px) {
+      .six {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+    }
     @media (prefers-reduced-motion: reduce) {
       .stat,
       .watermark {
@@ -60,7 +70,7 @@ export interface StatCard {
     }
   `,
   template: `
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" [class.five]="stats().length === 5">
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" [class.five]="stats().length === 5" [class.six]="stats().length === 6">
       @for (stat of stats(); track stat.label; let first = $first) {
         <div
           class="stat flex flex-col p-5"

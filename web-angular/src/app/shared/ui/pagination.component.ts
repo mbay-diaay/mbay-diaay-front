@@ -101,7 +101,7 @@ type Slot = { kind: "page"; page: number } | { kind: "gap"; key: string };
             class="btn"
             [disabled]="pageResult.page <= 1"
             [attr.aria-label]="t()('common.pager.prev')"
-            (click)="pager().setPage(pageResult.page - 1)"
+            (click)="goTo(pageResult.page - 1)"
           >
             <ui-icon name="chevron_left" [size]="20" />
           </button>
@@ -112,7 +112,7 @@ type Slot = { kind: "page"; page: number } | { kind: "gap"; key: string };
                 class="btn"
                 [attr.aria-current]="slot.page === pageResult.page ? 'page' : null"
                 [attr.aria-label]="t()('common.pager.page', { page: slot.page })"
-                (click)="pager().setPage(slot.page)"
+                (click)="goTo(slot.page)"
               >
                 {{ slot.page }}
               </button>
@@ -125,7 +125,7 @@ type Slot = { kind: "page"; page: number } | { kind: "gap"; key: string };
             class="btn"
             [disabled]="pageResult.page >= pageResult.pages"
             [attr.aria-label]="t()('common.pager.next')"
-            (click)="pager().setPage(pageResult.page + 1)"
+            (click)="goTo(pageResult.page + 1)"
           >
             <ui-icon name="chevron_right" [size]="20" />
           </button>
@@ -139,7 +139,7 @@ type Slot = { kind: "page"; page: number } | { kind: "gap"; key: string };
           [label]="t()('common.pager.size')"
           [options]="sizeOptions()"
           [value]="'' + pageResult.limit"
-          (valueChange)="pager().setSize(+$event)"
+          (valueChange)="changeSize(+$event)"
         />
       </nav>
     }
@@ -151,6 +151,23 @@ export class PaginationComponent {
   readonly sizes = input<readonly number[]>(PAGE_SIZES);
 
   protected readonly t = inject(LocaleService).t;
+
+  /** Change de page puis remonte en haut : on relit la liste depuis son début. */
+  protected goTo(page: number): void {
+    this.pager().setPage(page);
+    this.scrollToTop();
+  }
+
+  protected changeSize(size: number): void {
+    this.pager().setSize(size);
+    this.scrollToTop();
+  }
+
+  private scrollToTop(): void {
+    if (typeof window === "undefined") return;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+  }
 
   protected readonly minSize = computed(() => Math.min(...this.sizes()));
   protected readonly from = computed(() => {

@@ -1,4 +1,4 @@
-import { Component, input, output } from "@angular/core";
+import { Component, input, output, signal } from "@angular/core";
 
 import { IconComponent, type IconName } from "./icon.component";
 import { UiModalA11yDirective } from "./modal-a11y.directive";
@@ -97,6 +97,51 @@ let nextId = 0;
       outline: 2px solid var(--v2-foret);
       outline-offset: 2px;
     }
+    .photo {
+      display: block;
+      padding: 0;
+      border: 2px solid var(--v2-citron);
+      border-radius: 18px;
+      background: none;
+      cursor: zoom-in;
+      overflow: hidden;
+    }
+    .photo:focus-visible {
+      outline: 3px solid var(--v2-foret);
+      outline-offset: 2px;
+    }
+    .zoom {
+      position: fixed;
+      inset: 0;
+      z-index: 130;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      cursor: zoom-out;
+      background: color-mix(in oklab, var(--v2-encre) 85%, transparent);
+      animation: fade 0.18s ease both;
+    }
+    .zoom img {
+      max-width: min(92vw, 900px);
+      max-height: 88vh;
+      border-radius: 20px;
+      object-fit: contain;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    }
+    .zoom-close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border: 0;
+      border-radius: 999px;
+      cursor: pointer;
+      background: var(--v2-blanc);
+      color: var(--v2-foret);
+    }
     @keyframes fade {
       from {
         opacity: 0;
@@ -127,10 +172,20 @@ let nextId = 0;
           [attr.aria-labelledby]="titleId"
           [attr.aria-describedby]="description() ? descId : null"
           uiModalA11y
-          (dismiss)="closed.emit()"
+          (dismiss)="onDismiss()"
         >
           <header class="head flex items-start gap-4 px-6 pb-4 pt-6 sm:px-8 sm:pt-7">
-            @if (icon()) {
+            @if (image()) {
+              <button
+                type="button"
+                class="photo shrink-0"
+                [attr.aria-label]="zoomLabel()"
+                [title]="zoomLabel()"
+                (click)="zoomed.set(true)"
+              >
+                <img class="size-16 rounded-[16px] object-cover" [src]="image()" alt="" decoding="async" />
+              </button>
+            } @else if (icon()) {
               <span
                 class="grid size-12 shrink-0 place-items-center rounded-[14px]"
                 [style.background]="tone() === 'danger' ? 'var(--v2-erreur-fg)' : tone() === 'brand' ? 'var(--v2-citron)' : 'var(--v2-foret)'"
@@ -158,6 +213,14 @@ let nextId = 0;
             <ng-content select="[modal-footer]" />
           </footer>
         </section>
+        @if (zoomed() && image()) {
+          <div class="zoom" role="dialog" aria-modal="true" [attr.aria-label]="title()" (click)="zoomed.set(false)">
+            <img [src]="image()" [alt]="title()" />
+            <button type="button" class="zoom-close" [attr.aria-label]="closeLabel()" (click)="zoomed.set(false)">
+              <ui-icon name="close" [size]="22" />
+            </button>
+          </div>
+        }
       </div>
     }
   `,
@@ -167,15 +230,26 @@ export class ModalComponent {
   readonly title = input.required<string>();
   readonly description = input("");
   readonly icon = input<IconName | null>(null);
+  /** Photo ou logo affiché à la place de l'icône (fiche d'une personne, d'une coopérative…). */
+  readonly image = input<string | null | undefined>(null);
   /** `danger` : action destructive (archivage, suppression) ; `brand` : fiche de détail, en-tête forêt. */
   readonly tone = input<"default" | "danger" | "brand">("default");
   readonly width = input(620);
   readonly closeLabel = input("Fermer");
+  readonly zoomLabel = input("Agrandir la photo");
   readonly closed = output<void>();
 
   private readonly uid = nextId++;
   protected readonly titleId = `modal-${this.uid}-title`;
   protected readonly descId = `modal-${this.uid}-desc`;
+
+  protected readonly zoomed = signal(false);
+
+  /** Échap : ferme d'abord la photo agrandie, puis la fenêtre. */
+  protected onDismiss(): void {
+    if (this.zoomed()) this.zoomed.set(false);
+    else this.closed.emit();
+  }
 
   protected onBackdrop(e: MouseEvent): void {
     if (e.target === e.currentTarget) this.closed.emit();

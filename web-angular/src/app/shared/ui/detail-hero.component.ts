@@ -1,4 +1,4 @@
-import { Component, input } from "@angular/core";
+import { Component, input, output } from "@angular/core";
 import { RouterLink } from "@angular/router";
 
 import { IconComponent, type IconName } from "./icon.component";
@@ -157,8 +157,19 @@ export interface HeroMeta {
 
       <div class="relative mt-6 flex flex-wrap items-start justify-between gap-6">
         <div class="flex min-w-0 items-start gap-5">
-          <span class="mono" aria-hidden="true" [class.has-image]="!!image()">
-            @if (image()) {
+          <span class="mono" [attr.aria-hidden]="zoomable() && image() ? null : true" [class.has-image]="!!image()">
+            @if (image() && zoomable()) {
+              <button
+                type="button"
+                class="block h-full w-full cursor-zoom-in overflow-hidden"
+                style="border-radius: inherit"
+                [attr.aria-label]="zoomLabel()"
+                [title]="zoomLabel()"
+                (click)="imageClick.emit()"
+              >
+                <img [src]="image()" alt="" class="h-full w-full object-cover" decoding="async" />
+              </button>
+            } @else if (image()) {
               <img [src]="image()" alt="" class="h-full w-full object-cover" decoding="async" />
             } @else if (icon()) {
               <ui-icon [name]="icon()!" [size]="32" />
@@ -213,6 +224,10 @@ export class DetailHeroComponent {
   readonly mono = input("");
   /** Logo ou photo de la fiche : remplace le monogramme quand elle existe. */
   readonly image = input<string | null | undefined>(null);
+  /** La photo s'agrandit au clic : l'appelant ouvre sa visionneuse sur `imageClick`. */
+  readonly zoomable = input(false);
+  readonly zoomLabel = input("");
+  readonly imageClick = output<void>();
   readonly icon = input<IconName | null>(null);
   readonly badges = input<readonly HeroBadge[]>([]);
   readonly meta = input<readonly HeroMeta[]>([]);

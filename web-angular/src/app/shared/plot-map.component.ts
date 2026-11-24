@@ -42,6 +42,8 @@ export class PlotMapComponent implements OnDestroy {
   readonly plots = input.required<Plot[]>();
   readonly selectedId = input<string | undefined>();
   readonly basemap = input<"osm" | "sat">("sat");
+  /** Facultatif : variable CSS (ex. `--v2-foret`) par identifiant de producteur, à la place de la couleur de statut. */
+  readonly producerColors = input<Record<string, string>>({});
   readonly onSelect = input<(id: string) => void>(() => undefined);
 
   protected readonly browser = isPlatformBrowser(inject(PLATFORM_ID));
@@ -66,6 +68,7 @@ export class PlotMapComponent implements OnDestroy {
     effect(() => {
       this.plots();
       this.selectedId();
+      this.producerColors();
       if (this.ready) this.drawPlots();
     });
     effect(() => {
@@ -152,6 +155,7 @@ export class PlotMapComponent implements OnDestroy {
     g.clearLayers();
     const css = getComputedStyle(document.documentElement);
     const color = (s: PlotStatus) => css.getPropertyValue(STATUS_VAR[s]).trim();
+    const producerColors = this.producerColors();
     const select = this.onSelect();
     const selected = this.selectedId();
     for (const p of this.plots()) {
@@ -168,8 +172,9 @@ export class PlotMapComponent implements OnDestroy {
           fill: false,
         }).addTo(g);
       }
+      const custom = producerColors[p.producerId];
       L.polygon(ring, {
-        color: color(p.status),
+        color: (custom && css.getPropertyValue(custom).trim()) || color(p.status),
         weight: sel ? 3 : 1,
         fillOpacity: sel ? 0.55 : 0.35,
         smoothFactor: 1.5,

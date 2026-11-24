@@ -16,12 +16,16 @@ export interface DetailView {
   title: string;
   subtitle: string;
   icon: IconName;
+  /** Photo affichée à la place de l'icône dans l'en-tête (facultatif). */
+  image?: string | null | undefined;
   /** Pastilles d'état sous le titre, dans l'en-tête forêt. */
   badges: Badge[];
   /** Chiffres clés en tuiles colorées (0 à 4). */
   kpis: { label: string; value: string; icon: IconName; tone: Tone; muted?: boolean }[];
   /** Fiche d'identité : icône, libellé, valeur (en pastille quand `tone` est donné). */
   facts: { label: string; value: string; icon: IconName; muted?: boolean; wide?: boolean; tone?: Tone | undefined }[];
+  /** Point d'attention mis en avant sous les chiffres clés (problème à régler, anomalie…). */
+  alerts?: { title: string; text: string; lines?: { label: string; text: string }[] }[] | undefined;
   sections: {
     title: string;
     icon: IconName;
@@ -60,6 +64,62 @@ export interface DetailView {
     overflow: hidden;
     border-radius: 18px;
     padding: 14px 16px;
+  }
+  .alerte {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-top: 14px;
+    border-radius: 18px;
+    padding: 14px 16px;
+    background: var(--v2-attente-bg);
+    color: var(--v2-attente-fg);
+  }
+  .alerte-ico {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: color-mix(in oklab, var(--v2-attente-fg) 14%, transparent);
+  }
+  .alerte-titre {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .alerte-texte {
+    margin: 4px 0 0;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+  .alerte-liste {
+    display: grid;
+    gap: 6px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .alerte-liste li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    align-items: baseline;
+    border-radius: 12px;
+    padding: 7px 11px;
+    font-size: 13.5px;
+    font-weight: 600;
+    background: color-mix(in oklab, var(--v2-blanc) 55%, transparent);
+  }
+  .alerte-liste .lieu {
+    font-family: var(--v2-font-mono);
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
   }
   .kpi .kpi-ico {
     position: absolute;
@@ -187,7 +247,7 @@ export interface DetailView {
   ],
   template: `
     @if (view(); as detail) {
-      <ui-modal tone="brand" [open]="true" [title]="detail.title" [description]="detail.subtitle" [icon]="detail.icon" [width]="width()" [closeLabel]="t()('common.close')" (closed)="closed.emit()">
+      <ui-modal tone="brand" [open]="true" [title]="detail.title" [description]="detail.subtitle" [icon]="detail.icon" [image]="detail.image" [width]="width()" [closeLabel]="t()('common.close')" (closed)="closed.emit()">
         @if (detail.badges.length) {
           <div modal-badges class="mt-3 flex flex-wrap gap-2">
             @for (badge of detail.badges; track badge.label) {
@@ -208,7 +268,24 @@ export interface DetailView {
           </div>
         }
 
-        <dl class="facts" [class.mt-4]="detail.kpis.length">
+        @for (alert of detail.alerts ?? []; track alert.title) {
+          <div class="alerte" role="note">
+            <span class="alerte-ico" aria-hidden="true"><ui-icon name="info" [size]="20" /></span>
+            <div class="min-w-0">
+              <p class="alerte-titre">{{ alert.title }}</p>
+              <p class="alerte-texte">{{ alert.text }}</p>
+              @if (alert.lines?.length) {
+                <ul class="alerte-liste">
+                  @for (line of alert.lines; track line.label + line.text) {
+                    <li><span class="lieu">{{ line.label }}</span><span>{{ line.text }}</span></li>
+                  }
+                </ul>
+              }
+            </div>
+          </div>
+        }
+
+        <dl class="facts" [class.mt-4]="detail.kpis.length || detail.alerts?.length">
           @for (fact of detail.facts; track fact.label) {
             <div class="fact" [class.wide]="fact.wide">
               <span class="fact-ico" aria-hidden="true"><ui-icon [name]="fact.icon" [size]="18" /></span>
