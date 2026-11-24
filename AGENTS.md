@@ -14,7 +14,7 @@ Node **22.x** uniquement (jamais de plage ouverte), pnpm ≥ 11 (jamais `npm`/`b
 Angular (depuis `web-angular/`, dépendances séparées : `pnpm install --ignore-workspace`) :
 - `pnpm dev` — vite (port 4200)
 - `pnpm typecheck` — `tsc --noEmit -p tsconfig.app.json` (ne valide pas les templates Angular)
-- `pnpm test` — `vitest run` (seul test : `src/app/app.spec.ts`)
+- `pnpm test` — `vitest run` (specs sous `src/`, ex. `src/app/app.spec.ts`, `src/lib/**/*.spec.ts`)
 - `pnpm build` — `vite build` (site statique dans `dist/client`) ; seul moyen de compiler les templates
 - `pnpm check:host` — garde-fou site statique / `.env.production`
 - `pnpm ci` — `check:host` + `typecheck` + `build`
@@ -36,7 +36,7 @@ React archive (depuis la racine) :
 ## Architecture & conventions
 - `src/lib/` est partagé **par copie** : `web-angular/src/lib/` en est une copie (logique métier, store, permissions, mocks, i18n, `styles.css`). Pas de symlink : toute modification de logique ou de tokens CSS doit être reportée dans les deux arbres. Voir `web-angular/MIGRATION.md`.
 - Store central `src/lib/store.ts` (~3 200 lignes, état + `actions.*` + assemblage des données mock), indépendant du framework. Angular : `shared/store.service.ts` l'expose en signal (`state`, `actions`, `can()`). React : hook `useStore()`. Données fictives : `src/lib/mock/` et `data/fixtures/mbay_fixture_complet.json` (2,3 Mo).
-- Routage Analog par fichiers : page = `web-angular/src/app/pages/<route>.page.ts` (`cooperatives.[id].page.ts` = route paramétrée ; `.` = séparateur de segment). Transverses dans `app/shared/`, kit UI dans `app/shared/ui/`. React : `src/routes/` (TanStack Router, `routeTree.gen.ts` généré).
+- Routage Analog par fichiers : page = `web-angular/src/app/pages/<route>.page.ts` (`cooperatives.[id].page.ts` = route paramétrée ; `.` = séparateur de segment). Transverses dans `app/shared/`, kit UI dans `app/shared/ui/`. React : `src/routes/` (TanStack Router, `routeTree.gen.ts` généré — ne pas éditer à la main).
 - Permissions : toujours via `src/lib/permissions.ts` / `can()` du store ; jamais de contrôle de rôle codé en dur dans un composant. Le périmètre SCOOP (`scope.ts`) s'applique partout ; CNI et actions sensibles = permission + audit.
 - i18n FR/WO : tout texte visible passe par `src/lib/i18n/` (messages par module dans `messages/`, `fr.ts`/`wo.ts`) ; le wolof n'est **jamais** traduit automatiquement. Angular : `LocaleService`.
 - Design tokens : couleurs/tailles/polices uniquement via les variables CSS primitive→semantic→component de `styles.css` (miroir de `docs/prd/design-tokens.json`) ; pour une nouvelle charte, ne changer que le bloc primitive. Pas de couleurs hors tokens (graphiques : `--chart-1`/`--chart-2`). Marron CRADESC `#4E3228` non négociable.
@@ -45,7 +45,7 @@ React archive (depuis la racine) :
 ## Hébergement / pièges de déploiement
 - Le front Angular est un **site statique** (`analog({ ssr: false })`, sortie `dist/client`), voir `docs/DEPLOY_FRONT.md`. Ne pas rétablir le rendu serveur sans mettre à jour ce guide et `pnpm check:host` dans le même commit.
 - Hébergement : Build Path `web-angular/`, Node 22.x, dossier publié `dist/client`, mode SPA activé.
-- `VITE_DEMO_MODE` (`true|false`) doit être commitée dans `.env.production` (racine pour React, `web-angular/.env.production` pour Angular ; lue par Vite et `scripts/check-env.mjs` depuis le cwd) ; les variables `VITE_*` sont lues à la construction.
+- `VITE_DEMO_MODE` (`true|false`) doit être commitée dans `.env.production` (racine pour React, `web-angular/.env.production` pour Angular ; lue par Vite et `scripts/check-env.mjs` depuis le cwd) ; les variables `VITE_*` sont lues à la construction. Site en construction : `VITE_SITE_GATE` (défaut `true`) et `VITE_SITE_ACCESS_CODE` (défaut `CRADESC-NIAYES`) — voir `docs/DEPLOY_FRONT.md`.
 - CSP en **Report-Only**, posée sur le routeur du serveur (voir `docs/DEPLOY_FRONT.md`) ; tuiles Esri autorisées, pas d'OSM.org.
 
 ## Workflow
