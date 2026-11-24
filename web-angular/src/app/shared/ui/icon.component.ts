@@ -37,6 +37,7 @@ import group from "@material-symbols/svg-400/rounded/group.svg?raw";
 import history from "@material-symbols/svg-400/rounded/history.svg?raw";
 import homeWork from "@material-symbols/svg-400/rounded/home_work.svg?raw";
 import hub from "@material-symbols/svg-400/rounded/hub.svg?raw";
+import layers from "@material-symbols/svg-400/rounded/layers.svg?raw";
 import inventory2 from "@material-symbols/svg-400/rounded/inventory_2.svg?raw";
 import leftPanelClose from "@material-symbols/svg-400/rounded/left_panel_close.svg?raw";
 import leftPanelOpen from "@material-symbols/svg-400/rounded/left_panel_open.svg?raw";
@@ -84,8 +85,11 @@ import helpSvg from "@material-symbols/svg-400/rounded/help.svg?raw";
 import settingsSvg from "@material-symbols/svg-400/rounded/settings.svg?raw";
 import addSvg from "@material-symbols/svg-400/rounded/add.svg?raw";
 import uploadSvg from "@material-symbols/svg-400/rounded/upload.svg?raw";
+import accessibleSvg from "@material-symbols/svg-400/rounded/accessible.svg?raw";
 import downloadSvg from "@material-symbols/svg-400/rounded/download.svg?raw";
 import arrowForwardSvg from "@material-symbols/svg-400/rounded/arrow_forward.svg?raw";
+import arrowBackSvg from "@material-symbols/svg-400/rounded/arrow_back.svg?raw";
+import deleteSvg from "@material-symbols/svg-400/rounded/delete.svg?raw";
 import arrowOutwardSvg from "@material-symbols/svg-400/rounded/arrow_outward.svg?raw";
 import squareFootSvg from "@material-symbols/svg-400/rounded/square_foot.svg?raw";
 import femaleSvg from "@material-symbols/svg-400/rounded/female.svg?raw";
@@ -148,6 +152,7 @@ const ICONS = {
   history,
   home_work: homeWork,
   hub,
+  layers,
   inventory_2: inventory2,
   left_panel_close: leftPanelClose,
   left_panel_open: leftPanelOpen,
@@ -195,8 +200,11 @@ const ICONS = {
   settings: settingsSvg,
   add: addSvg,
   upload: uploadSvg,
+  accessible: accessibleSvg,
   download: downloadSvg,
   arrow_forward: arrowForwardSvg,
+  arrow_back: arrowBackSvg,
+  delete: deleteSvg,
   arrow_outward: arrowOutwardSvg,
   square_foot: squareFootSvg,
   female: femaleSvg,

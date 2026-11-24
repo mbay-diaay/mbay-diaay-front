@@ -24,6 +24,7 @@ export * from "./kpi-tile.component";
 export * from "./modal-a11y.directive";
 export * from "./modal-focus";
 export * from "./modal.component";
+export * from "./multi-select.component";
 export * from "./page-header.component";
 export * from "./pagination.component";
 export * from "./photo-slideshow.component";
