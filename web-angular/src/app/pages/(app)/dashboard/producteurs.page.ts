@@ -533,6 +533,7 @@ export default class ProducteursPage {
     const youth = rows.filter((p) => ageAtMost(p.age, youthAge)).length;
     const validated = rows.filter((p) => p.quality === "validé").length;
     const toCheck = rows.filter((p) => p.quality === "à vérifier").length;
+    const handicap = rows.filter((p) => p.handicap).length;
     return [
       {
         label: t("producteurs.index.stat.total"),
@@ -566,6 +567,13 @@ export default class ProducteursPage {
         sub: t("producteurs.index.stat.youthSub", { age: youthAge, pct: pct(youth) }),
         icon: "grass",
         ...TONE.attente,
+      },
+      {
+        label: t("producteurs.index.stat.handicap"),
+        value: nf.format(handicap),
+        sub: t("producteurs.index.stat.shareSub", { pct: pct(handicap) }),
+        icon: "accessible",
+        ...(handicap ? TONE.info : TONE.neutre),
       },
       {
         label: t("producteurs.index.stat.validated"),
@@ -637,6 +645,7 @@ export default class ProducteursPage {
       title: `${p.firstName} ${p.lastName}`,
       subtitle: [p.code, p.village].filter(Boolean).join(" · "),
       icon: "agriculture",
+      image: p.photoUrl ?? null,
       badges: [
         { label: t(st.label), bg: st.bg, fg: st.fg },
         { label: t(q.label), bg: q.bg, fg: q.fg },
