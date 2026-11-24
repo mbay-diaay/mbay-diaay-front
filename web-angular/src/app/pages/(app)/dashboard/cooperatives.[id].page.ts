@@ -1,24 +1,32 @@
-import { Component, computed, inject, signal } from "@angular/core";
+import { Component, computed, effect, inject, signal, untracked } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, RouterLink } from "@angular/router";
 import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
+import { listOrganisations, orgFromApi } from "@/lib/api/organisations";
 import { fetchAllPages } from "@/lib/api/pagination";
+import { loadScoopStatsFromApi } from "@/lib/api/session";
 import { inviteUser, listUsers } from "@/lib/api/users";
+import { organisationDraft } from "@/lib/coop-request-templates";
 import { memberDues } from "@/lib/contributions";
-import { ageAtMost, fmtDate, fmtDateTime, nf } from "@/lib/format";
+import { fmtDate, fmtDateTime, nf, nf1 } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
 import { accountOf, managerOf, type AccountState } from "@/lib/scoop-account";
+import { scoopFigures } from "@/lib/scoop-figures";
 import { AppShellComponent } from "@shared/app-shell.component";
+import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
 import { StoreService } from "@shared/store.service";
 import { createPager } from "@shared/pager";
 import {
   DetailModalComponent,
   IconComponent,
+  ModalComponent,
   PaginationComponent,
   SnackbarService,
+  TextFieldComponent,
+  V2_PAGE_STYLES,
   type Badge,
   type DetailView,
   type IconName,
@@ -124,14 +132,19 @@ const initials = (name: string) =>
   imports: [
     RouterLink,
     AppShellComponent,
+    ContactScoopModalComponent,
     IconComponent,
     DetailModalComponent,
+    ModalComponent,
     PaginationComponent,
+    TextFieldComponent,
     TechnicianDialogComponent,
     OrganisationDialogComponent,
     MemberDialogComponent,
   ],
-  styles: `
+  styles: [
+    V2_PAGE_STYLES,
+    `
     .mono {
       font-family: var(--v2-font-mono);
       font-size: 11px;
@@ -581,6 +594,7 @@ const initials = (name: string) =>
       }
     }
   `,
+  ],
   template: `
     <app-shell [perm]="perms" [area]="t()('cooperatives.fiche.area')">
       @if (scoop(); as coop) {
@@ -735,6 +749,11 @@ const initials = (name: string) =>
                 <ui-icon name="mail" [size]="18" />{{ t()("cooperatives.fiche.resendLink") }}
               </button>
             }
+            @if (manager().user && apiMode && store.can("user.manage")) {
+              <button type="button" class="ghost-dark" (click)="openReplaceManagerDialog()">
+                <ui-icon name="edit" [size]="18" />{{ t()("cooperatives.fiche.replaceManager") }}
+              </button>
+            }
           </div>
         </section>
 
@@ -767,7 +786,7 @@ const initials = (name: string) =>
           <div class="panel" role="tabpanel">
             <!-- ═════ Aperçu ═════ -->
             @if (current === "apercu") {
-              <section class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <section class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 @for (stat of stats(); track stat.label; let first = $first) {
                   <div
                     class="card stat flex flex-col p-5"
@@ -801,6 +820,14 @@ const initials = (name: string) =>
                       style="opacity: 0.75"
                       >{{ stat.sub }}</span
                     >
+                    @if (stat.to) {
+                      <a
+                        class="absolute inset-0 rounded-[24px]"
+                        [routerLink]="stat.to"
+                        [queryParams]="stat.query"
+                        [attr.aria-label]="stat.label"
+                      ></a>
+                    }
                   </div>
                 }
               </section>
@@ -817,14 +844,14 @@ const initials = (name: string) =>
                       class="ring grid size-[116px] shrink-0 place-items-center rounded-full"
                       [style.background]="quality().ring"
                       role="img"
-                      [attr.aria-label]="quality().pct + ' % ' + t()('dashboard.quality.ring')"
+                      [attr.aria-label]="(quality().pct ?? '—') + ' % ' + t()('dashboard.quality.ring')"
                     >
                       <div
                         class="grid size-[88px] place-items-center rounded-full text-center"
                         style="background: var(--v2-blanc)"
                       >
                         <span class="text-[24px] font-extrabold leading-none tracking-[-0.03em]"
-                          >{{ quality().pct }}<span class="text-[14px]"> %</span></span
+                          >{{ quality().pct ?? "—" }}@if (quality().pct !== null) {<span class="text-[14px]"> %</span>}</span
                         >
                       </div>
                     </div>
@@ -839,7 +866,7 @@ const initials = (name: string) =>
                             >{{ share.label }}</span
                           >
                           <span class="font-extrabold tabular-nums" [class.zero]="!share.n">{{
-                            nf.format(share.n)
+                            show(share.n)
                           }}</span>
                         </li>
                       }
@@ -859,12 +886,12 @@ const initials = (name: string) =>
                         <div class="flex items-center justify-between text-[14px] font-semibold">
                           <span>{{ share.label }}</span>
                           <span class="font-extrabold tabular-nums" [class.zero]="!share.n"
-                            >{{ nf.format(share.n) }}
-                            <span class="sub">· {{ share.pct }} %</span></span
+                            >{{ show(share.n) }}
+                            @if (share.pct !== null) {<span class="sub">· {{ share.pct }} %</span>}</span
                           >
                         </div>
                         <div class="bar mt-1.5">
-                          <span [style.width.%]="share.pct" [style.background]="share.color"></span>
+                          <span [style.width.%]="share.pct ?? 0" [style.background]="share.color"></span>
                         </div>
                       </li>
                     }
@@ -914,7 +941,7 @@ const initials = (name: string) =>
                           <span
                             class="text-[24px] font-extrabold tracking-[-0.03em] tabular-nums"
                             [class.zero]="!pendingItem.n"
-                            >{{ nf.format(pendingItem.n) }}</span
+                            >{{ show(pendingItem.n) }}</span
                           >
                           <ui-icon name="arrow_forward" [size]="18" class="go" />
                         </a>
@@ -1404,7 +1431,11 @@ const initials = (name: string) =>
                       {{ t()("cooperatives.fiche.techniciens.empty.title") }}
                     </p>
                     <p class="sub max-w-md">
-                      {{ t()("cooperatives.fiche.techniciens.empty.text") }}
+                      {{
+                        canReadTechnicians()
+                          ? t()("cooperatives.fiche.techniciens.empty.text")
+                          : t()("cooperatives.fiche.techniciens.unavailable")
+                      }}
                     </p>
                   </div>
                 }
@@ -1462,6 +1493,9 @@ const initials = (name: string) =>
             @if (current === "cotisations") {
               <section class="mt-6">
                 @if (dues().rule) {
+                  @if (apiMode) {
+                    <p class="sub mb-4">{{ t()("cooperatives.fiche.cot.unavailable.text") }}</p>
+                  }
                   <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <div class="card stat p-5">
                       <span class="watermark" style="color: var(--v2-foret)" aria-hidden="true"
@@ -1542,7 +1576,9 @@ const initials = (name: string) =>
                         /></span>
                       </button>
                     } @empty {
-                      <p class="sub px-5 pb-6">{{ t()("cooperatives.fiche.cot.late.none") }}</p>
+                      <p class="sub px-5 pb-6">
+                        {{ apiMode ? "—" : t()("cooperatives.fiche.cot.late.none") }}
+                      </p>
                     }
                     <ui-pagination class="px-5 pb-5" [pager]="latePager" />
                   </section>
@@ -1571,11 +1607,129 @@ const initials = (name: string) =>
       }
 
       <!-- ───── Détail (organisation, adhérent, technicien, réunion) : on reste sur la fiche ───── -->
-      <ui-detail-modal [view]="detail()" (closed)="closeDetail()" />
+      <ui-detail-modal [view]="detail()" (closed)="closeDetail()">
+        @if (contactOrg(); as org) {
+          <button detail-actions type="button" class="btn btn-ghost" (click)="openContact(org)">
+            <ui-icon name="mail" [size]="18" />{{ t()("demandes.action") }}
+          </button>
+        }
+      </ui-detail-modal>
+      <ui-contact-scoop-modal
+        [open]="contactTargets().length > 0"
+        kind="organisation"
+        [targets]="contactTargets()"
+        [link]="contactLink()"
+        (closed)="contactTargets.set([])"
+      />
       <app-technician-dialog [(open)]="techOpen" [scoopId]="coopId()" />
       <app-organisation-dialog [(open)]="orgOpen" [scoopId]="coopId()" />
       <app-member-dialog [(open)]="memberOpen" [scoopId]="coopId()" />
     </app-shell>
+
+    @if (replaceManagerDialogOpen()) {
+      <ui-modal
+        [open]="replaceManagerDialogOpen()"
+        [title]="t()('cooperatives.fiche.replaceModal.title')"
+        [description]="t()('cooperatives.fiche.replaceModal.description')"
+        icon="badge"
+        tone="brand"
+        (closed)="replaceManagerDialogOpen.set(false)"
+      >
+        <div class="grid gap-5">
+          @if (manager().user; as current) {
+            <div
+              class="flex items-center gap-3 rounded-[18px] border p-3.5"
+              style="background: var(--v2-creme); border-color: var(--v2-bord-carte)"
+            >
+              <span
+                class="grid size-11 shrink-0 place-items-center rounded-full text-[13px] font-extrabold"
+                style="background: var(--v2-foret); color: var(--v2-citron)"
+              >
+                {{ manager().initials || "—" }}
+              </span>
+              <div class="min-w-0 flex-1">
+                <p class="mono" style="color: var(--v2-gris-texte)">
+                  {{ t()("cooperatives.fiche.manager") }} actuel
+                </p>
+                <p class="truncate text-[15px] font-extrabold" style="color: var(--v2-encre)">
+                  {{ current.name }}
+                </p>
+                <p class="truncate text-[13px] font-medium" style="color: var(--v2-gris-texte)">
+                  {{ current.email }}{{ current.phone ? " · " + current.phone : "" }}
+                </p>
+              </div>
+              <span
+                class="badge shrink-0"
+                [style.background]="account(manager().state).bg"
+                [style.color]="account(manager().state).fg"
+              >
+                {{ t()(account(manager().state).label) }}
+              </span>
+            </div>
+          }
+
+          @if (manager().user?.active) {
+            <div
+              class="flex items-start gap-3 rounded-[18px] p-3.5 text-[13.5px] font-semibold leading-snug"
+              style="background: var(--v2-attente-bg); color: var(--v2-attente-fg)"
+              role="note"
+            >
+              <span
+                class="grid size-9 shrink-0 place-items-center rounded-[12px]"
+                style="background: color-mix(in oklab, currentColor 14%, transparent)"
+              >
+                <ui-icon name="warning" [size]="20" />
+              </span>
+              <p class="m-0 pt-0.5">{{ t()("cooperatives.fiche.lastManagerWarn") }}</p>
+            </div>
+          }
+
+          <div class="grid gap-4">
+            <ui-text-field
+              [label]="t()('cooperatives.fiche.replaceModal.name')"
+              type="text"
+              autocomplete="name"
+              placeholder="Ex. : Fatou Ndiaye"
+              icon="badge"
+              [value]="newManagerName()"
+              (valueChange)="newManagerName.set($event)"
+            />
+            <ui-text-field
+              [label]="t()('cooperatives.fiche.replaceModal.email')"
+              preset="email"
+              icon="mail"
+              [value]="newManagerEmail()"
+              (valueChange)="newManagerEmail.set($event)"
+            />
+            <ui-text-field
+              [label]="t()('cooperatives.fiche.replaceModal.phone')"
+              preset="phoneSn"
+              icon="call"
+              optional="facultatif"
+              [value]="newManagerPhone()"
+              (valueChange)="newManagerPhone.set($event)"
+            />
+          </div>
+        </div>
+
+        <div modal-footer class="flex flex-wrap justify-end gap-3">
+          <button type="button" class="btn btn-ghost" (click)="replaceManagerDialogOpen.set(false)">
+            {{ t()("qualite.merge.cancel") }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            [disabled]="replaceManagerInProgress() || !newManagerName().trim() || !newManagerEmail().trim()"
+            (click)="submitReplaceManager()"
+          >
+            <span>{{ t()("cooperatives.fiche.replaceModal.confirm") }}</span>
+            <span class="btn-chip" aria-hidden="true">
+              <ui-icon name="arrow_forward" [size]="16" />
+            </span>
+          </button>
+        </div>
+      </ui-modal>
+    }
   `,
 })
 export default class CooperativeDetailPage {
@@ -1594,6 +1748,19 @@ export default class CooperativeDetailPage {
   protected readonly memberFilter = signal<"tous" | "membre" | "candidat" | "autres">("tous");
   /** `tous`, un type d'organisation (« GIE », « Individuel »…) ou `aucun` (à qualifier). */
   protected readonly orgFilter = signal<string>("tous");
+
+  /**
+   * Pourquoi une organisation est « À qualifier » : son type n'a pas pu être déduit. On dit le problème précis, pour que
+   * le gestionnaire sache quoi corriger (nom vide, « Non précisé », nom sans GIE/Association/Section/Groupement, ou
+   * organisation sans aucun producteur).
+   */
+  protected qualifyIssue(org: { name: string; type?: string | null; producers?: number }): string {
+    const t = this.t();
+    const name = (org.name ?? "").trim();
+    if (!name || /^(non pr[ée]cis[ée]e?|n\/?a|inconnu|\?+)$/i.test(name)) return t("cooperatives.fiche.gie.issue.noName");
+    if (org.producers === 0) return t("cooperatives.fiche.gie.issue.noProducer", { name });
+    return t("cooperatives.fiche.gie.issue.unknownType", { name });
+  }
 
   /** Types d'organisation présents dans la coopérative, du plus fréquent au moins fréquent ; « À qualifier » en dernier. */
   protected readonly orgTypes = computed(() => {
@@ -1681,9 +1848,33 @@ export default class CooperativeDetailPage {
 
   protected readonly apiMode = isApiMode();
 
+  /** Faux en mode API tant que les organisations de la coopérative n'ont pas été lues sur le serveur. */
+  protected readonly orgsReady = signal(!isApiMode());
+
   constructor() {
+    if (!isApiMode()) return;
     // Mode API : le gestionnaire de la coopérative est un compte du serveur ; on le charge pour qui peut les lister.
-    if (isApiMode() && this.store.can("user.manage")) void this.loadAccounts();
+    if (this.store.can("user.manage")) void this.loadAccounts();
+    // Chiffres (Kobo) et organisations de la coopérative affichée : lus sur l'API à chaque changement de fiche.
+    effect(() => {
+      const scoopId = this.id();
+      if (scoopId) untracked(() => void this.loadFromApi(scoopId));
+    });
+  }
+
+  private async loadFromApi(scoopId: string): Promise<void> {
+    this.orgsReady.set(false);
+    await Promise.allSettled([loadScoopStatsFromApi(scoopId), this.loadOrganisations(scoopId)]);
+  }
+
+  private async loadOrganisations(scoopId: string): Promise<void> {
+    try {
+      const organisations = await fetchAllPages((query) => listOrganisations({ ...query, scoopId }));
+      this.store.actions.replaceScoopOrgsFromApi(scoopId, organisations.map(orgFromApi));
+      if (this.id() === scoopId) this.orgsReady.set(true);
+    } catch {
+      // Silencieux : les organisations restent à « — » plutôt qu'une liste de démonstration.
+    }
   }
 
   private async loadAccounts(): Promise<void> {
@@ -1694,6 +1885,45 @@ export default class CooperativeDetailPage {
     }
   }
   protected readonly resending = signal(false);
+  protected readonly replaceManagerDialogOpen = signal(false);
+  protected readonly replaceManagerInProgress = signal(false);
+  protected readonly newManagerName = signal("");
+  protected readonly newManagerEmail = signal("");
+  protected readonly newManagerPhone = signal("");
+
+  protected openReplaceManagerDialog(): void {
+    this.newManagerName.set("");
+    this.newManagerEmail.set("");
+    this.newManagerPhone.set("");
+    this.replaceManagerDialogOpen.set(true);
+  }
+
+  /** Nomme le nouveau gestionnaire, puis désactive l'ancien : la coopérative n'est jamais sans destinataire. */
+  protected async submitReplaceManager(): Promise<void> {
+    const currentScoop = this.scoop();
+    const name = this.newManagerName().trim();
+    const email = this.newManagerEmail().trim().toLowerCase();
+    const phone = this.newManagerPhone().trim();
+    if (!currentScoop || !name || !email || this.replaceManagerInProgress()) return;
+    this.replaceManagerInProgress.set(true);
+    try {
+      const previousManager = this.manager().user;
+      await this.store.actions.addUser({
+        name,
+        email,
+        phone: phone || "",
+        role: "gestionnaire",
+        scoopId: currentScoop.id,
+      });
+      if (previousManager && previousManager.active) {
+        await this.store.actions.toggleUser(previousManager.id);
+      }
+      this.replaceManagerDialogOpen.set(false);
+      this.snackbar.success(this.t()("cooperatives.fiche.replaceModal.success", { name }));
+    } finally {
+      this.replaceManagerInProgress.set(false);
+    }
+  }
 
   /** Renvoie le lien d'activation au gestionnaire qui n'a pas encore choisi son mot de passe. */
   protected async resendManagerLink(): Promise<void> {
@@ -1734,6 +1964,13 @@ export default class CooperativeDetailPage {
 
   protected readonly orgCount = computed(() => this.base().orgs.length);
 
+  /** Chiffres Kobo de la coopérative (API en mode API, « — » si absents ; calcul local en démonstration). */
+  private readonly figures = computed(() => scoopFigures(this.store.state(), this.id()));
+  protected readonly show = (value: number | null) => (value === null ? "—" : nf.format(value));
+  /** Mode API : les listes d'adhérents et de techniciens ne s'affichent qu'à qui peut les lire. */
+  private readonly canReadMembers = computed(() => !isApiMode() || this.store.can("member.read"));
+  protected readonly canReadTechnicians = computed(() => !isApiMode() || this.store.can("user.manage"));
+
   protected readonly tabs = computed(() => {
     const t = this.t();
     const b = this.base();
@@ -1753,22 +1990,22 @@ export default class CooperativeDetailPage {
         // « Organisations (GIE, Individuel, À qualifier) » : les types présents, dans l'ordre du filtre.
         label: this.orgTypes().length
           ? `${t("cooperatives.fiche.tab.orgs")} (${this.orgTypes()
-              .map((ty) => ty.label)
-              .join(", ")})`
+            .map((ty) => ty.label)
+            .join(", ")})`
           : t("cooperatives.fiche.tab.orgs"),
-        count: b.orgs.length,
+        count: this.orgsReady() ? b.orgs.length : (this.figures().organisations ?? "—"),
       },
       {
         id: "membres" as const,
         icon: "group" as IconName,
         label: t("cooperatives.fiche.tab.adherents"),
-        count: b.members.length,
+        count: this.canReadMembers() ? b.members.length : "—",
       },
       {
         id: "techniciens" as const,
         icon: "person" as IconName,
         label: strip(t("cooperatives.fiche.tab.techniciens", { count: 0 })),
-        count: b.technicians.length,
+        count: this.canReadTechnicians() ? b.technicians.length : "—",
       },
       {
         id: "reunions" as const,
@@ -1798,106 +2035,144 @@ export default class CooperativeDetailPage {
           `${ty.count} ${ty.label === ty.label.toUpperCase() ? ty.label : ty.label.toLowerCase()}`,
       )
       .join(" · ");
+    const figures = this.figures();
+    const orgsKnown = this.orgsReady();
+    const orgCount = orgsKnown ? b.orgs.length : figures.organisations;
+    const none = t("cooperatives.fiche.unavailable");
+    const scoopQuery = { scoop: this.id() };
     return [
       {
         label: t("cooperatives.card.producers"),
-        value: nf.format(b.producers.length),
-        sub: t("cooperatives.structure.producersSub"),
+        value: this.show(figures.producers),
+        sub:
+          figures.women === null
+            ? t("cooperatives.fiche.kpi.producersSubNone")
+            : t("cooperatives.fiche.kpi.producersSub", {
+              women: nf.format(figures.women),
+              youth: this.show(figures.youth),
+            }),
         icon: "agriculture" as IconName,
         bg: "",
         fg: "",
+        to: "/dashboard/producteurs",
+        query: scoopQuery,
+      },
+      {
+        label: t("cooperatives.fiche.kpi.plots"),
+        value: this.show(figures.plots),
+        sub:
+          figures.plotAreaHa === null
+            ? t("cooperatives.fiche.kpi.plotsSubNone")
+            : t("cooperatives.fiche.kpi.plotsSub", { area: nf1.format(figures.plotAreaHa) }),
+        icon: "landscape" as IconName,
+        bg: "var(--v2-culture-bg)",
+        fg: "var(--v2-culture-fg)",
+        to: null,
+        query: null,
       },
       {
         label: t("cooperatives.fiche.kpi.adherents"),
-        value: nf.format(b.members.length),
-        sub: t("cooperatives.fiche.kpi.adherentsSub", { count: active }),
+        value: this.canReadMembers() ? nf.format(b.members.length) : "—",
+        sub: this.canReadMembers() ? t("cooperatives.fiche.kpi.adherentsSub", { count: active }) : none,
         icon: "group" as IconName,
         bg: "var(--v2-sauge)",
         fg: "var(--v2-vert-pousse)",
+        to: null,
+        query: null,
       },
       {
         label: t("cooperatives.fiche.kpi.orgs"),
-        value: nf.format(b.orgs.length),
-        sub: orgBreakdown || t("cooperatives.fiche.gie.empty.title"),
+        value: this.show(orgCount),
+        sub: orgsKnown ? orgBreakdown || t("cooperatives.fiche.gie.empty.title") : none,
         icon: "hub" as IconName,
         bg: "var(--v2-info-bg)",
         fg: "var(--v2-info-fg)",
+        to: "/dashboard/organisations",
+        query: scoopQuery,
       },
       {
         label: t("cooperatives.fiche.kpi.techniciansTotal"),
-        value: nf.format(b.technicians.length),
-        sub: t("cooperatives.fiche.kpi.techniciansSub", { count: techActive }),
+        value: this.canReadTechnicians() ? nf.format(b.technicians.length) : "—",
+        sub: this.canReadTechnicians() ? t("cooperatives.fiche.kpi.techniciansSub", { count: techActive }) : none,
         icon: "person" as IconName,
-        bg: "var(--v2-culture-bg)",
-        fg: "var(--v2-culture-fg)",
+        bg: "var(--v2-attente-bg)",
+        fg: "var(--v2-attente-fg)",
+        to: null,
+        query: null,
       },
     ];
   });
 
   protected readonly quality = computed(() => {
-    const ps = this.base().producers;
     const t = this.t();
-    const rows = [
+    const figures = this.figures();
+    const b = this.base();
+    // Mode API : seuls « validées » et « à vérifier » sont fournis par le serveur ; doublons et invalides restent « — ».
+    const fromApi = isApiMode();
+    const ps = b.producers;
+    const rows: { label: string; n: number | null; color: string }[] = [
       {
         label: t("dashboard.quality.validated"),
-        n: ps.filter((p) => p.quality === "validé").length,
+        n: fromApi ? figures.validated : ps.filter((p) => p.quality === "validé").length,
         color: "var(--v2-vert-pousse)",
       },
       {
         label: t("dashboard.quality.toVerify"),
-        n: ps.filter((p) => p.quality === "à vérifier").length,
+        n: fromApi ? figures.toCheck : ps.filter((p) => p.quality === "à vérifier").length,
         color: "var(--v2-soleil)",
       },
       {
         label: t("dashboard.quality.duplicate"),
-        n: ps.filter((p) => p.quality === "doublon").length,
+        n: fromApi ? null : ps.filter((p) => p.quality === "doublon").length,
         color: "var(--v2-info-fg)",
       },
       {
         label: t("dashboard.quality.invalid"),
-        n: ps.filter((p) => p.quality === "invalide").length,
+        n: fromApi ? null : ps.filter((p) => p.quality === "invalide").length,
         color: "var(--v2-erreur-fg)",
       },
     ];
-    const total = ps.length || 1;
+    const totalProducers = figures.producers;
+    const total = totalProducers || 1;
     let acc = 0;
     const stops = rows.map((r) => {
       const from = (acc / total) * 100;
-      acc += r.n;
+      acc += r.n ?? 0;
       return `${r.color} ${from}% ${(acc / total) * 100}%`;
     });
+    const validated = rows[0]!.n;
     return {
       rows,
-      pct: Math.round((rows[0]!.n / total) * 100),
-      ring: ps.length ? `conic-gradient(${stops.join(", ")})` : "var(--v2-lin)",
+      pct: validated === null || !totalProducers ? null : Math.round((validated / total) * 100),
+      ring: totalProducers ? `conic-gradient(${stops.join(", ")})` : "var(--v2-lin)",
     };
   });
 
   protected readonly composition = computed(() => {
     const t = this.t();
-    const ps = this.base().producers;
-    const n = ps.length || 1;
+    const figures = this.figures();
+    const total = figures.producers || 0;
     const youthAge = this.store.state().youthMaxAge;
-    const women = ps.filter((p) => p.sex === "F").length;
-    const youth = ps.filter((p) => ageAtMost(p.age, youthAge)).length;
-    const handicap = ps.filter((p) => p.handicap).length;
+    // « Situation de handicap » : le serveur ne fournit pas ce chiffre, « — » en mode API.
+    const handicap = isApiMode() ? null : this.base().producers.filter((p) => p.handicap).length;
+    const share = (count: number | null) => (count === null || !total ? null : Math.round((count / total) * 100));
     return [
       {
         label: t("cooperatives.fiche.compo.women"),
-        n: women,
-        pct: Math.round((women / n) * 100),
+        n: figures.women,
+        pct: share(figures.women),
         color: "var(--v2-chart-2)",
       },
       {
         label: t("cooperatives.fiche.compo.youth", { age: youthAge }),
-        n: youth,
-        pct: Math.round((youth / n) * 100),
+        n: figures.youth,
+        pct: share(figures.youth),
         color: "var(--v2-foret)",
       },
       {
         label: t("cooperatives.fiche.compo.handicap"),
         n: handicap,
-        pct: Math.round((handicap / n) * 100),
+        pct: share(handicap),
         color: "var(--v2-soleil)",
       },
     ];
@@ -1907,6 +2182,14 @@ export default class CooperativeDetailPage {
     const t = this.t();
     const c = this.scoop();
     const none = t("cooperatives.fiche.info.none");
+    const unavailable = t("cooperatives.fiche.unavailable");
+    // Villages couverts : comptés sur les producteurs lus ; sans producteur lu, « Non disponible ».
+    const villages = new Set(
+      this.base()
+        .producers.map((p) => p.village)
+        .filter(Boolean),
+    ).size;
+    const lastImportAt = this.store.state().scoopStats[this.id()]?.lastImportAt ?? null;
     return [
       { label: t("cooperatives.fiche.info.code"), value: c?.code ?? none, known: !!c?.code },
       {
@@ -1927,15 +2210,18 @@ export default class CooperativeDetailPage {
       },
       {
         label: t("cooperatives.fiche.info.villages"),
-        value: nf.format(
-          new Set(
-            this.base()
-              .producers.map((p) => p.village)
-              .filter(Boolean),
-          ).size,
-        ),
-        known: true,
+        value: villages ? nf.format(villages) : unavailable,
+        known: villages > 0,
       },
+      ...(isApiMode()
+        ? [
+          {
+            label: t("cooperatives.fiche.lastImport"),
+            value: lastImportAt ? fmtDate(lastImportAt) : unavailable,
+            known: !!lastImportAt,
+          },
+        ]
+        : []),
     ];
   });
 
@@ -1959,7 +2245,7 @@ export default class CooperativeDetailPage {
     return [
       {
         label: t("cooperatives.fiche.pending.dossiers"),
-        n: dossiers,
+        n: dossiers as number | null,
         icon: "folder_shared" as IconName,
         to: "/dashboard/dossiers",
         bg: "var(--v2-info-bg)",
@@ -1967,7 +2253,8 @@ export default class CooperativeDetailPage {
       },
       {
         label: t("cooperatives.fiche.pending.corrections"),
-        n: corrections,
+        // Mode API : les corrections ne sont lues que par qui peut les gérer.
+        n: isApiMode() && !this.store.can("correction.manage") ? null : corrections,
         icon: "edit" as IconName,
         to: "/dashboard/qualite/corrections",
         bg: "var(--v2-culture-bg)",
@@ -1975,7 +2262,8 @@ export default class CooperativeDetailPage {
       },
       {
         label: t("cooperatives.fiche.pending.alerts"),
-        n: alerts,
+        // Mode API : les alertes de qualité ne viennent pas encore du serveur.
+        n: isApiMode() ? null : alerts,
         icon: "warning" as IconName,
         to: "/dashboard/qualite/alertes",
         bg: "var(--v2-attente-bg)",
@@ -2039,6 +2327,8 @@ export default class CooperativeDetailPage {
 
   private readonly duesOf = computed(() => {
     const s = this.store.state();
+    // Mode API : le serveur ne fournit pas encore les cotisations : ni règle, ni paiement, ni retard affichés.
+    if (isApiMode()) return { rule: undefined, map: new Map<string, ReturnType<typeof memberDues>>() };
     const rule = s.contributionRules.find((r) => r.scoopId === this.id());
     const now = new Date().toISOString();
     return {
@@ -2119,6 +2409,16 @@ export default class CooperativeDetailPage {
   protected readonly dues = computed(() => {
     const { rule, map: dues } = this.duesOf();
     const members = this.base().members;
+    // Mode API : la structure reste, chaque valeur sans source est « — » et la liste des retards est vide.
+    if (isApiMode()) {
+      return {
+        rule: { apiPlaceholder: true } as unknown as NonNullable<typeof rule>,
+        ruleLabel: "—",
+        collected: "—",
+        remaining: "—",
+        late: [] as { id: string; name: string; initials: string; owes: string; balance: number }[],
+      };
+    }
     if (!rule) return { rule: null, ruleLabel: "", collected: "", remaining: "", late: [] };
     let collected = 0;
     let remaining = 0;
@@ -2166,6 +2466,29 @@ export default class CooperativeDetailPage {
 
   protected closeDetail(): void {
     this.detailTarget.set(null);
+  }
+
+  /** Mode API, administrateur CRADESC : l'organisation ouverte est « à qualifier » (type inconnu) → bouton de contact. */
+  protected readonly contactOrg = computed(() => {
+    const target = this.detailTarget();
+    if (target?.kind !== "org" || !isApiMode() || !this.store.can("coop_request.send")) return null;
+    const org = this.store.state().orgs.find((candidate) => candidate.id === target.id);
+    return org && !org.type ? org : null;
+  });
+  protected readonly contactTargets = signal<CoopRequestTarget[]>([]);
+  protected readonly contactLink = signal("");
+
+  /** Ferme la fiche puis ouvre la demande à la coopérative (une seule fenêtre à la fois). */
+  protected openContact(org: { id: string; name: string; scoopId: string }): void {
+    this.detailTarget.set(null);
+    this.contactLink.set(`/dashboard/organisations/${org.id}`);
+    this.contactTargets.set([
+      {
+        scoopId: org.scoopId,
+        items: [{ type: "organisation", id: org.id, label: org.name }],
+        ...organisationDraft({ name: org.name }),
+      },
+    ]);
   }
 
   protected readonly detail = computed<DetailView | null>(() => {
@@ -2237,6 +2560,9 @@ export default class CooperativeDetailPage {
           ),
           fact(t("cooperatives.fiche.detail.village"), o.village, "location_on"),
         ],
+        alerts: o.type
+          ? undefined
+          : [{ title: t("cooperatives.fiche.detail.issue"), text: this.qualifyIssue({ ...o, producers }) }],
         sections: [
           {
             title: t("cooperatives.fiche.detail.orgMembers"),
@@ -2271,8 +2597,13 @@ export default class CooperativeDetailPage {
           badge(memberStatus(m.status)),
           ...(dueTone && d ? [{ label: d.state, ...dueTone }] : []),
         ],
-        kpis: d
+        kpis: !d && isApiMode()
           ? [
+            kpi(t("cooperatives.fiche.detail.paid"), 0, "check_circle", SAUGE, "—"),
+            kpi(t("cooperatives.fiche.detail.balance"), 0, "payments", SAUGE, "—"),
+          ]
+          : d
+            ? [
               kpi(
                 t("cooperatives.fiche.detail.paid"),
                 d.paid,
@@ -2288,7 +2619,7 @@ export default class CooperativeDetailPage {
                 `${nf.format(d.balance)} F`,
               ),
             ]
-          : [],
+            : [],
         facts: [
           fact(t("cooperatives.fiche.detail.phone"), this.store.phone(m.phone), "call"),
           fact(t("cooperatives.fiche.detail.email"), m.email, "mail"),
@@ -2337,10 +2668,10 @@ export default class CooperativeDetailPage {
       const state = u.active
         ? { label: t("cooperatives.fiche.techniciens.active"), ...SAUGE }
         : {
-            label: t("cooperatives.fiche.techniciens.closed"),
-            bg: "var(--v2-lin)",
-            fg: "var(--v2-gris-texte)",
-          };
+          label: t("cooperatives.fiche.techniciens.closed"),
+          bg: "var(--v2-lin)",
+          fg: "var(--v2-gris-texte)",
+        };
       return {
         title: u.name,
         subtitle: u.email,
@@ -2387,13 +2718,13 @@ export default class CooperativeDetailPage {
           : []),
         ...(mt.status === "planifiée" && !view.past
           ? [
-              kpi(
-                t("cooperatives.fiche.detail.daysLeft"),
-                Math.ceil((new Date(mt.date).getTime() - Date.now()) / 86_400_000),
-                "calendar_today",
-                ATTENTE,
-              ),
-            ]
+            kpi(
+              t("cooperatives.fiche.detail.daysLeft"),
+              Math.ceil((new Date(mt.date).getTime() - Date.now()) / 86_400_000),
+              "calendar_today",
+              ATTENTE,
+            ),
+          ]
           : []),
       ],
       facts: [
@@ -2401,10 +2732,10 @@ export default class CooperativeDetailPage {
         fact(t("cooperatives.fiche.detail.place"), mt.place, "location_on"),
         ...(mt.cancelReason
           ? [
-              fact(t("cooperatives.fiche.detail.cancelReason"), mt.cancelReason, "warning", {
-                wide: true,
-              }),
-            ]
+            fact(t("cooperatives.fiche.detail.cancelReason"), mt.cancelReason, "warning", {
+              wide: true,
+            }),
+          ]
           : []),
       ],
       sections: [

@@ -1029,7 +1029,8 @@ export default class ImportsPage {
   protected readonly issueLevel = signal<"rejet" | "avertissement" | "tous">("rejet");
   protected readonly sessionReports = new Map<string, Issue[]>();
 
-  protected readonly batches = computed(() => this.store.state().imports);
+  /** Mode API : pas de lots fictifs, le rapport Kobo remplace la liste. */
+  protected readonly batches = computed(() => (this.koboMode ? [] : this.store.state().imports));
 
   // ---------------------------------------------------- Rapport de l'import Kobo (mode API)
 

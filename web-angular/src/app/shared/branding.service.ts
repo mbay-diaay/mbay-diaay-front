@@ -34,17 +34,17 @@ export class BrandingService {
   /** Logo choisi pour un fond clair, ou null (logo d'origine). */
   colorLogo(): string | null {
     const value = this.branding();
-    return value?.custom.color ? value.logoUrl : null;
+    return value?.custom?.color ? value.logoUrl : null;
   }
 
   /** Logo choisi pour un fond foncé, ou null (logo d'origine). */
   inverseLogo(): string | null {
     const value = this.branding();
-    return value?.custom.inverse ? value.logoInverseUrl : null;
+    return value?.custom?.inverse ? value.logoInverseUrl : null;
   }
 
   private updateFavicon(value: Branding): void {
-    if (typeof document === "undefined" || !value.custom.color) return;
+    if (typeof document === "undefined" || !value?.custom?.color) return;
     let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
     if (!link) {
       link = document.createElement("link");

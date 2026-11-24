@@ -4,6 +4,7 @@ import { RouterLink } from "@angular/router";
 import { isApiMode } from "@/lib/api/config";
 import { syncImage } from "@/lib/api/media";
 import { fetchAllPages } from "@/lib/api/pagination";
+import { loadScoopStatsFromApi } from "@/lib/api/session";
 import { listUsers } from "@/lib/api/users";
 import {
   archiveScoop as archiveScoopApi,
@@ -15,11 +16,12 @@ import {
   scoopFromApi,
   updateScoop as updateScoopApi,
 } from "@/lib/api/scoops";
-import { fmtDate, nf } from "@/lib/format";
+import { fmtDate, nf, nf1 } from "@/lib/format";
 import type { PreparedImage } from "@/lib/image";
 import type { MessageKey } from "@/lib/i18n";
 import { accountOf, managerOf, type AccountState } from "@/lib/scoop-account";
 import { inScope } from "@/lib/scope";
+import { scoopFigures, sumKnown } from "@/lib/scoop-figures";
 import { blockingDossiers, generateScoopCode, scoopIssues, type ScoopInput } from "@/lib/scoops";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
@@ -43,6 +45,9 @@ type FieldKey =
   "name" | "commune" | "code" | "managerFirstName" | "managerLastName" | "managerEmail";
 
 const VIEW_KEY = "mbd.cooperatives.view";
+/** Un chiffre inconnu (l'API ne l'a pas fourni) s'affiche « — », jamais 0. */
+const show = (value: number | null) => (value === null ? "—" : nf.format(value));
+const showHa = (value: number | null) => (value === null ? "—" : nf1.format(value));
 const FIELD_ORDER: FieldKey[] = [
   "name",
   "commune",
@@ -624,6 +629,23 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
         </ui-collapsible>
       </section>
 
+      <!-- ───── Chiffres de la base Kobo (réseau) ───── -->
+      <section class="card mt-4 p-5" [attr.aria-label]="t()('cooperatives.figure.title')">
+        <h2 class="mono" style="color: var(--v2-ardoise)">{{ t()("cooperatives.figure.title") }}</h2>
+        <p class="sub mt-1">{{ t()("cooperatives.figure.sub") }}</p>
+        <dl class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+          @for (figure of koboTotals(); track figure.key) {
+            <div>
+              <dt class="sub">{{ figure.label }}</dt>
+              <dd class="mt-1 text-[24px] font-extrabold leading-none tracking-[-0.02em] tabular-nums">
+                {{ figure.value
+                }}@if (figure.unit) {<span class="ml-1 text-[13px] font-semibold" style="color: var(--v2-gris-texte)">{{ figure.unit }}</span>}
+              </dd>
+            </div>
+          }
+        </dl>
+      </section>
+
       <!-- ───── Statistiques (aplats, filigrane) ───── -->
       <section
         class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
@@ -883,18 +905,29 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
                 }
               </ol>
 
+              <dl class="mt-4 grid grid-cols-4 gap-2 px-5">
+                @for (figure of row.kobo.slice(1); track figure.key) {
+                  <div>
+                    <dt class="sub text-[11.5px]">{{ figure.label }}</dt>
+                    <dd class="mt-0.5 text-[15px] font-extrabold tabular-nums">
+                      {{ figure.value }}{{ figure.unit ? " " + figure.unit : "" }}
+                    </dd>
+                  </div>
+                }
+              </dl>
+
               <div class="mt-4 px-5">
                 <div class="flex items-center justify-between text-[13px] font-semibold">
                   <span style="color: var(--v2-ardoise)">{{
                     t()("cooperatives.card.quality")
                   }}</span>
-                  <span class="font-extrabold tabular-nums">{{ row.quality }} %</span>
+                  <span class="font-extrabold tabular-nums">{{ row.quality === null ? "—" : row.quality + " %" }}</span>
                 </div>
                 <div class="bar mt-1.5">
                   <span
-                    [style.width.%]="row.quality"
+                    [style.width.%]="row.quality ?? 0"
                     [style.background]="
-                      row.quality >= 70 ? 'var(--v2-vert-pousse)' : 'var(--v2-soleil)'
+                      (row.quality ?? 0) >= 70 ? 'var(--v2-vert-pousse)' : 'var(--v2-soleil)'
                     "
                   ></span>
                 </div>
@@ -933,7 +966,7 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
       } @else {
         <!-- ───── Vue liste ───── -->
         <div class="card mt-3 overflow-x-auto">
-          <table class="w-full min-w-[820px] text-left text-[14px]">
+          <table class="w-full min-w-[1000px] text-left text-[14px]">
             <thead>
               <tr class="mono" style="color: var(--v2-gris-texte)">
                 <th class="px-5 py-3 font-bold">{{ t()("cooperatives.col.name") }}</th>
@@ -946,6 +979,15 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
                 </th>
                 <th class="px-2.5 py-3 text-right font-bold">
                   {{ t()("cooperatives.col.members") }}
+                </th>
+                <th class="px-2.5 py-3 text-right font-bold">
+                  {{ t()("cooperatives.figure.women") }}
+                </th>
+                <th class="px-2.5 py-3 text-right font-bold">
+                  {{ t()("cooperatives.figure.plots") }}
+                </th>
+                <th class="px-2.5 py-3 text-right font-bold">
+                  {{ t()("cooperatives.figure.area") }}
                 </th>
                 <th class="px-3 py-3 font-bold">{{ t()("cooperatives.card.quality") }}</th>
                 <th class="px-5 py-3 font-bold">{{ t()("cooperatives.col.manager") }}</th>
@@ -1001,32 +1043,41 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
                     class="px-3 py-3.5 text-right font-semibold tabular-nums"
                     [class.zero]="!row.gie"
                   >
-                    {{ nf.format(row.gie) }}
+                    {{ show(row.gie) }}
                   </td>
                   <td
                     class="px-3 py-3.5 text-right font-extrabold tabular-nums"
                     [class.zero]="!row.producers"
                   >
-                    {{ nf.format(row.producers) }}
+                    {{ show(row.producers) }}
                   </td>
                   <td
                     class="px-3 py-3.5 text-right font-semibold tabular-nums"
                     [class.zero]="!row.members"
                   >
-                    {{ nf.format(row.members) }}
+                    {{ show(row.members) }}
+                  </td>
+                  <td class="px-3 py-3.5 text-right font-semibold tabular-nums" [class.zero]="!row.figures.women">
+                    {{ show(row.figures.women) }}
+                  </td>
+                  <td class="px-3 py-3.5 text-right font-semibold tabular-nums" [class.zero]="!row.figures.plots">
+                    {{ show(row.figures.plots) }}
+                  </td>
+                  <td class="px-3 py-3.5 text-right font-semibold tabular-nums" [class.zero]="!row.figures.plotAreaHa">
+                    {{ showHa(row.figures.plotAreaHa) }}
                   </td>
                   <td class="px-3 py-3.5">
                     <span class="flex items-center gap-2">
                       <span class="bar w-14"
                         ><span
-                          [style.width.%]="row.quality"
+                          [style.width.%]="row.quality ?? 0"
                           [style.background]="
-                            row.quality >= 70 ? 'var(--v2-vert-pousse)' : 'var(--v2-soleil)'
+                            (row.quality ?? 0) >= 70 ? 'var(--v2-vert-pousse)' : 'var(--v2-soleil)'
                           "
                         ></span
                       ></span>
                       <span class="whitespace-nowrap text-[13px] font-bold tabular-nums"
-                        >{{ row.quality }} %</span
+                        >{{ row.quality === null ? "—" : row.quality + " %" }}</span
                       >
                     </span>
                   </td>
@@ -1272,6 +1323,8 @@ export default class CooperativesPage {
   private readonly snackbar = inject(SnackbarService);
   protected readonly t = this.locale.t;
   protected readonly nf = nf;
+  protected readonly show = show;
+  protected readonly showHa = showHa;
   protected readonly perms = ["scoop.manage", "org.read"] as const;
 
   protected readonly q = signal("");
@@ -1298,23 +1351,21 @@ export default class CooperativesPage {
     const scoops = s.scoops.filter((c) => inScope([{ scoopId: c.id }], session).length === 1);
     const t = this.t();
     return scoops.map((scoop) => {
-      const producers = s.producers.filter((p) => p.scoopId === scoop.id && !p.mergedInto);
-      const members = s.members.filter(
-        (m) => m.scoopId === scoop.id && m.status === "membre",
-      ).length;
-      const scoopOrgs = s.orgs.filter((o) => o.scoopId === scoop.id);
-      const orgs = scoopOrgs.length;
-      const gie = scoopOrgs.filter((o) => o.type === "GIE").length;
+      // Chiffres de la base Kobo : l'API en mode API (« — » tant qu'elle n'a pas répondu), le store en démonstration.
+      const figures = scoopFigures(s, scoop.id);
+      const { producers, members, organisations: orgs } = figures;
+      // Le serveur ne distingue pas les GIE des autres organisations dans ses chiffres : on compte les organisations.
+      const gie = isApiMode() ? orgs : s.orgs.filter((o) => o.scoopId === scoop.id && o.type === "GIE").length;
       const manager = managerOf(s.users, scoop.id);
       const account = accountOf(manager, now);
-      const quality = producers.length
-        ? Math.round(
-            (producers.filter((p) => p.quality === "validé").length / producers.length) * 100,
-          )
-        : 0;
+      const quality =
+        figures.producers && figures.validated !== null
+          ? Math.round((figures.validated / figures.producers) * 100)
+          : null;
       return {
         scoop,
-        producers: producers.length,
+        figures,
+        producers,
         members,
         manager,
         account,
@@ -1337,14 +1388,15 @@ export default class CooperativesPage {
               .toUpperCase()
           : "",
         gie,
+        kobo: this.koboFigures(figures),
         // Lecture « du collectif à l'exploitant » : SCOOP › GIE › Producteurs.
         structure: [
           {
             key: "scoop",
             icon: "diversity_3" as IconName,
             title: t("cooperatives.structure.scoop"),
-            value: nf.format(members),
-            zero: members === 0,
+            value: show(members),
+            zero: !members,
             unit: t("cooperatives.structure.membersUnit"),
             sub: t("cooperatives.structure.scoopSub"),
             bg: "var(--v2-foret)",
@@ -1354,9 +1406,9 @@ export default class CooperativesPage {
             key: "gie",
             icon: "hub" as IconName,
             title: t("cooperatives.structure.gie"),
-            value: nf.format(gie),
-            zero: gie === 0,
-            unit: orgs > gie ? t("cooperatives.structure.orgsUnit", { count: orgs }) : "",
+            value: show(gie),
+            zero: !gie,
+            unit: gie !== null && orgs !== null && orgs > gie ? t("cooperatives.structure.orgsUnit", { count: orgs }) : "",
             sub: t("cooperatives.structure.gieSub"),
             bg: "var(--v2-info-bg)",
             fg: "var(--v2-info-fg)",
@@ -1365,9 +1417,9 @@ export default class CooperativesPage {
             key: "producers",
             icon: "agriculture" as IconName,
             title: t("cooperatives.structure.producers"),
-            value: nf.format(producers.length),
-            zero: producers.length === 0,
-            unit: "",
+            value: show(producers),
+            zero: !producers,
+            unit: figures.women === null ? "" : t("cooperatives.figure.womenShort", { count: nf.format(figures.women) }),
             sub: t("cooperatives.structure.producersSub"),
             bg: "var(--v2-sauge)",
             fg: "var(--v2-vert-pousse)",
@@ -1403,7 +1455,7 @@ export default class CooperativesPage {
       },
       {
         label: t("cooperatives.kpi.members"),
-        value: nf.format(rows.reduce((n, r) => n + r.members, 0)),
+        value: show(sumKnown(rows.map((r) => r.members))),
         sub: t("cooperatives.kpi.membersSub"),
         icon: "group" as IconName,
         bg: "var(--v2-info-bg)",
@@ -1420,12 +1472,46 @@ export default class CooperativesPage {
     ];
   });
 
+  /** Chiffres Kobo : un tableau de cinq valeurs, présentées comme dans la base du CRADESC. */
+  private koboFigures(figures: ReturnType<typeof scoopFigures>) {
+    const t = this.t();
+    return [
+      { key: "producers", label: t("cooperatives.figure.producers"), value: show(figures.producers), unit: "" },
+      { key: "women", label: t("cooperatives.figure.women"), value: show(figures.women), unit: "" },
+      { key: "youth", label: t("cooperatives.figure.youth"), value: show(figures.youth), unit: "" },
+      { key: "plots", label: t("cooperatives.figure.plots"), value: show(figures.plots), unit: "" },
+      {
+        key: "area",
+        label: t("cooperatives.figure.area"),
+        value: showHa(figures.plotAreaHa),
+        unit: figures.plotAreaHa === null ? "" : t("cooperatives.figure.ha"),
+      },
+    ];
+  }
+
+  /** Totaux du réseau (coopératives actives) : producteurs, femmes, jeunes, parcelles, hectares. */
+  protected readonly koboTotals = computed(() => {
+    const rows = this.rows().filter((r) => !r.scoop.archived);
+    return this.koboFigures({
+      producers: sumKnown(rows.map((r) => r.figures.producers)),
+      women: sumKnown(rows.map((r) => r.figures.women)),
+      youth: sumKnown(rows.map((r) => r.figures.youth)),
+      validated: null,
+      toCheck: null,
+      organisations: null,
+      members: null,
+      plots: sumKnown(rows.map((r) => r.figures.plots)),
+      plotAreaHa: sumKnown(rows.map((r) => r.figures.plotAreaHa)),
+    });
+  });
+
   /** Pyramide du réseau : la faîtière fédère les coopératives, qui regroupent des GIE et des producteurs. */
   protected readonly network = computed(() => {
     const t = this.t();
     const rows = this.rows().filter((r) => !r.scoop.archived);
-    const gie = rows.reduce((n, r) => n + r.gie, 0);
-    const producers = rows.reduce((n, r) => n + r.producers, 0);
+    const gie = sumKnown(rows.map((r) => r.gie));
+    const producers = sumKnown(rows.map((r) => r.producers));
+    const women = sumKnown(rows.map((r) => r.figures.women));
     return [
       {
         key: "faitiere",
@@ -1453,8 +1539,8 @@ export default class CooperativesPage {
         key: "gie",
         icon: "hub" as IconName,
         title: t("cooperatives.structure.gie"),
-        value: nf.format(gie),
-        zero: gie === 0,
+        value: show(gie),
+        zero: !gie,
         unit: "",
         sub: t("cooperatives.structure.gieSub"),
         bg: "var(--v2-info-bg)",
@@ -1464,9 +1550,9 @@ export default class CooperativesPage {
         key: "producers",
         icon: "agriculture" as IconName,
         title: t("cooperatives.structure.producers"),
-        value: nf.format(producers),
-        zero: producers === 0,
-        unit: "",
+        value: show(producers),
+        zero: !producers,
+        unit: women === null ? "" : t("cooperatives.figure.womenShort", { count: nf.format(women) }),
         sub: t("cooperatives.structure.producersSub"),
         bg: "var(--v2-sauge)",
         fg: "var(--v2-vert-pousse)",
@@ -1577,10 +1663,12 @@ export default class CooperativesPage {
     try {
       const scoops = await fetchAllPages((query) => listScoops(query));
       this.store.actions.replaceScoopsFromApi(scoops.map(scoopFromApi));
-      this.store.actions.mergeUsersFromApi(managerRowsFromScoops(scoops));
+      this.store.actions.syncManagersFromApi(scoops.map((scoop) => scoop.id), managerRowsFromScoops(scoops));
     } catch {
       this.snackbar.error(this.t()("errors.scoop.loadError"));
     }
+    // Chiffres de la base Kobo : sans réponse du serveur, la liste affiche « — ».
+    await loadScoopStatsFromApi();
     // Les comptes gestionnaires (état « invité », « actif »…) viennent du serveur pour qui peut les lister.
     if (this.store.can("user.manage")) {
       try {

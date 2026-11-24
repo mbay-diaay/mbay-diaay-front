@@ -180,6 +180,7 @@ import {
 } from "./scoops";
 import { canEditMinutes, canMeetingTransition, isMeetingEditable } from "./meetings";
 import { isApiMode } from "./api/config";
+import type { ScoopStatsDto } from "./api/scoops";
 import { mediaSrc } from "./api/media";
 import { clearTokens } from "./api/tokens";
 import { DEMO_MODE } from "./auth/config";
@@ -319,6 +320,8 @@ export interface State {
   deletedDocuments: DocumentMeta[];
   /** Réglages des rappels par coopérative (`*` = valeurs par défaut de l'administration). */
   reminderSettings: Record<string, ReminderSettings>;
+  /** Mode API : chiffres de chaque coopérative (`GET /scoops/stats`), par identifiant. Absent = inconnu, jamais zéro. */
+  scoopStats: Record<string, ScoopStatsDto>;
 }
 
 /** Relie un compte à son membre (même adresse e-mail), quand la personne est aussi membre de la coopérative. */
@@ -365,12 +368,14 @@ function generateTemporaryCode(): string {
 const digitsOf = (value: string) => value.replace(/\D/g, "");
 let state: State = {
   session: null,
-  producers: PRODUCERS,
-  orgs: ORGS,
-  plots: PLOTS,
-  cases: CASES,
-  alerts: ALERTS,
-  audit: [
+  // Mode API : ni producteur, ni organisation, ni parcelle de démonstration avant la lecture sur le serveur.
+  producers: isApiMode() ? [] : PRODUCERS,
+  orgs: isApiMode() ? [] : ORGS,
+  plots: isApiMode() ? [] : PLOTS,
+  cases: isApiMode() ? [] : CASES,
+  alerts: isApiMode() ? [] : ALERTS,
+  // Mode API : pas de journal fictif ; seules les actions de la session s'y ajoutent.
+  audit: isApiMode() ? [] : [
     {
       id: "au3",
       at: "2026-10-21T16:12:00.000Z",
@@ -519,7 +524,7 @@ let state: State = {
         active: true,
       },
     ] satisfies AppUser[]
-  ).map(withMember),
+  ).map(withMember).filter(() => !isApiMode()),
   imports: [
     {
       id: "L-002",
@@ -570,7 +575,7 @@ let state: State = {
   ],
   merges: {},
   youthMaxAge: YOUTH_DEFAULT,
-  corrections: CORRECTIONS,
+  corrections: isApiMode() ? [] : CORRECTIONS,
   devices: DEVICES,
   linkCandidates: ACCOUNT_CANDIDATES,
   links: ACCOUNT_LINKS,
@@ -579,9 +584,9 @@ let state: State = {
   seuils: SEUILS,
   // Mode API : la liste vient du serveur après la connexion (jamais les membres de démonstration).
   members: isApiMode() ? [] : MEMBERS,
-  dossiers: DOSSIERS,
+  dossiers: isApiMode() ? [] : DOSSIERS,
   documents: [...DOCUMENTS, ...LIBRARY_DOCUMENTS],
-  scoops: SCOOPS,
+  scoops: isApiMode() ? [] : SCOOPS,
   campaigns: CAMPAIGN_LIST,
   expenses: EXPENSES,
   inputItems: INPUT_ITEMS,
@@ -595,13 +600,14 @@ let state: State = {
   plans: PLANS,
   reports: [],
   contributionRules: CONTRIBUTION_RULES,
-  payments: CONTRIBUTION_PAYMENTS,
+  payments: isApiMode() ? [] : CONTRIBUTION_PAYMENTS,
   paymentLinks: loadPaymentLinks(),
-  meetings: MEETINGS,
+  meetings: isApiMode() ? [] : MEETINGS,
   rolePermissions: cloneDefaultMatrix(),
   customRoles: [],
   deletedDocuments: [],
   reminderSettings: {},
+  scoopStats: {},
 };
 
 const listeners = new Set<() => void>();
@@ -1158,6 +1164,10 @@ export const actions = {
   replaceOrgsFromApi(items: Org[]) {
     set({ orgs: items });
   },
+  /** Mode API : les organisations d'une coopérative lues sur le serveur remplacent celles qu'on avait pour elle. */
+  replaceScoopOrgsFromApi(scoopId: string, items: Org[]) {
+    set((s) => ({ orgs: [...s.orgs.filter((o) => o.scoopId !== scoopId), ...items] }));
+  },
   /** Mode API : une organisation relue sur le serveur (ajoutée ou mise à jour). */
   upsertOrgFromApi(item: Org) {
     set((s) => ({ orgs: s.orgs.some((o) => o.id === item.id) ? s.orgs.map((o) => (o.id === item.id ? item : o)) : [...s.orgs, item] }));
@@ -1294,6 +1304,20 @@ export const actions = {
         ...incoming.values(),
       ],
     }));
+  },
+  /**
+   * Mode API : la liste des coopératives renvoyée par le serveur fait foi pour leurs gestionnaires. Les gestionnaires
+   * fictifs gardés dans le navigateur sur ces coopératives disparaissent ; ceux de l'API sont ajoutés ou mis à jour.
+   */
+  syncManagersFromApi(scoopIds: string[], items: ApiUserRow[]) {
+    const known = new Set(scoopIds);
+    const fromApi = new Set(items.map((apiUser) => apiUser.id));
+    set((s) => ({
+      users: s.users.filter(
+        (user) => !(user.role === "gestionnaire" && user.scoopId && known.has(user.scoopId) && !fromApi.has(user.id)),
+      ),
+    }));
+    actions.mergeUsersFromApi(items);
   },
   /** Retire un compte de la liste locale une fois supprimé sur l'API. */
   removeUserFromApi(userId: string) {
@@ -3797,6 +3821,14 @@ export const actions = {
     set((s) => ({ scoops: s.scoops.map((x) => (x.id === id ? { ...x, archived: false } : x)) }));
     audit("Coopérative réactivée", `SCOOP ${scoop.name}`, "", id);
     return { ok: true };
+  },
+  /** Mode API : remplace les chiffres de toutes les coopératives par ceux de `GET /scoops/stats`. */
+  setScoopStatsFromApi(items: ScoopStatsDto[]) {
+    set({ scoopStats: Object.fromEntries(items.map((item) => [item.scoopId, item])) });
+  },
+  /** Mode API : range les chiffres d'une ou de quelques coopératives sans toucher aux autres. */
+  mergeScoopStatsFromApi(items: ScoopStatsDto[]) {
+    set((s) => ({ scoopStats: { ...s.scoopStats, ...Object.fromEntries(items.map((item) => [item.scoopId, item])) } }));
   },
   /** Mode API : remplace la liste locale des coopératives par celle du serveur (source de vérité). */
   replaceScoopsFromApi(items: Scoop[]) {

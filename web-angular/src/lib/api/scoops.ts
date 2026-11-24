@@ -147,3 +147,34 @@ export type ScoopStaffMember = { id: string; name: string; role: RoleId };
 
 export const fetchScoopStaff = (scoopId: string) =>
   apiFetch<ScoopStaffMember[]>(`/scoops/${encodeURIComponent(scoopId)}/staff`);
+
+/**
+ * Chiffres d'une coopérative tels que `GET /scoops/stats` les renvoie, calculés sur la base reçue du CRADESC (Kobo) :
+ * producteurs (dont femmes, jeunes), parcelles et superficie en hectares. Tous les nombres sont fournis (0 si rien).
+ */
+export type ScoopStatsDto = {
+  scoopId: string;
+  producers: number;
+  women: number;
+  men: number;
+  youth: number;
+  producersValidated: number;
+  producersToCheck: number;
+  organisations: number;
+  members: number;
+  plots: number;
+  plotAreaHa: number;
+  cultivatedAreaHa: number;
+  plotsValidated: number;
+  plotsToCheck: number;
+  photos: number;
+  mainCrops: { crop: string; plots: number }[];
+  /** Date du dernier import Kobo, `null` si la coopérative n'en a pas. */
+  lastImportAt: string | null;
+};
+
+/** Chiffres des coopératives du périmètre (ou d'une seule avec `scoopId`). */
+export async function fetchScoopStats(scoopId?: string): Promise<ScoopStatsDto[]> {
+  const response = await apiFetch<{ items: ScoopStatsDto[] }>(withPage("/scoops/stats", scoopId ? { scoopId } : {}));
+  return response.items;
+}
