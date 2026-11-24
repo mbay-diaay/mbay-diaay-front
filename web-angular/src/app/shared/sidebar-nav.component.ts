@@ -81,6 +81,8 @@ const SCREEN_ICONS: Record<string, IconName> = {
 /** Menu organisé module par module (note de cadrage), puis les blocs transversaux. */
 const MODULE_GROUPS: ModuleGroup[] = [
   { id: "pilotage", labelKey: "nav.group.pilotage", icon: "space_dashboard", items: itemsOfSection("Pilotage"), soon: false, flat: true, defaultOpen: true },
+  // « Outils › Qualité des données » : juste après Tableau de bord et Rapports, avant les modules.
+  { id: "qualite", section: "tools", labelKey: "nav.item.qualite", icon: "verified", items: byPath(["/dashboard/qualite"]), soon: false, flat: true, defaultOpen: true },
   // Bloc à part, en tête et visible seulement avec `role.configure` (super administrateur).
   { id: "superadmin", section: "superadmin", labelKey: "nav.group.superadmin", icon: "lock", items: itemsOfSection("Super administration"), soon: false, defaultOpen: true },
   { id: "m1", section: "modules", labelKey: "modules.administratif.name", icon: "badge", items: byPath(M1_PATHS), soon: false, defaultOpen: true },
@@ -88,7 +90,6 @@ const MODULE_GROUPS: ModuleGroup[] = [
   { id: "m3", section: "modules", labelKey: "modules.exploitation.name", icon: "query_stats", items: soonOf("exploitation"), soon: true, defaultOpen: false },
   { id: "m4", section: "modules", labelKey: "modules.agronomique.name", icon: "potted_plant", items: soonOf("agronomique"), soon: true, defaultOpen: false },
   { id: "m5", section: "modules", labelKey: "modules.sig.name", icon: "pin_drop", items: soonOf("sig"), soon: true, defaultOpen: false },
-  { id: "qualite", section: "tools", labelKey: "nav.item.qualite", icon: "verified", items: byPath(["/dashboard/qualite"]), soon: false, flat: true, defaultOpen: true },
   { id: "admin", section: "tools", labelKey: "nav.group.administration", icon: "tune", items: itemsOfSection("Administration"), soon: false, defaultOpen: false },
 ];
 

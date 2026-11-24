@@ -2,10 +2,21 @@ import { Component, computed, inject, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 
 import { AccessDeniedError, inScope } from "@/lib/store";
+import { isApiMode } from "@/lib/api/config";
+import { alertDraft, sheetDraft } from "@/lib/coop-request-templates";
+import type { CoopRequestKind } from "@/lib/api/coop-requests";
+import { describeSource, sourceOfProducer, type DataSource } from "@/lib/data-source";
 import { nf } from "@/lib/format";
+import {
+  collectQualityPoints,
+  explainAlert,
+  type QualityPoint,
+  type QualityPointKind,
+} from "@/lib/quality-real";
 import type { AlertStatus, DataAlert } from "@/lib/mock/data";
 import type { MessageKey } from "@/lib/i18n";
 import { AppShellComponent } from "@shared/app-shell.component";
+import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
 import { StoreService } from "@shared/store.service";
 import { createPager } from "@shared/pager";
@@ -62,6 +73,7 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
   selector: "app-qualite-alertes-page",
   imports: [
     AppShellComponent,
+    ContactScoopModalComponent,
     IconComponent,
     ModalComponent,
     PaginationComponent,
@@ -126,6 +138,7 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
 
       <ui-stat-cards class="rise mt-8" [stats]="stats()" />
 
+      @if (!apiMode) {
       <div class="toolbar card mt-6">
         <label class="search">
           <ui-icon name="search" [size]="20" />
@@ -292,6 +305,156 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
         }
       </section>
 
+      } @else {
+        <!-- Mode API : points signalés par le CRADESC à l'import Kobo (données réelles) -->
+        <div class="toolbar card mt-6">
+          <label class="search">
+            <ui-icon name="search" [size]="20" />
+            <input
+              type="search"
+              [placeholder]="t()('qualite.real.search')"
+              [attr.aria-label]="t()('qualite.real.search')"
+              [value]="q()"
+              (input)="q.set($any($event.target).value)"
+            />
+          </label>
+          <ui-select
+            class="min-w-[200px]"
+            variant="compact"
+            leadingIcon="storefront"
+            [label]="t()('qualite.real.filter.scoop')"
+            [options]="scoopOptions()"
+            [value]="scoopFilter()"
+            (valueChange)="scoopFilter.set($event)"
+          />
+          <ui-select
+            class="min-w-[180px]"
+            variant="compact"
+            leadingIcon="warning"
+            [label]="t()('qualite.real.filter.kind')"
+            [options]="kindOptions()"
+            [value]="kindFilter()"
+            (valueChange)="kindFilter.set($event)"
+          />
+          <ui-select
+            class="min-w-[200px]"
+            variant="compact"
+            leadingIcon="verified"
+            [label]="t()('qualite.real.filter.quality')"
+            [options]="qualityOptions()"
+            [value]="qualityFilter()"
+            (valueChange)="qualityFilter.set($event)"
+          />
+        </div>
+
+        <p class="sub mt-4" aria-live="polite">
+          {{ t()("qualite.real.count", { count: nf.format(realRows().length) }) }}
+        </p>
+
+        <section class="card mt-3 overflow-hidden">
+          @if (realRows().length) {
+            <div class="overflow-x-auto">
+              <table class="tbl min-w-[1040px]">
+                <thead>
+                  <tr>
+                    <th>{{ t()("qualite.real.col.producer") }}</th>
+                    <th>{{ t()("qualite.real.col.scoop") }}</th>
+                    <th>{{ t()("qualite.source.col") }}</th>
+                    <th>{{ t()("qualite.real.col.where") }}</th>
+                    <th>{{ t()("qualite.real.col.point") }}</th>
+                    <th class="text-right">{{ t()("organisations.col.actions") }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (point of realPager.items(); track point.id) {
+                    <tr>
+                      <td>
+                        <span class="block font-bold">{{ point.producerName }}</span>
+                        <span class="sub block">{{ point.producerCode }}</span>
+                      </td>
+                      <td class="font-medium">{{ scoopName(point.scoopId) }}</td>
+                      <td>
+                        @if (sourceOfPoint(point); as source) {
+                          <span
+                            class="badge"
+                            [style.background]="source.bg"
+                            [style.color]="source.fg"
+                            [title]="sourceDetail(source)"
+                            ><ui-icon [name]="source.icon" [size]="14" />{{ t()(source.labelKey) }}</span
+                          >
+                        }
+                      </td>
+                      <td>
+                        <span
+                          class="badge"
+                          [style.background]="kindTone[point.kind].bg"
+                          [style.color]="kindTone[point.kind].fg"
+                          >{{ t()(kindLabel[point.kind]) }}</span
+                        >
+                        @if (point.place) {
+                          <span class="sub block">{{ point.place }}</span>
+                        }
+                      </td>
+                      <td>
+                        <span class="block max-w-[460px] font-bold">{{
+                          point.text || t()("qualite.real.noReason")
+                        }}</span>
+                        @if (explanation(point.text); as why) {
+                          <span class="sub block max-w-[460px]">{{ t()(why) }}</span>
+                        }
+                      </td>
+                      <td>
+                        <span class="flex justify-end gap-2">
+                          @if (canContact()) {
+                            <button
+                              type="button"
+                              class="act"
+                              [title]="t()('demandes.action')"
+                              [attr.aria-label]="t()('demandes.action')"
+                              (click)="openContact(point)"
+                            >
+                              <ui-icon name="mail" [size]="18" />
+                            </button>
+                          }
+                          <a
+                            class="act"
+                            [routerLink]="['/dashboard/producteurs', point.producerId]"
+                            [title]="t()('qualite.v2.alertes.open')"
+                            [attr.aria-label]="t()('qualite.v2.alertes.open')"
+                            ><ui-icon name="visibility" [size]="18"
+                          /></a>
+                        </span>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <ui-pagination class="px-5 pb-5" [pager]="realPager" />
+          } @else {
+            <div class="flex flex-col items-center gap-3 p-10 text-center">
+              <span
+                class="grid size-14 place-items-center rounded-[16px]"
+                style="background: var(--v2-sauge); color: var(--v2-foret)"
+                ><ui-icon name="task_alt" [size]="26"
+              /></span>
+              <p class="max-w-md text-[16px] font-extrabold">
+                {{ t()(realPoints().length ? "qualite.real.emptyFilter" : "qualite.real.empty") }}
+              </p>
+            </div>
+          }
+        </section>
+      }
+
+      <!-- Contacter la coopérative (mode API, administrateur CRADESC) -->
+      <ui-contact-scoop-modal
+        [open]="contactTargets().length > 0"
+        [kind]="contactKind()"
+        [targets]="contactTargets()"
+        link="/dashboard/qualite/alertes"
+        (closed)="contactTargets.set([])"
+      />
+
       <!-- Actions groupées -->
       @if (selected().length) {
         <div
@@ -414,6 +577,159 @@ export default class QualiteAlertesPage {
   protected readonly comment = signal("");
   protected readonly pending = signal<{ ids: string[]; status: AlertStatus } | null>(null);
 
+  /** Mode API : liste réelle des points signalés à l'import (jamais de donnée de démonstration). */
+  protected readonly apiMode = isApiMode();
+  protected readonly scoopFilter = signal("");
+  protected readonly kindFilter = signal("");
+  protected readonly qualityFilter = signal("");
+  protected readonly kindLabel: Record<QualityPointKind, MessageKey> = {
+    fiche: "qualite.real.kind.fiche",
+    parcelle: "qualite.real.kind.parcelle",
+    culture: "qualite.real.kind.culture",
+  };
+  protected readonly kindTone: Record<QualityPointKind, { bg: string; fg: string }> = {
+    fiche: TONE.info,
+    parcelle: TONE.attente,
+    culture: TONE.culture,
+  };
+
+  protected readonly realPoints = computed<QualityPoint[]>(() =>
+    this.apiMode ? collectQualityPoints(this.store.state()) : [],
+  );
+
+  protected readonly realRows = computed(() => {
+    const needle = norm(this.q().trim());
+    const scoop = this.scoopFilter();
+    const kind = this.kindFilter();
+    const quality = this.qualityFilter();
+    return this.realPoints().filter(
+      (point) =>
+        (!scoop || point.scoopId === scoop) &&
+        (!kind || point.kind === kind) &&
+        (!quality || point.quality === quality) &&
+        (!needle ||
+          norm(
+            `${point.producerName} ${point.producerCode} ${point.place} ${point.text} ${this.scoopName(point.scoopId)}`,
+          ).includes(needle)),
+    );
+  });
+
+  protected readonly realPager = createPager(() => this.realRows());
+
+  /** Base d'origine de la fiche du point signalé (Kobo apurée ou saisie dans l'application). */
+  private readonly producersById = computed(
+    () => new Map(this.store.state().producers.map((producer) => [producer.id, producer])),
+  );
+
+  protected sourceOfPoint(point: QualityPoint): DataSource | null {
+    const producer = this.producersById().get(point.producerId);
+    return producer ? sourceOfProducer(producer) : null;
+  }
+
+  protected sourceDetail(source: DataSource): string {
+    return describeSource(source, this.t());
+  }
+
+  protected readonly canContact = computed(() => this.apiMode && this.store.can("coop_request.send"));
+  protected readonly contactTargets = signal<CoopRequestTarget[]>([]);
+  protected readonly contactKind = signal<CoopRequestKind>("alerte");
+
+  /**
+   * Demande à la coopérative du producteur de la ligne : tous ses points signalés (fiche, parcelles, cultures)
+   * partent ensemble, en langage simple. Fiche seule : demande « fiche à vérifier » ; sinon « alerte ».
+   */
+  protected openContact(point: QualityPoint) {
+    const all = this.realPoints().filter((candidate) => candidate.producerId === point.producerId);
+    const onlySheet = all.every((candidate) => candidate.kind === "fiche");
+    const input = {
+      code: point.producerCode,
+      name: point.producerName,
+      points: all.map((candidate) => ({ text: candidate.text, place: candidate.place })),
+    };
+    this.contactKind.set(onlySheet ? "fiche" : "alerte");
+    this.contactTargets.set([
+      {
+        scoopId: point.scoopId,
+        items: [{ type: "producer", id: point.producerId, label: `${point.producerName} (${point.producerCode})` }],
+        ...(onlySheet ? sheetDraft(input) : alertDraft(input)),
+      },
+    ]);
+  }
+
+  protected readonly scoopOptions = computed<SelectOption[]>(() => {
+    const ids = new Set(this.realPoints().map((point) => point.scoopId));
+    return [
+      { value: "", label: this.t()("qualite.real.filter.scoopAll") },
+      ...this.store
+        .state()
+        .scoops.filter((scoop) => ids.has(scoop.id))
+        .map((scoop) => ({ value: scoop.id, label: scoop.name })),
+    ];
+  });
+
+  protected readonly kindOptions = computed<SelectOption[]>(() => [
+    { value: "", label: this.t()("qualite.real.filter.kindAll") },
+    ...(["fiche", "parcelle", "culture"] as const).map((kind) => ({
+      value: kind,
+      label: this.t()(this.kindLabel[kind]),
+    })),
+  ]);
+
+  protected readonly qualityOptions = computed<SelectOption[]>(() => [
+    { value: "", label: this.t()("qualite.real.filter.qualityAll") },
+    { value: "validé", label: this.t()("dashboard.quality.validated") },
+    { value: "à vérifier", label: this.t()("dashboard.quality.toVerify") },
+    { value: "doublon", label: this.t()("dashboard.quality.duplicate") },
+    { value: "invalide", label: this.t()("dashboard.quality.invalid") },
+  ]);
+
+  private readonly realStats = computed<StatCard[]>(() => {
+    const t = this.t();
+    const points = this.realPoints();
+    const count = (kind: QualityPointKind) => points.filter((point) => point.kind === kind).length;
+    return [
+      {
+        label: t("qualite.real.stat.total"),
+        value: nf.format(points.length),
+        sub: t("qualite.real.stat.totalSub", {
+          count: nf.format(new Set(points.map((point) => point.producerId)).size),
+        }),
+        icon: "warning",
+        bg: "",
+        fg: "",
+      },
+      {
+        label: t("qualite.real.stat.fiche"),
+        value: nf.format(count("fiche")),
+        sub: t("qualite.real.stat.ficheSub"),
+        icon: "badge",
+        ...TONE.info,
+      },
+      {
+        label: t("qualite.real.stat.parcelle"),
+        value: nf.format(count("parcelle")),
+        sub: t("qualite.real.stat.parcelleSub"),
+        icon: "map",
+        ...TONE.attente,
+      },
+      {
+        label: t("qualite.real.stat.culture"),
+        value: nf.format(count("culture")),
+        sub: t("qualite.real.stat.cultureSub"),
+        icon: "agriculture",
+        ...TONE.culture,
+      },
+    ];
+  });
+
+  protected scoopName(id: string): string {
+    return this.store.state().scoops.find((scoop) => scoop.id === id)?.name ?? "—";
+  }
+
+  protected explanation(text: string): MessageKey | null {
+    return explainAlert(text);
+  }
+
   protected readonly canDecide = computed(() => this.store.can("alert.manage"));
 
   /** Alertes du périmètre (producteurs et parcelles de la session). */
@@ -475,7 +791,11 @@ export default class QualiteAlertesPage {
   /** Pagination : mêmes règles que l'API (`GET /v1/quality/alerts?page=&limit=`). */
   protected readonly pager = createPager(() => this.rows());
 
-  protected readonly stats = computed<StatCard[]>(() => {
+  protected readonly stats = computed<StatCard[]>(() =>
+    this.apiMode ? this.realStats() : this.demoStats(),
+  );
+
+  private readonly demoStats = computed<StatCard[]>(() => {
     const t = this.t();
     const all = this.mine();
     const n = (st: AlertStatus) => all.filter((a) => a.status === st).length;

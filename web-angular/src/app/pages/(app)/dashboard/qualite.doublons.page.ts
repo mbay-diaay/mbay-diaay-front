@@ -1,25 +1,53 @@
 import { Component, computed, effect, inject, signal, untracked } from "@angular/core";
 import { ActivatedRoute, RouterLink } from "@angular/router";
 
+import { isApiMode } from "@/lib/api/config";
+import { describeSource, sourceOfGroup, type DataSourceSummary } from "@/lib/data-source";
+import { duplicateDraft, groupByScoop, producerItem } from "@/lib/coop-request-templates";
 import { fmtAge, maskCni, nf } from "@/lib/format";
+import { mergeErrorKey, unmergeProducers } from "@/lib/api/producers";
+import {
+  analyzeGroupConcordance,
+  duplicateGroups,
+  identicalSubsets,
+  mergedGroups,
+  type DuplicateGroup,
+  type DuplicateReason,
+  type GroupConcordance,
+  type MergedGroup,
+} from "@/lib/quality-real";
 import type { CaseStatus, DuplicateCase, Producer } from "@/lib/mock/data";
 import type { MessageKey } from "@/lib/i18n";
 import { inScope, scopedCases } from "@/lib/scope";
 import { sharedPhoneGroups, type PhoneGroup } from "@/lib/store";
 import { AppShellComponent } from "@shared/app-shell.component";
+import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
+import { MergeProducersModalComponent } from "@shared/merge-producers-modal.component";
 import { LocaleService } from "@shared/locale.service";
 import { PlotMapComponent } from "@shared/plot-map.component";
+import { ProducerWorkflow } from "@shared/producer-workflow.service";
 import { StoreService } from "@shared/store.service";
+import { createPager } from "@shared/pager";
 import {
   IconComponent,
   initialsOf,
   ModalComponent,
+  PaginationComponent,
   SnackbarService,
   StatCardsComponent,
   TONE,
   V2_PAGE_STYLES,
   type StatCard,
 } from "@shared/ui";
+
+/** Nombre maximal de fiches comparées côte à côte. */
+const MAX_COMPARED = 4;
+
+interface ShownGroup {
+  id: string;
+  open: DuplicateGroup | null;
+  merged: MergedGroup | null;
+}
 
 type Group = "a-traiter" | "probables" | "non-resolus" | "classes" | "tous";
 
@@ -106,8 +134,11 @@ const CASE_TONE: Record<CaseStatus, { bg: string; fg: string }> = {
   selector: "app-qualite-doublons-page",
   imports: [
     AppShellComponent,
+    ContactScoopModalComponent,
     IconComponent,
+    MergeProducersModalComponent,
     ModalComponent,
+    PaginationComponent,
     PlotMapComponent,
     RouterLink,
     StatCardsComponent,
@@ -118,6 +149,89 @@ const CASE_TONE: Record<CaseStatus, { bg: string; fg: string }> = {
       .layout {
         display: grid;
         gap: 16px;
+      }
+      .members {
+        display: grid;
+        gap: 12px;
+        padding: 16px 20px 20px;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      }
+      .member {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        border-radius: 18px;
+        border: 1px solid var(--v2-bord-carte);
+        background: var(--v2-creme);
+        padding: 14px;
+      }
+      .alerte {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        border-radius: 18px;
+        padding: 14px 18px;
+        background: var(--v2-attente-bg);
+        color: var(--v2-attente-fg);
+      }
+      .alerte-ico {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: color-mix(in oklab, var(--v2-attente-fg) 14%, transparent);
+      }
+      .alerte-titre {
+        margin: 0;
+        font-size: 12.5px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .pas-doublon {
+        margin: 16px 20px 4px;
+        padding: 16px 20px;
+        background: var(--v2-info-bg);
+        color: var(--v2-info-fg);
+      }
+      .pas-doublon .alerte-ico {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        background: color-mix(in oklab, var(--v2-info-fg) 16%, transparent);
+      }
+      .alerte-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+        padding: 8px 16px;
+        border-radius: 999px;
+        background: var(--v2-info-fg);
+        color: var(--v2-blanc);
+        font-size: 13.5px;
+        font-weight: 700;
+        text-decoration: none;
+        box-shadow: 0 2px 6px color-mix(in oklab, var(--v2-info-fg) 25%, transparent);
+        transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .alerte-cta:hover {
+        background: color-mix(in oklab, var(--v2-info-fg) 85%, black);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px color-mix(in oklab, var(--v2-info-fg) 35%, transparent);
+      }
+      .pas-doublon .alerte-texte {
+        margin: 4px 0 0;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .alerte-texte {
+        margin: 6px 0 0;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.45;
       }
       @media (min-width: 1100px) {
         .layout {
@@ -231,6 +345,84 @@ const CASE_TONE: Record<CaseStatus, { bg: string; fg: string }> = {
       .map {
         height: 240px;
       }
+      .group-foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid var(--v2-separateur);
+        padding: 12px 20px;
+      }
+      .btn-compare {
+        padding: 0 10px 0 16px;
+        background: var(--v2-sauge);
+        border: 1.5px solid var(--v2-foret);
+        color: var(--v2-foret);
+        font-weight: 700;
+        box-shadow: 0 2px 6px color-mix(in oklab, var(--v2-foret) 12%, transparent);
+        transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+      }
+      .btn-compare:hover:not(:disabled) {
+        background: color-mix(in oklab, var(--v2-citron) 25%, var(--v2-sauge));
+        border-color: var(--v2-foret-clair);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px color-mix(in oklab, var(--v2-foret) 20%, transparent);
+      }
+      .btn-compare-chip {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--v2-foret);
+        color: var(--v2-citron);
+        margin-left: 2px;
+      }
+      .phones-notice {
+        background: var(--v2-info-bg);
+        color: var(--v2-info-fg);
+        border: 1px solid color-mix(in oklab, var(--v2-info-fg) 22%, transparent);
+      }
+      .phones-notice .alerte-ico {
+        background: color-mix(in oklab, var(--v2-info-fg) 16%, transparent);
+      }
+      .concordance-bar {
+        display: flex;
+        align-items: center;
+        margin: 0 20px 4px;
+        padding: 8px 14px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .concordance-bar.is-identical {
+        background: color-mix(in oklab, var(--v2-citron) 25%, var(--v2-sauge));
+        color: var(--v2-foret);
+        border: 1px solid color-mix(in oklab, var(--v2-foret) 20%, transparent);
+      }
+      .concordance-bar.is-diff {
+        background: var(--v2-attente-bg);
+        color: var(--v2-attente-fg);
+        border: 1px solid color-mix(in oklab, var(--v2-attente-fg) 20%, transparent);
+      }
+      .concordance-bar.is-distinct {
+        background: var(--v2-info-bg);
+        color: var(--v2-info-fg);
+        border: 1px solid color-mix(in oklab, var(--v2-info-fg) 20%, transparent);
+      }
+      .concordance-text {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+      }
+      .concordance-diffs {
+        font-weight: 700;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
     `,
   ],
   template: `
@@ -271,7 +463,22 @@ const CASE_TONE: Record<CaseStatus, { bg: string; fg: string }> = {
             }}<span class="n" [class.zero]="!phoneGroups().length">{{ phoneGroups().length }}</span>
           </button>
         </div>
-        @if (view() === "cas") {
+        @if (view() === "cas" && apiMode) {
+          <div class="seg" role="radiogroup" [attr.aria-label]="t()('qualite.v2.dbl.view.cases')">
+            @for (option of reasonButtons(); track option.id) {
+              <button
+                type="button"
+                role="radio"
+                [class.on]="reasonFilter() === option.id"
+                [attr.aria-checked]="reasonFilter() === option.id"
+                (click)="reasonFilter.set(option.id)"
+              >
+                {{ option.label
+                }}<span class="n" [class.zero]="!option.count">{{ option.count }}</span>
+              </button>
+            }
+          </div>
+        } @else if (view() === "cas") {
           <div class="seg" role="radiogroup" [attr.aria-label]="t()('qualite.v2.dbl.view.cases')">
             @for (group of groups; track group.key) {
               <button
@@ -291,7 +498,190 @@ const CASE_TONE: Record<CaseStatus, { bg: string; fg: string }> = {
         }
       </div>
 
-      @if (view() === "cas") {
+      @if (view() === "cas" && apiMode) {
+        <!-- Mode API : groupes de fiches reliées par une CNI identique ou un téléphone partagé -->
+        <p class="sub mt-4 max-w-3xl">{{ t()("qualite.real.dbl.intro") }}</p>
+        <div class="mt-3 grid gap-3">
+          @for (item of groupPager.items(); track item.id) {
+            @let group = item.open;
+            @let fused = item.merged;
+            <section class="sec-card">
+              <div class="sec-head">
+                <h2>
+                  @if (group) {
+                    @let c = concordanceOf(group);
+                    <span
+                      class="sec-ico"
+                      [style.background]="concordanceTone(c.toneKey).bg"
+                      [style.color]="concordanceTone(c.toneKey).fg"
+                      ><ui-icon [name]="c.icon" [size]="18"
+                    /></span>
+                    <span>{{ t()(c.titleKey) }}</span>
+                  } @else if (fused) {
+                    <span class="sec-ico" style="background: var(--v2-foret); color: var(--v2-citron)"
+                      ><ui-icon name="task_alt" [size]="18" /></span
+                    >{{ t()("qualite.real.dbl.mergedInto", { keep: fused.keep.code }) }}
+                  }
+                </h2>
+                <div class="flex flex-wrap items-center gap-2">
+                  @let source = sourceOfItem(item);
+                  <span
+                    class="badge"
+                    [style.background]="source.bg"
+                    [style.color]="source.fg"
+                    [title]="sourceDetail(source)"
+                    ><ui-icon [name]="source.icon" [size]="14" />{{ t()(source.labelKey) }}</span
+                  >
+                  @if (group) {
+                    @let c = concordanceOf(group);
+                    <span
+                      class="badge font-bold"
+                      [style.background]="concordanceTone(c.toneKey).bg"
+                      [style.color]="concordanceTone(c.toneKey).fg"
+                    >
+                      <ui-icon
+                        [name]="c.kind === 'identical' ? 'check_circle' : c.kind === 'differences' ? 'warning' : 'info'"
+                        [size]="14"
+                      />
+                      {{ t()(c.badgeKey) }}
+                    </span>
+                    <span class="badge" style="background: var(--v2-sauge); color: var(--v2-foret)">{{
+                      t()("qualite.real.dbl.people", { n: group.members.length })
+                    }}</span>
+                  } @else {
+                    <span class="badge" style="background: var(--v2-foret); color: var(--v2-citron)">{{
+                      t()("qualite.real.dbl.merged")
+                    }}</span>
+                  }
+                </div>
+              </div>
+              @if (group) {
+                @let c = concordanceOf(group);
+                <div
+                  class="concordance-bar"
+                  [class.is-identical]="c.kind === 'identical'"
+                  [class.is-diff]="c.kind === 'differences'"
+                  [class.is-distinct]="c.kind === 'distinct'"
+                >
+                  <p class="concordance-text">
+                    <ui-icon [name]="c.icon" [size]="16" />
+                    <span>{{ t()(c.hintKey) }}</span>
+                    @if (c.diffFields.length) {
+                      <span class="concordance-diffs"
+                        >({{ t()("qualite.concordance.diffPrefix", { fields: c.diffFields.join(", ") }) }})</span
+                      >
+                    }
+                  </p>
+                </div>
+              }
+              <div class="members">
+                @for (member of membersOf(item); track member.id) {
+                  <div class="member">
+                    <span class="avatar">{{ initials(member.firstName + " " + member.lastName) }}</span>
+                    <div class="min-w-0 flex-1">
+                      <a
+                        class="block truncate font-bold hover:underline"
+                        [routerLink]="['/dashboard/producteurs', member.id]"
+                        >{{ member.firstName }} {{ member.lastName }}</a
+                      >
+                      <span class="sub block">{{ member.code }}</span>
+                      <span class="sub block truncate">{{ scoopName(member.scoopId) }}</span>
+                      <span class="sub block truncate"
+                        >{{ member.village || "—" }} · {{ fmtAge(member.age) }}</span
+                      >
+                      @if (fused) {
+                        <span class="sub block font-bold">{{
+                          t()(member.id === fused.keep.id ? "qualite.real.dbl.mergedKept" : "qualite.real.dbl.mergedFusion")
+                        }}</span>
+                      }
+                    </div>
+                    <a
+                      class="act"
+                      [routerLink]="['/dashboard/producteurs', member.id]"
+                      [title]="t()('qualite.real.dbl.open')"
+                      [attr.aria-label]="t()('qualite.real.dbl.open')"
+                      ><ui-icon name="visibility" [size]="18"
+                    /></a>
+                  </div>
+                }
+              </div>
+              @if (group) {
+                @let subsets = identicalOf(group);
+                @let others = notIdentical(group, subsets);
+                @if (others.length) {
+                  <div class="alerte pas-doublon" role="note">
+                    <span class="alerte-ico" aria-hidden="true"><ui-icon name="info" [size]="22" /></span>
+                    <div class="min-w-0">
+                      <p class="alerte-titre">{{ t()("qualite.merge.differentPeopleTitle") }}</p>
+                      <p class="alerte-texte">{{ t()("qualite.merge.differentPeople") }}</p>
+                      <a
+                        class="alerte-cta"
+                        routerLink="/dashboard/qualite/doublons/comparer"
+                        [queryParams]="compareParams(group.members)"
+                      >
+                        <ui-icon name="visibility" [size]="18" />
+                        <span>{{ t()("qualite.compare.link") }}</span>
+                        <ui-icon name="arrow_forward" [size]="16" />
+                      </a>
+                    </div>
+                  </div>
+                }
+                <div class="group-foot">
+                  <div class="grid gap-2">
+                    @if (subsets.length && !store.can("quality.merge")) {
+                      <p class="sub">{{ t()("qualite.merge.needsPerm") }}</p>
+                    }
+                  </div>
+                  <div class="flex flex-wrap justify-end gap-2">
+                    @if (canContact()) {
+                      <button type="button" class="btn btn-ghost" (click)="openContact(group)">
+                        <ui-icon name="mail" [size]="18" />{{ t()("demandes.action") }}
+                      </button>
+                    }
+                    <a
+                      class="btn btn-compare"
+                      routerLink="/dashboard/qualite/doublons/comparer"
+                      [queryParams]="compareParams(group.members, subsets)"
+                    >
+                      <ui-icon name="visibility" [size]="18" />
+                      <span>{{ t()("qualite.compare.action") }}</span>
+                      <span class="btn-compare-chip" aria-hidden="true">
+                        <ui-icon name="arrow_forward" [size]="14" />
+                      </span>
+                    </a>
+                    @if (store.can("quality.merge")) {
+                      @for (subset of subsets; track subset[0].id) {
+                        <button type="button" class="btn btn-primary" (click)="openMerge(group, subset)">
+                          <ui-icon name="hub" [size]="18" />{{ t()("qualite.merge.action") }}
+                          @if (subsets.length > 1) {
+                            <span>· {{ codesOf(subset) }}</span>
+                          }
+                        </button>
+                      }
+                    }
+                  </div>
+                </div>
+              } @else if (fused) {
+                <div class="group-foot">
+                  <span></span>
+                  @if (store.can("quality.merge")) {
+                    <button type="button" class="btn btn-ghost" (click)="undoTarget.set(fused)">
+                      <ui-icon name="arrow_forward" [size]="18" style="transform: rotate(180deg)" />{{
+                        t()("qualite.merge.undo")
+                      }}
+                    </button>
+                  } @else {
+                    <span class="sub">{{ t()("qualite.merge.needsPerm") }}</span>
+                  }
+                </div>
+              }
+            </section>
+          } @empty {
+            <p class="card sub p-10 text-center">{{ t()("qualite.real.dbl.empty") }}</p>
+          }
+        </div>
+        <ui-pagination class="mt-4 block" [pager]="groupPager" />
+      } @else if (view() === "cas") {
         <p class="sub mt-4">{{ currentGroupHint() }}</p>
         <div class="layout mt-3">
           <!-- Liste des cas -->
@@ -569,7 +959,13 @@ const CASE_TONE: Record<CaseStatus, { bg: string; fg: string }> = {
         </div>
       } @else {
         <!-- Téléphones partagés -->
-        <p class="sub mt-4 max-w-3xl">{{ t()("qualite.doublons.phones.intro") }}</p>
+        <div class="alerte phones-notice mt-4" role="note">
+          <span class="alerte-ico" aria-hidden="true"><ui-icon name="info" [size]="22" /></span>
+          <div class="min-w-0">
+            <p class="alerte-titre">{{ t()("qualite.doublons.phones.title", { n: phoneGroups().length }) }}</p>
+            <p class="alerte-texte">{{ t()("qualite.doublons.phones.intro") }}</p>
+          </div>
+        </div>
         <div class="mt-3 grid gap-3 md:grid-cols-2">
           @for (phoneGroup of phoneGroups(); track phoneGroup.phone) {
             <section class="sec-card">
@@ -601,6 +997,13 @@ const CASE_TONE: Record<CaseStatus, { bg: string; fg: string }> = {
                       >{{ member.firstName }} {{ member.lastName }}</a
                     >
                     <span class="sub">{{ member.code }} · {{ member.village }}</span>
+                    <a
+                      class="act"
+                      [routerLink]="['/dashboard/producteurs', member.id]"
+                      [title]="t()('qualite.real.dbl.open')"
+                      [attr.aria-label]="t()('qualite.real.dbl.open')"
+                      ><ui-icon name="visibility" [size]="18"
+                    /></a>
                   </li>
                 }
               </ul>
@@ -612,6 +1015,38 @@ const CASE_TONE: Record<CaseStatus, { bg: string; fg: string }> = {
           }
         </div>
       }
+
+      <!-- Fusion réelle (mode API) : modale partagée avec la page « Comparer les fiches » -->
+      <app-merge-producers-modal [group]="mergeGroup()" (closed)="mergeGroup.set(null)" />
+
+      <!-- Contacter la coopérative (mode API, administrateur CRADESC) : une demande par coopérative concernée -->
+      <ui-contact-scoop-modal
+        [open]="contactTargets().length > 0"
+        kind="doublon"
+        [targets]="contactTargets()"
+        link="/dashboard/qualite/doublons"
+        (closed)="contactTargets.set([])"
+      />
+
+      <!-- Annulation d'une fusion réelle (mode API) -->
+      <ui-modal
+        [open]="!!undoTarget()"
+        [title]="t()('qualite.merge.undoTitle')"
+        [description]="undoBody()"
+        icon="hub"
+        [width]="520"
+        [closeLabel]="t()('common.close')"
+        (closed)="undoTarget.set(null)"
+      >
+        <div class="h-2" aria-hidden="true"></div>
+        <button modal-footer type="button" class="btn btn-ghost" [disabled]="busy()" (click)="undoTarget.set(null)">
+          {{ t()("qualite.merge.undoKeep") }}
+        </button>
+        <button modal-footer type="button" class="btn btn-primary" [disabled]="busy()" (click)="confirmApiUndo()">
+          {{ busy() ? t()("qualite.merge.running") : t()("qualite.merge.undoConfirm")
+          }}<span class="btn-chip"><ui-icon name="check" [size]="18" /></span>
+        </button>
+      </ui-modal>
 
       <!-- Fusion -->
       <ui-modal
@@ -647,6 +1082,158 @@ export default class QualiteDoublonsPage {
   protected readonly classifyStatuses = STATUSES.filter((s) => s !== "fusionné");
   protected readonly initials = initialsOf;
   private readonly snackbar = inject(SnackbarService);
+  private readonly flow = inject(ProducerWorkflow);
+
+  /** Mode API : groupes réels déduits des alertes d'import ; pas de cas de démonstration, fusion réelle via l'API. */
+  protected readonly apiMode = isApiMode();
+  protected readonly fmtAge = fmtAge;
+  protected concordanceOf(group: DuplicateGroup): GroupConcordance {
+    return analyzeGroupConcordance(group);
+  }
+  protected concordanceTone(toneKey: "succes" | "attente" | "info"): { bg: string; fg: string } {
+    return TONE[toneKey];
+  }
+  protected readonly reasonFilter = signal<"" | DuplicateReason | "merged">("");
+  protected readonly reasonLabel: Record<DuplicateReason, MessageKey> = {
+    cni: "qualite.real.dbl.reason.cni",
+    phone: "qualite.real.dbl.reason.phone",
+  };
+  protected readonly reasonTone: Record<DuplicateReason, { bg: string; fg: string }> = {
+    cni: TONE.erreur,
+    phone: TONE.attente,
+  };
+  protected readonly allGroups = computed<DuplicateGroup[]>(() =>
+    this.apiMode ? duplicateGroups(this.store.state()) : [],
+  );
+  protected readonly mergedList = computed<MergedGroup[]>(() =>
+    this.apiMode ? mergedGroups(this.store.state()) : [],
+  );
+  protected readonly shownGroups = computed<ShownGroup[]>(() => {
+    const reason = this.reasonFilter();
+    const open: ShownGroup[] = this.allGroups()
+      .filter((group) => !reason || group.reason === reason)
+      .map((group) => ({ id: group.id, open: group, merged: null }));
+    const fused: ShownGroup[] = this.mergedList().map((group) => ({ id: group.id, open: null, merged: group }));
+    if (reason === "merged") return fused;
+    return reason ? open : [...open, ...fused];
+  });
+  protected readonly groupPager = createPager(() => this.shownGroups(), 10);
+  protected readonly reasonButtons = computed(() => {
+    const all = this.allGroups();
+    const t = this.t();
+    return [
+      { id: "" as "" | DuplicateReason | "merged", label: t("qualite.real.dbl.reasonAll"), count: all.length },
+      ...(["cni", "phone"] as const).map((reason) => ({
+        id: reason as "" | DuplicateReason | "merged",
+        label: t(this.reasonLabel[reason]),
+        count: all.filter((group) => group.reason === reason).length,
+      })),
+      {
+        id: "merged" as "" | DuplicateReason | "merged",
+        label: t("qualite.real.dbl.reasonMerged"),
+        count: this.mergedList().length,
+      },
+    ];
+  });
+
+  /** Base d'origine du groupe : une seule base, ou « Sources mélangées » (c'est là que la colonne sert). */
+  protected sourceOfItem(item: ShownGroup): DataSourceSummary {
+    return sourceOfGroup(this.membersOf(item));
+  }
+
+  protected sourceDetail(source: DataSourceSummary): string {
+    return describeSource(source, this.t());
+  }
+
+  protected membersOf(item: ShownGroup): Producer[] {
+    return item.open ? item.open.members : item.merged ? [item.merged.keep, ...item.merged.merged] : [];
+  }
+
+  // ------------------------------------------------------- Fusion réelle (mode API)
+
+  protected readonly mergeGroup = signal<DuplicateGroup | null>(null);
+
+  // ------------------------------------------------------- Contacter la coopérative (mode API)
+
+  protected readonly contactTargets = signal<CoopRequestTarget[]>([]);
+  protected readonly canContact = computed(() => this.apiMode && this.store.can("coop_request.send"));
+
+  /** Une demande par coopérative des fiches du groupe : fiches citées par leurs codes, jamais par téléphone ni CNI. */
+  protected openContact(group: DuplicateGroup) {
+    this.contactTargets.set(
+      groupByScoop(group.members).map(({ scoopId, entries }) => ({
+        scoopId,
+        items: entries.map(producerItem),
+        ...duplicateDraft({ codes: entries.map((member) => member.code) }),
+      })),
+    );
+  }
+  protected readonly busy = signal(false);
+  protected readonly undoTarget = signal<MergedGroup | null>(null);
+
+  protected readonly undoBody = computed(() => {
+    const target = this.undoTarget();
+    if (!target) return "";
+    return this.t()("qualite.merge.undoBody", { merged: target.merged.map((member) => member.code).join(", ") });
+  });
+
+  protected identicalOf(group: DuplicateGroup): Producer[][] {
+    return identicalSubsets(group.members);
+  }
+
+  protected notIdentical(group: DuplicateGroup, subsets: Producer[][]): Producer[] {
+    const covered = new Set(subsets.flat().map((member) => member.id));
+    return group.members.filter((member) => !covered.has(member.id));
+  }
+
+  /** Paramètres du lien « Comparer » : codes du groupe, ou du premier sous-ensemble identique si le groupe dépasse 4 fiches. */
+  protected compareParams(members: Producer[], subsets: Producer[][] = []): { fiches: string } {
+    const list = members.length > MAX_COMPARED && subsets[0] ? subsets[0] : members;
+    return { fiches: list.slice(0, MAX_COMPARED).map((member) => member.code).join(",") };
+  }
+
+  protected codesOf(members: Producer[]): string {
+    return members.map((member) => member.code).join(", ");
+  }
+
+  /** Seules les fiches identiques du sous-ensemble choisi sont proposées à la fusion. */
+  protected openMerge(group: DuplicateGroup, subset: Producer[]) {
+    this.mergeGroup.set({ ...group, members: subset });
+  }
+
+  /** Annule les fusions rattachées à la fiche gardée, une par une ; s'arrête à la première erreur. */
+  protected async confirmApiUndo() {
+    const target = this.undoTarget();
+    if (!target || this.busy()) return;
+    this.busy.set(true);
+    let done = 0;
+    let failure: { code: string; reason: string } | null = null;
+    for (const other of target.merged) {
+      try {
+        await unmergeProducers(target.keep.id, other.id);
+        done += 1;
+      } catch (error) {
+        failure = { code: other.code, reason: this.t()(mergeErrorKey(error)) };
+        break;
+      }
+    }
+    if (done) await this.flow.hydrate();
+    this.busy.set(false);
+    const t = this.t();
+    if (!failure) {
+      this.undoTarget.set(null);
+      this.snackbar.success(t("qualite.merge.undoSuccess", { merged: target.merged.map((member) => member.code).join(", ") }));
+    } else if (done) {
+      this.undoTarget.set(null);
+      this.snackbar.error(t("qualite.merge.undoPartial", { done, ...failure }));
+    } else {
+      this.snackbar.error(t("qualite.merge.undoFailed", failure));
+    }
+  }
+
+  protected scoopName(id: string): string {
+    return this.store.state().scoops.find((scoop) => scoop.id === id)?.name ?? "—";
+  }
 
   protected readonly filter = signal<Group>("a-traiter");
   protected readonly selId = signal<string | null>(null);
@@ -693,7 +1280,50 @@ export default class QualiteDoublonsPage {
     return this.comparisonRows(a, b).filter((r) => r.diff).length;
   }
 
-  protected readonly stats = computed<StatCard[]>(() => {
+  protected readonly stats = computed<StatCard[]>(() =>
+    this.apiMode ? this.realStats() : this.demoStats(),
+  );
+
+  private readonly realStats = computed<StatCard[]>(() => {
+    const t = this.t();
+    const all = this.allGroups();
+    const ofReason = (reason: DuplicateReason) => all.filter((group) => group.reason === reason);
+    const people = new Set(all.flatMap((group) => group.members.map((member) => member.id)));
+    const largest = Math.max(0, ...all.map((group) => group.members.length));
+    return [
+      {
+        label: t("qualite.real.dbl.stat.groups"),
+        value: nf.format(all.length),
+        sub: t("qualite.real.dbl.stat.groupsSub", { n: nf.format(people.size) }),
+        icon: "group",
+        bg: "",
+        fg: "",
+      },
+      {
+        label: t("qualite.real.dbl.stat.cni"),
+        value: nf.format(ofReason("cni").length),
+        sub: t("qualite.real.dbl.stat.cniSub"),
+        icon: "badge",
+        ...TONE.erreur,
+      },
+      {
+        label: t("qualite.real.dbl.stat.phone"),
+        value: nf.format(ofReason("phone").length),
+        sub: t("qualite.real.dbl.stat.phoneSub"),
+        icon: "call",
+        ...TONE.attente,
+      },
+      {
+        label: t("qualite.real.dbl.stat.largest"),
+        value: largest ? nf.format(largest) : "—",
+        sub: t("qualite.real.dbl.stat.largestSub"),
+        icon: "hub",
+        ...TONE.info,
+      },
+    ];
+  });
+
+  private readonly demoStats = computed<StatCard[]>(() => {
     const t = this.t();
     const v = this.visible();
     const todo = v.filter((c) => c.status === "à examiner");
