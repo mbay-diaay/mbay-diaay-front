@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 
+import { describeSource, sourceOfProducer, type DataSource } from "@/lib/data-source";
 import { fmtDateTime, maskCni, maskPhone, nf } from "@/lib/format";
 import type { CorrectionRequest, CorrectionStatus, Producer } from "@/lib/mock/data";
 import type { MessageKey } from "@/lib/i18n";
@@ -183,10 +184,11 @@ const STATUS_TONE: Record<CorrectionStatus, { bg: string; fg: string }> = {
       <section class="card mt-3 overflow-hidden">
         @if (rows().length) {
           <div class="overflow-x-auto">
-            <table class="tbl min-w-[920px]">
+            <table class="tbl min-w-[1040px]">
               <thead>
                 <tr>
                   <th>{{ t()("qualite.corrections.col.producer") }}</th>
+                  <th>{{ t()("qualite.source.col") }}</th>
                   <th>{{ t()("qualite.corrections.col.changes") }}</th>
                   <th>{{ t()("qualite.corrections.col.motif") }}</th>
                   <th>{{ t()("qualite.corrections.col.requester") }}</th>
@@ -210,6 +212,19 @@ const STATUS_TONE: Record<CorrectionStatus, { bg: string; fg: string }> = {
                           }}</span>
                         </span>
                       </span>
+                    </td>
+                    <td>
+                      @if (sourceOfProducerId(request.producerId); as source) {
+                        <span
+                          class="badge"
+                          [style.background]="source.bg"
+                          [style.color]="source.fg"
+                          [title]="sourceDetail(source)"
+                          ><ui-icon [name]="source.icon" [size]="14" />{{ t()(source.labelKey) }}</span
+                        >
+                      } @else {
+                        <span class="sub">—</span>
+                      }
                     </td>
                     <td>
                       <span class="block font-bold">{{
@@ -631,6 +646,16 @@ export default class QualiteCorrectionsPage {
 
   protected prodOf(id: string): Producer | undefined {
     return this.prodMap().get(id);
+  }
+
+  /** Base d'origine du producteur concerné par la demande (« — » si la fiche n'est pas chargée). */
+  protected sourceOfProducerId(id: string): DataSource | null {
+    const producer = this.prodOf(id);
+    return producer ? sourceOfProducer(producer) : null;
+  }
+
+  protected sourceDetail(source: DataSource): string {
+    return describeSource(source, this.t());
   }
 
   protected producerName(id: string): string {
