@@ -4,12 +4,14 @@ import { ActivatedRoute } from "@angular/router";
 import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
+import { organisationDraft } from "@/lib/coop-request-templates";
 import { listOrganisations, orgFromApi } from "@/lib/api/organisations";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { inScope } from "@/lib/scope";
 import { nf } from "@/lib/format";
 import type { Org } from "@/lib/mock/data";
 import { AppShellComponent } from "@shared/app-shell.component";
+import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
 import { StoreService } from "@shared/store.service";
 import { createPager } from "@shared/pager";
@@ -47,6 +49,7 @@ const typeTone = (type: string | null) =>
   imports: [
     GlobalFiltersComponent,
     AppShellComponent,
+    ContactScoopModalComponent,
     IconComponent,
     DetailModalComponent,
     PaginationComponent,
@@ -214,7 +217,20 @@ const typeTone = (type: string | null) =>
         }
       </section>
 
-      <ui-detail-modal [view]="detail()" (closed)="detailId.set(null)" />
+      <ui-detail-modal [view]="detail()" (closed)="detailId.set(null)">
+        @if (contactOrg(); as org) {
+          <button detail-actions type="button" class="btn btn-ghost" (click)="openContact(org)">
+            <ui-icon name="mail" [size]="18" />{{ t()("demandes.action") }}
+          </button>
+        }
+      </ui-detail-modal>
+      <ui-contact-scoop-modal
+        [open]="contactTargets().length > 0"
+        kind="organisation"
+        [targets]="contactTargets()"
+        [link]="contactLink()"
+        (closed)="contactTargets.set([])"
+      />
       <app-organisation-dialog [(open)]="newOpen" [scoopId]="scoopFilter() || null" />
     </app-shell>
   `,
@@ -358,6 +374,28 @@ export default class OrganisationsPage {
     ];
   });
 
+  /** Mode API, administrateur CRADESC : l'organisation ouverte est « à qualifier » (type inconnu) → bouton de contact. */
+  protected readonly contactOrg = computed<Org | null>(() => {
+    const id = this.detailId();
+    const org = id ? this.store.state().orgs.find((candidate) => candidate.id === id) : null;
+    return org && !org.type && isApiMode() && this.store.can("coop_request.send") ? org : null;
+  });
+  protected readonly contactTargets = signal<CoopRequestTarget[]>([]);
+  protected readonly contactLink = signal("");
+
+  /** Ferme la fiche puis ouvre la demande à la coopérative de l'organisation (une seule fenêtre à la fois). */
+  protected openContact(org: Org): void {
+    this.detailId.set(null);
+    this.contactLink.set(`/dashboard/organisations/${org.id}`);
+    this.contactTargets.set([
+      {
+        scoopId: org.scoopId,
+        items: [{ type: "organisation", id: org.id, label: org.name }],
+        ...organisationDraft({ name: org.name }),
+      },
+    ]);
+  }
+
   protected readonly detail = computed<DetailView | null>(() => {
     const id = this.detailId();
     const o = id ? this.all().find((x) => x.id === id) : null;
@@ -375,9 +413,35 @@ export default class OrganisationsPage {
           : st === "suspendu"
             ? TONE.attente
             : TONE.neutre;
+    // Ce qui pose problème : type inconnu, puis producteurs « à vérifier » avec leur première alerte.
+    const toCheck = s.producers.filter((p) => p.orgId === o.id && p.quality === "à vérifier");
+    const typeIssue = !o.type
+      ? (o.name ?? "").trim() === "" || /^(non pr[ée]cis[ée]e?|n\/?a|inconnu|\?+)$/i.test((o.name ?? "").trim())
+        ? t("cooperatives.fiche.gie.issue.noName")
+        : t("cooperatives.fiche.gie.issue.unknownType", { name: o.name })
+      : null;
+    const lines = toCheck.slice(0, 6).map((p) => ({
+      label: p.code,
+      text: p.survey?.alerts?.[0] ?? t("organisations.detail.toCheckNoAlert"),
+    }));
+    if (toCheck.length > 6)
+      lines.push({ label: "…", text: t("organisations.detail.toCheckMore", { count: toCheck.length - 6 }) });
+    const alerts = [
+      ...(typeIssue ? [{ title: t("cooperatives.fiche.detail.issue"), text: typeIssue }] : []),
+      ...(toCheck.length
+        ? [
+            {
+              title: t("organisations.detail.toCheckTitle"),
+              text: t("organisations.detail.toCheckIntro", { count: toCheck.length }),
+              lines,
+            },
+          ]
+        : []),
+    ];
     return {
       title: o.name,
       subtitle: [o.village, o.scoop].filter(Boolean).join(" · "),
+      alerts,
       icon: "hub",
       badges: [{ label: o.type ?? t("organisations.filter.toQualify"), ...o.tone }],
       kpis: [

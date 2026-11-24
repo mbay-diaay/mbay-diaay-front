@@ -1,3 +1,4 @@
+import type { MessageKey } from "../i18n";
 import type {
   CorrectionChange,
   CorrectionRequest,
@@ -247,6 +248,42 @@ export const approveDossierOnApi = (
 
 export const sendRemindersOnApi = () =>
   apiFetch<{ reminded: number }>("/dossiers/reminders", { method: "POST", body: {} });
+
+// -------------------------------------------------------------------- Fusion
+
+/** Fusionne la fiche `mergeId` dans `keepId` : parcelles, cultures, photos, adhésions et dossiers passent sur `keepId`. */
+export const mergeProducers = (keepId: string, mergeId: string, comment?: string) =>
+  apiFetch<ApiProducer>(`/producers/${encodeURIComponent(keepId)}/merge`, {
+    method: "POST",
+    body: { mergeId, ...(comment?.trim() && { comment: comment.trim() }) },
+  }).then(producerFromApi);
+
+/** Annule la fusion de `mergeId` dans `keepId`. */
+export const unmergeProducers = (keepId: string, mergeId: string) =>
+  apiFetch<ApiProducer>(`/producers/${encodeURIComponent(keepId)}/unmerge`, {
+    method: "POST",
+    body: { mergeId },
+  }).then(producerFromApi);
+
+/** Clé de message française pour une erreur de fusion ou d'annulation de fusion. */
+export function mergeErrorKey(error: unknown): MessageKey {
+  if (error instanceof ApiError) {
+    const cause = (error.details as { code?: string } | undefined)?.code ?? error.code;
+    switch (cause) {
+      case "ALREADY_MERGED":
+        return "qualite.merge.err.alreadyMerged";
+      case "DIFFERENT_SCOOP":
+        return "qualite.merge.err.differentScoop";
+      case "NOT_MERGED":
+        return "qualite.merge.err.notMerged";
+    }
+    if (error.status === 0) return "qualite.merge.err.network";
+    if (error.status === 403) return "qualite.merge.err.forbidden";
+    if (error.status === 404) return "qualite.merge.err.notFound";
+    if (error.status === 400 || error.status === 422) return "qualite.merge.err.invalid";
+  }
+  return "qualite.merge.err.generic";
+}
 
 // ------------------------------------------------------------------- Erreurs
 

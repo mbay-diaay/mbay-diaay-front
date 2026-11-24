@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
+import { organisationDraft } from "@/lib/coop-request-templates";
 import { listOrganisations, orgFromApi, organisationApiError, qualifyOrganisations } from "@/lib/api/organisations";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { ageAtMost, downloadCsv, fmtAge, fmtDate, nf, nf1 } from "@/lib/format";
@@ -12,6 +13,7 @@ import { ORG_TYPES, type OrgType, type Producer } from "@/lib/mock/data";
 import { inScope } from "@/lib/scope";
 import { AccessDeniedError, actions } from "@/lib/store";
 import { AppShellComponent } from "@shared/app-shell.component";
+import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
 import { createPager } from "@shared/pager";
 import { PlotMapComponent } from "@shared/plot-map.component";
@@ -61,6 +63,7 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
   selector: "app-organisation-detail-page",
   imports: [
     AppShellComponent,
+    ContactScoopModalComponent,
     DetailHeroComponent,
     IconComponent,
     ModalComponent,
@@ -82,6 +85,97 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
       }
       .map {
         height: 360px;
+      }
+      .alerte {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        border-radius: 18px;
+        padding: 14px 16px;
+        background: var(--v2-attente-bg);
+        color: var(--v2-attente-fg);
+      }
+      .alerte-ico {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: color-mix(in oklab, var(--v2-attente-fg) 14%, transparent);
+      }
+      .alerte-titre {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .alerte-texte {
+        margin: 4px 0 0;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.45;
+      }
+      .handicap-note {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        margin: 4px 20px 16px;
+        border-radius: 18px;
+        padding: 14px 18px;
+        background: var(--v2-info-bg);
+        color: var(--v2-info-fg);
+      }
+      .handicap-ico {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: color-mix(in oklab, var(--v2-info-fg) 14%, transparent);
+      }
+      .handicap-title {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .handicap-names {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .handicap-name {
+        border: 0;
+        border-radius: 999px;
+        padding: 6px 14px;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+        background: var(--v2-blanc);
+        color: var(--v2-info-fg);
+      }
+      .handicap-name:hover {
+        text-decoration: underline;
+      }
+      .handicap-name:focus-visible {
+        outline: 2px solid var(--v2-info-fg);
+        outline-offset: 2px;
+      }
+      .handicap-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border-radius: 999px;
+        padding: 4px 11px;
+        font-size: 13px;
+        font-weight: 800;
+        background: var(--v2-info-bg);
+        color: var(--v2-info-fg);
       }
       .types {
         display: grid;
@@ -155,6 +249,23 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
 
           <ui-stat-cards class="rise mt-6" [stats]="stats()" />
 
+          @if (!organisation.type) {
+            <div class="alerte rise mt-4" role="note">
+              <span class="alerte-ico" aria-hidden="true"><ui-icon name="info" [size]="20" /></span>
+              <div class="min-w-0">
+                <p class="alerte-titre">{{ t()("cooperatives.fiche.detail.issue") }}</p>
+                <p class="alerte-texte">{{ qualifyIssue() }}</p>
+                @if (canContact()) {
+                  <div class="mt-3 flex flex-wrap justify-end">
+                    <button type="button" class="btn btn-ghost" (click)="openContact()">
+                      <ui-icon name="mail" [size]="18" />{{ t()("demandes.action") }}
+                    </button>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
           <!-- Onglets -->
           <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
             <div
@@ -215,7 +326,35 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
                     (input)="q.set($any($event.target).value)"
                   />
                 </label>
+                <div class="seg" role="radiogroup" [attr.aria-label]="t()('organisations.v2.filter.aria')">
+                  @for (option of producerFilters(); track option.id) {
+                    <button
+                      type="button"
+                      role="radio"
+                      [class.on]="producerFilter() === option.id"
+                      [attr.aria-checked]="producerFilter() === option.id"
+                      (click)="producerFilter.set(option.id)"
+                    >
+                      {{ option.label }}<span class="n" [class.zero]="!option.count">{{ option.count }}</span>
+                    </button>
+                  }
+                </div>
               </div>
+              @if (handicapped().length) {
+                <div class="handicap-note">
+                  <span class="handicap-ico" aria-hidden="true"><ui-icon name="accessible" [size]="22" /></span>
+                  <div class="min-w-0">
+                    <p class="handicap-title">{{ t()("organisations.v2.handicap.title", { count: handicapped().length }) }}</p>
+                    <div class="handicap-names">
+                      @for (person of handicapped(); track person.id) {
+                        <button type="button" class="handicap-name" (click)="openProducer(person.id)">
+                          {{ person.firstName }} {{ person.lastName }}
+                        </button>
+                      }
+                    </div>
+                  </div>
+                </div>
+              }
               @if (shownProducers().length) {
                 <div class="overflow-x-auto">
                   <table class="tbl min-w-[720px]">
@@ -223,6 +362,7 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
                       <tr>
                         <th>{{ t()("organisations.v2.col.producer") }}</th>
                         <th>{{ t()("organisations.v2.col.sexAge") }}</th>
+                        <th>{{ t()("organisations.v2.col.handicap") }}</th>
                         <th>{{ t()("organisations.detail.col.village") }}</th>
                         <th>{{ t()("organisations.v2.col.status") }}</th>
                         <th>{{ t()("organisations.v2.col.quality") }}</th>
@@ -259,6 +399,13 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
                               t()(producer.sex === "F" ? "producteurs.sex.F" : "producteurs.sex.H")
                             }}
                             · {{ fmtAge(producer.age) }}
+                          </td>
+                          <td>
+                            @if (producer.handicap) {
+                              <span class="handicap-badge"><ui-icon name="accessible" [size]="15" />{{ t()("organisations.v2.handicap.yes") }}</span>
+                            } @else {
+                              <span class="sub">—</span>
+                            }
                           </td>
                           <td class="font-medium">{{ producer.village }}</td>
                           <td>
@@ -494,6 +641,14 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
           </ui-modal>
         }
       }
+      <!-- Contacter la coopérative (mode API, administrateur CRADESC) -->
+      <ui-contact-scoop-modal
+        [open]="contactTargets().length > 0"
+        kind="organisation"
+        [targets]="contactTargets()"
+        [link]="contactLink()"
+        (closed)="contactTargets.set([])"
+      />
     </app-shell>
   `,
 })
@@ -524,9 +679,35 @@ export default class OrganisationDetailPage {
 
   protected readonly org = computed(() => this.store.state().orgs.find((o) => o.id === this.id()));
 
+  /** Mode API, administrateur CRADESC : organisation « à qualifier » → demande au gestionnaire de la coopérative. */
+  protected readonly canContact = computed(() => isApiMode() && this.store.can("coop_request.send"));
+  protected readonly contactTargets = signal<CoopRequestTarget[]>([]);
+  protected readonly contactLink = computed(() => `/dashboard/organisations/${this.id()}`);
+
+  protected openContact(): void {
+    const org = this.org();
+    if (!org) return;
+    this.contactTargets.set([
+      {
+        scoopId: org.scoopId,
+        items: [{ type: "organisation", id: org.id, label: org.name }],
+        ...organisationDraft({ name: org.name }),
+      },
+    ]);
+  }
+
   protected readonly inScopeOrg = computed(() => {
     const o = this.org();
     return !!o && inScope([o], this.store.state().session).length === 1;
+  });
+
+  /** Pourquoi l'organisation est « à qualifier » : le type n'a pas pu être déduit de son nom. */
+  protected readonly qualifyIssue = computed(() => {
+    const t = this.t();
+    const name = (this.org()?.name ?? "").trim();
+    if (!name || /^(non pr[ée]cis[ée]e?|n\/?a|inconnu|\?+)$/i.test(name)) return t("cooperatives.fiche.gie.issue.noName");
+    if (this.producers().length === 0) return t("cooperatives.fiche.gie.issue.noProducer", { name });
+    return t("cooperatives.fiche.gie.issue.unknownType", { name });
   });
 
   protected readonly producers = computed(() =>
@@ -536,11 +717,51 @@ export default class OrganisationDetailPage {
       .sort((a, b) => `${a.lastName}${a.firstName}`.localeCompare(`${b.lastName}${b.firstName}`)),
   );
 
+  /** Producteurs en situation de handicap de l'organisation : leurs noms sont mis en avant au-dessus du tableau. */
+  protected readonly handicapped = computed(() =>
+    this.producers()
+      .filter((producer) => producer.handicap)
+      .sort((a, b) => `${a.lastName}${a.firstName}`.localeCompare(`${b.lastName}${b.firstName}`)),
+  );
+
+  /** Filtre du tableau des producteurs : tous, handicap, femmes, jeunes ou fiches à vérifier. */
+  protected readonly producerFilter = signal<"tous" | "handicap" | "femmes" | "jeunes" | "verifier">("tous");
+
+  private matchesFilter(
+    producer: { handicap: boolean; sex: string; age: number | null; quality: string },
+    filter: "tous" | "handicap" | "femmes" | "jeunes" | "verifier",
+  ): boolean {
+    if (filter === "handicap") return producer.handicap;
+    if (filter === "femmes") return producer.sex === "F";
+    if (filter === "jeunes") return ageAtMost(producer.age, this.store.state().youthMaxAge);
+    if (filter === "verifier") return producer.quality !== "validé";
+    return true;
+  }
+
+  /** Options du filtre avec leur effectif (sur tous les producteurs de l'organisation). */
+  protected readonly producerFilters = computed(() => {
+    const t = this.t();
+    const all = this.producers();
+    const options = [
+      { id: "tous" as const, label: t("organisations.v2.filter.all") },
+      { id: "handicap" as const, label: t("organisations.v2.filter.handicap") },
+      { id: "femmes" as const, label: t("organisations.v2.filter.women") },
+      { id: "jeunes" as const, label: t("organisations.v2.filter.youth") },
+      { id: "verifier" as const, label: t("organisations.v2.filter.toVerify") },
+    ];
+    return options.map((option) => ({
+      ...option,
+      count: all.filter((producer) => this.matchesFilter(producer, option.id)).length,
+    }));
+  });
+
   protected readonly shownProducers = computed(() => {
     const needle = norm(this.q().trim());
+    const filter = this.producerFilter();
     return this.producers().filter(
       (p) =>
-        !needle || norm(`${p.firstName} ${p.lastName} ${p.code} ${p.village}`).includes(needle),
+        this.matchesFilter(p, filter) &&
+        (!needle || norm(`${p.firstName} ${p.lastName} ${p.code} ${p.village}`).includes(needle)),
     );
   });
 
@@ -580,6 +801,7 @@ export default class OrganisationDetailPage {
     const measured = plots.reduce((n, pl) => n + (pl.measured || 0), 0);
     const declared = plots.reduce((n, pl) => n + (pl.declared || 0), 0);
     const toVerify = ps.filter((p) => p.quality !== "validé").length;
+    const handicapCount = ps.filter((p) => p.handicap).length;
     return [
       {
         label: t("organisations.col.producers"),
@@ -607,6 +829,15 @@ export default class OrganisationDetailPage {
         sub: t("organisations.v2.stat.areaSub", { declared: nf1.format(declared) }),
         icon: "square_foot",
         ...TONE.succes,
+      },
+      {
+        label: t("organisations.v2.stat.handicap"),
+        value: nf.format(handicapCount),
+        sub: t("producteurs.index.stat.shareSub", {
+          pct: ps.length ? Math.round((handicapCount / ps.length) * 100) : 0,
+        }),
+        icon: "accessible",
+        ...(handicapCount ? TONE.info : TONE.neutre),
       },
       {
         label: t("organisations.col.toVerify"),

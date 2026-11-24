@@ -5,6 +5,7 @@ import { ActivatedRoute, RouterLink } from "@angular/router";
 import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
+import { producerItem, sheetDraft } from "@/lib/coop-request-templates";
 import { fetchProducerPhotos } from "@/lib/api/plots";
 import { fmtAge, fmtDate, fmtDateTime, maskCni, maskPhone, nf, nf1 } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
@@ -19,6 +20,7 @@ import type {
 } from "@/lib/mock/data";
 import { inScope } from "@/lib/store";
 import { AppShellComponent } from "@shared/app-shell.component";
+import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
 import { PlotMapComponent } from "@shared/plot-map.component";
 import { ProducerWorkflow } from "@shared/producer-workflow.service";
@@ -86,6 +88,7 @@ const SEASON_KEYS = [
   selector: "app-producteur-detail-page",
   imports: [
     AppShellComponent,
+    ContactScoopModalComponent,
     DetailHeroComponent,
     IconComponent,
     ModalComponent,
@@ -258,6 +261,479 @@ const SEASON_KEYS = [
         outline: 2px solid var(--v2-foret);
         outline-offset: 2px;
       }
+      .alerte {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        border-radius: 18px;
+        padding: 16px 18px;
+        background: var(--v2-attente-bg);
+        color: var(--v2-attente-fg);
+      }
+      .alerte-ico {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: color-mix(in oklab, var(--v2-attente-fg) 14%, transparent);
+      }
+      .alerte-titre {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .alerte-texte {
+        margin: 4px 0 0;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.45;
+      }
+      .alerte-liste {
+        display: grid;
+        gap: 8px;
+        margin: 12px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .alerte-liste li {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        align-items: baseline;
+        border-radius: 12px;
+        padding: 8px 12px;
+        font-size: 14px;
+        font-weight: 600;
+        background: color-mix(in oklab, var(--v2-blanc) 55%, transparent);
+      }
+      .alerte-lieu {
+        font-family: var(--v2-font-mono);
+        font-size: 11.5px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .alerte-aide {
+        margin: 12px 0 0;
+        font-size: 13.5px;
+        font-weight: 500;
+        opacity: 0.85;
+      }
+      .head-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border-radius: 999px;
+        padding: 7px 14px;
+        font-size: 13px;
+        font-weight: 800;
+        background: var(--v2-sauge);
+        color: var(--v2-foret);
+        font-variant-numeric: tabular-nums;
+      }
+      .head-pill.strong {
+        padding: 9px 18px;
+        font-size: 15px;
+        background: var(--v2-citron);
+        box-shadow: 0 2px 0 color-mix(in oklab, var(--v2-foret) 30%, transparent);
+      }
+      .ps-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+      }
+      .ps-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 7px 14px;
+        font-size: 13.5px;
+        font-weight: 600;
+        background: var(--v2-creme);
+        border: 1.5px solid var(--v2-bord-carte);
+        color: var(--v2-foret);
+      }
+      .ps-item b {
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--v2-ardoise);
+      }
+      .ps-quote {
+        margin: 12px 0 0;
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-size: 14.5px;
+        font-weight: 600;
+        line-height: 1.5;
+        background: var(--v2-creme);
+        color: var(--v2-foret);
+      }
+      .pd-pill.big {
+        padding: 6px 14px;
+        font-size: 13.5px;
+      }
+      .pd-chip.info {
+        background: var(--v2-info-bg);
+        color: var(--v2-info-fg);
+      }
+      .pd {
+        display: grid;
+        gap: 14px;
+        padding: 18px 20px 20px;
+      }
+      .pd-place {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        color: var(--v2-foret);
+      }
+      .pd-place-name {
+        font-size: 17px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+      }
+      .pd-place-village {
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        background: var(--v2-sauge);
+        color: var(--v2-foret);
+      }
+      .pd-areas {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 12px;
+      }
+      .pd-area {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        border-radius: 16px;
+        padding: 14px 16px;
+        background: var(--v2-creme);
+        border: 1.5px solid var(--v2-bord-carte);
+      }
+      .pd-area-label {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--v2-ardoise);
+      }
+      .pd-area-value {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 800;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+        color: var(--v2-foret);
+        font-variant-numeric: tabular-nums;
+      }
+      .pd-area-value.zero {
+        font-size: 16px;
+        font-weight: 700;
+        opacity: 0.55;
+      }
+      .pd-area-gap {
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 800;
+        background: var(--v2-sauge);
+        color: var(--v2-foret);
+        font-variant-numeric: tabular-nums;
+      }
+      .pd-cols {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 10px;
+      }
+      .pd-card {
+        border-radius: 16px;
+        padding: 14px 16px;
+        border: 1.5px solid var(--v2-bord-carte);
+        background: var(--v2-blanc);
+      }
+      .pd-card-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 0 8px;
+        font-family: var(--v2-font-mono);
+        font-size: 11.5px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--v2-ardoise);
+      }
+      .pd-status {
+        margin: 0 0 10px;
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--v2-succes-fg);
+      }
+      .pd-status.warn {
+        color: var(--v2-attente-fg);
+      }
+      .pd-status-sub {
+        font-weight: 600;
+        color: var(--v2-ardoise);
+      }
+      .pd-list {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+      }
+      .pd-list > div {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding-top: 8px;
+        border-top: 1px solid var(--v2-separateur);
+      }
+      .pd-list dt {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--v2-ardoise);
+      }
+      .pd-list dd {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 700;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .pd-pill {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 3px 12px;
+        font-size: 13px;
+        font-weight: 800;
+        background: var(--v2-creme);
+      }
+      .pd-pill.ok {
+        background: var(--v2-succes-bg);
+        color: var(--v2-succes-fg);
+      }
+      .pd-pill.no {
+        background: var(--v2-attente-bg);
+        color: var(--v2-attente-fg);
+      }
+      .pd-water {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--v2-info-fg);
+      }
+      .pd-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .pd-chip {
+        border-radius: 999px;
+        padding: 5px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        background: var(--v2-sauge);
+        color: var(--v2-foret);
+      }
+      .pd-note {
+        border-radius: 16px;
+        padding: 12px 16px;
+        background: var(--v2-attente-bg);
+        color: var(--v2-attente-fg);
+      }
+      .pd-note.alert {
+        background: var(--v2-erreur-bg);
+        color: var(--v2-erreur-fg);
+      }
+      .pd-note-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .pd-note-text {
+        margin: 4px 0 0;
+        font-size: 14.5px;
+        font-weight: 600;
+        line-height: 1.45;
+      }
+      .pd-crops {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 10px;
+      }
+      .pd-crop {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-radius: 16px;
+        padding: 10px 14px;
+        border: 1.5px solid var(--v2-bord-carte);
+        background: var(--v2-blanc);
+      }
+      .pc-tiles {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .pc-tile {
+        border-radius: 16px;
+        padding: 14px 16px;
+        background: var(--v2-creme);
+      }
+      .pc-tile-text {
+        margin: 6px 0 0;
+        font-size: 20px;
+        font-weight: 800;
+        line-height: 1.1;
+      }
+      .pc-seasons {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 10px;
+      }
+      .pc-season {
+        border-radius: 18px;
+        padding: 16px 18px;
+        background: var(--v2-foret);
+        color: var(--v2-blanc);
+      }
+      .pc-season .pd-card-title,
+      .pc-season .pd-list dt {
+        color: color-mix(in oklab, var(--v2-blanc) 75%, transparent);
+      }
+      .pc-season .pd-list > div {
+        border-top-color: color-mix(in oklab, var(--v2-blanc) 16%, transparent);
+      }
+      .pc-season.off {
+        background: var(--v2-creme);
+        color: var(--v2-ardoise);
+      }
+      .pc-season.off .pd-card-title {
+        color: var(--v2-ardoise);
+      }
+      .pc-value {
+        margin: 0 0 12px;
+        font-size: 28px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.03em;
+        color: var(--v2-citron);
+        font-variant-numeric: tabular-nums;
+      }
+      .pc-dest {
+        border-radius: 999px;
+        padding: 5px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        background: color-mix(in oklab, var(--v2-blanc) 16%, transparent);
+        color: var(--v2-blanc);
+      }
+      .pc-diffs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .pc-diff {
+        border-radius: 999px;
+        padding: 6px 14px;
+        font-size: 13.5px;
+        font-weight: 800;
+        background: var(--v2-blanc);
+        color: var(--v2-erreur-fg);
+      }
+      .pd-crop-ico {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 800;
+        background: var(--v2-citron);
+        color: var(--v2-foret);
+      }
+      .pd-crop-name {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 800;
+      }
+      .pd-crop-variety {
+        font-weight: 600;
+        color: var(--v2-ardoise);
+      }
+      .pd-crop-share {
+        margin: 2px 0 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--v2-ardoise);
+        font-variant-numeric: tabular-nums;
+      }
+      .difficultes {
+        margin-top: 20px;
+      }
+      .difficultes-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-right: 8px;
+        font-family: var(--v2-font-mono);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--v2-citron);
+      }
+      .difficulte {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border-radius: 999px;
+        padding: 6px 14px 6px 10px;
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--v2-erreur-fg);
+        background: var(--v2-blanc);
+        box-shadow: 0 2px 0 color-mix(in oklab, var(--v2-erreur-fg) 35%, transparent);
+      }
+      .difficulte::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 99px;
+        background: var(--v2-erreur-fg);
+      }
+      .difficulte.vide {
+        font-weight: 700;
+        color: var(--v2-blanc);
+        background: color-mix(in oklab, var(--v2-blanc) 16%, transparent);
+        box-shadow: none;
+      }
+      .difficulte.vide::before {
+        display: none;
+      }
       .viewer {
         display: grid;
         place-items: center;
@@ -298,6 +774,9 @@ const SEASON_KEYS = [
             [eyebrow]="current.code"
             [mono]="initials(current.firstName + ' ' + current.lastName)"
             [image]="current.photoUrl"
+            [zoomable]="!!current.photoUrl"
+            [zoomLabel]="t()('producteurs.photos.enlarge')"
+            (imageClick)="heroPhotoOpen.set(true)"
             [badges]="heroBadges()"
             [meta]="heroMeta()"
             [backLabel]="t()('producteurs.fiche.back')"
@@ -306,6 +785,17 @@ const SEASON_KEYS = [
               <button hero-actions type="button" class="btn btn-citron" (click)="openCorrection()">
                 <ui-icon name="edit" [size]="18" />{{ t()("producteurs.detail.requestEdit") }}
               </button>
+            }
+          
+            @if (current.survey) {
+              <div hero-extra class="difficultes relative flex flex-wrap items-center gap-2">
+                <span class="difficultes-label"><ui-icon name="warning" [size]="16" />{{ t()("producteurs.survey.difficulties") }}</span>
+                @for (difficulty of current.survey.difficulties; track difficulty) {
+                  <span class="difficulte">{{ difficulty }}</span>
+                } @empty {
+                  <span class="difficulte vide">{{ t()("producteurs.survey.noDifficulty") }}</span>
+                }
+              </div>
             }
           </ui-detail-hero>
 
@@ -319,6 +809,32 @@ const SEASON_KEYS = [
           }
 
           <ui-stat-cards class="rise mt-6" [stats]="stats()" />
+
+          @if (checkItems().length) {
+            <div class="alerte rise mt-4" role="note">
+              <span class="alerte-ico" aria-hidden="true"><ui-icon name="info" [size]="20" /></span>
+              <div class="min-w-0">
+                <p class="alerte-titre">{{ t()("producteurs.check.title") }}</p>
+                <p class="alerte-texte">{{ t()("producteurs.check.intro", { count: checkItems().length }) }}</p>
+                <ul class="alerte-liste">
+                  @for (item of checkItems(); track item.id) {
+                    <li>
+                      <span class="alerte-lieu">{{ item.where }}</span>
+                      <span>{{ item.text }}</span>
+                    </li>
+                  }
+                </ul>
+                <p class="alerte-aide">{{ t()("producteurs.check.help") }}</p>
+                @if (canContact()) {
+                  <div class="mt-3 flex flex-wrap justify-end">
+                    <button type="button" class="btn btn-ghost" (click)="openContact()">
+                      <ui-icon name="mail" [size]="18" />{{ t()("demandes.action") }}
+                    </button>
+                  </div>
+                }
+              </div>
+            </div>
+          }
 
           <div class="grid-main mt-6">
             <!-- Identité -->
@@ -480,276 +996,101 @@ const SEASON_KEYS = [
                   <span class="sec-ico"><ui-icon name="query_stats" [size]="18" /></span
                   >{{ t()("producteurs.survey.title") }}
                 </h2>
-                <span class="sub">{{
-                  t()("producteurs.survey.source", { batch: survey.batch })
-                }}</span>
+                <span class="head-pill">
+                  <ui-icon name="query_stats" [size]="16" />{{ t()("producteurs.survey.source", { batch: survey.batch }) }}
+                </span>
               </div>
-              <dl class="facts">
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="calendar_today" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.surveyedAt") }}</dt>
-                    <dd [class.zero]="!survey.surveyedAt">
-                      {{ survey.surveyedAt ? fmtDate(survey.surveyedAt) : "—" }}
-                    </dd>
-                  </div>
+              <div class="pd">
+                <div class="ps-strip">
+                  <span class="ps-item"><ui-icon name="calendar_today" [size]="16" /><b>{{ t()("producteurs.survey.surveyedAt") }}</b>{{ survey.surveyedAt ? fmtDate(survey.surveyedAt) : "—" }}</span>
+                  <span class="ps-item"><ui-icon name="event_note" [size]="16" /><b>{{ t()("producteurs.survey.phase") }}</b>{{ survey.phase || "—" }}</span>
+                  <span class="ps-item"><ui-icon name="schedule" [size]="16" /><b>{{ t()("producteurs.survey.duration") }}</b>{{ amount(survey.durationMin, "producteurs.unit.minutes", nf) }}</span>
+                  <span class="ps-item"><ui-icon name="location_on" [size]="16" /><b>{{ t()("producteurs.survey.zone") }}</b>{{ t()("producteurs.survey.zoneValue", { zone: survey.zone }) }}</span>
+                  <span class="ps-item"><ui-icon name="support_agent" [size]="16" /><b>{{ t()("producteurs.survey.supervisor") }}</b>{{ survey.supervisor || "—" }}</span>
                 </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="event_note" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.phase") }}</dt>
-                    <dd [class.zero]="!survey.phase">{{ survey.phase || "—" }}</dd>
+
+                <div class="pd-cols">
+                  <div class="pd-card">
+                    <p class="pd-card-title"><ui-icon name="person" [size]="16" />{{ t()("producteurs.survey.profile") }}</p>
+                    <dl class="pd-list">
+                      <div><dt>{{ t()("producteurs.survey.opStatus") }}</dt><dd>{{ survey.opStatus || "—" }}</dd></div>
+                      <div><dt>{{ t()("producteurs.survey.ageGroup") }}</dt><dd>{{ survey.ageGroup || "—" }}</dd></div>
+                      <div><dt>{{ t()("producteurs.survey.education") }}</dt><dd>{{ survey.education || "—" }}</dd></div>
+                      <div><dt>{{ t()("producteurs.survey.seniority") }}</dt><dd>{{ survey.seniorityYears === null ? "—" : t()("producteurs.survey.years", { count: survey.seniorityYears }) }}</dd></div>
+                      <div><dt>{{ t()("producteurs.survey.smartphone") }}</dt><dd><span class="pd-pill" [class.ok]="survey.smartphone === true" [class.no]="survey.smartphone === false">{{ yesNo(survey.smartphone) }}</span></dd></div>
+                      <div><dt>{{ t()("producteurs.survey.mobileApps") }}</dt><dd>{{ survey.mobileApps || "—" }}</dd></div>
+                    </dl>
                   </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="schedule" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.duration") }}</dt>
-                    <dd [class.zero]="survey.durationMin === null">
-                      {{ amount(survey.durationMin, "producteurs.unit.minutes", nf) }}
-                    </dd>
+
+                  <div class="pd-card">
+                    <p class="pd-card-title"><ui-icon name="group" [size]="16" />{{ t()("producteurs.survey.situation") }}</p>
+                    <dl class="pd-list">
+                      <div><dt>{{ t()("producteurs.survey.womanHead") }}</dt><dd><span class="pd-pill">{{ yesNo(survey.womanHead) }}</span></dd></div>
+                      <div><dt>{{ t()("producteurs.survey.youth") }}</dt><dd><span class="pd-pill">{{ yesNo(survey.youth) }}</span></dd></div>
+                      <div><dt>{{ t()("producteurs.survey.youthDeclared") }}</dt><dd><span class="pd-pill">{{ yesNo(survey.youthDeclared) }}</span></dd></div>
+                      <div><dt>{{ t()("producteurs.fiche.handicap") }}</dt><dd><span class="pd-pill">{{ yesNo(current.handicap) }}</span></dd></div>
+                      <div><dt>{{ t()("producteurs.survey.rotatingFund") }}</dt><dd><span class="pd-pill">{{ yesNo(survey.rotatingFund) }}</span></dd></div>
+                      <div><dt>{{ t()("producteurs.survey.consent") }}</dt><dd><span class="pd-pill" [class.ok]="survey.consent === 'Oui'">{{ survey.consent || "—" }}</span></dd></div>
+                    </dl>
                   </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="location_on" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.zone") }}</dt>
-                    <dd>{{ t()("producteurs.survey.zoneValue", { zone: survey.zone }) }}</dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="support_agent" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.supervisor") }}</dt>
-                    <dd [class.zero]="!survey.supervisor">{{ survey.supervisor || "—" }}</dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="hub" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.opStatus") }}</dt>
-                    <dd [class.zero]="!survey.opStatus">{{ survey.opStatus || "—" }}</dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="person" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.ageGroup") }}</dt>
-                    <dd [class.zero]="!survey.ageGroup">{{ survey.ageGroup || "—" }}</dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="school" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.education") }}</dt>
-                    <dd [class.zero]="!survey.education">{{ survey.education || "—" }}</dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="devices" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.smartphone") }}</dt>
-                    <dd [class.zero]="survey.smartphone === null">
-                      {{ yesNo(survey.smartphone) }}
-                    </dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="devices" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.mobileApps") }}</dt>
-                    <dd [class.zero]="!survey.mobileApps">{{ survey.mobileApps || "—" }}</dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="history" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.seniority") }}</dt>
-                    <dd [class.zero]="survey.seniorityYears === null">
-                      {{ amount(survey.seniorityYears, "producteurs.unit.years", nf) }}
-                    </dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="female" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.womanHead") }}</dt>
-                    <dd [class.zero]="survey.womanHead === null">
-                      {{ yesNo(survey.womanHead) }}
-                    </dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="person" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.youth") }}</dt>
-                    <dd [class.zero]="survey.youth === null">
-                      {{ yesNo(survey.youth) }}
-                      @if (survey.youthDeclared !== null && survey.youthDeclared !== survey.youth) {
-                        <span class="sub block"
-                          >{{ t()("producteurs.survey.youthDeclared") }} :
-                          {{ yesNo(survey.youthDeclared) }}</span
-                        >
+
+                  <div class="pd-card">
+                    <p class="pd-card-title"><ui-icon name="agriculture" [size]="16" />{{ t()("producteurs.survey.farm") }}</p>
+                    <dl class="pd-list">
+                      <div><dt>{{ t()("producteurs.survey.plotCount") }}</dt><dd>{{ survey.plotCount ?? "—" }}</dd></div>
+                      <div><dt>{{ t()("producteurs.survey.totalArea") }}</dt><dd>{{ amount(survey.totalAreaHa, "producteurs.unit.ha") }}</dd></div>
+                      <div><dt>{{ t()("producteurs.survey.cultivatedArea") }}</dt><dd>{{ amount(survey.cultivatedAreaHa, "producteurs.unit.ha") }}</dd></div>
+                    </dl>
+                    <p class="pd-card-title mt-3">{{ t()("producteurs.survey.cropsPracticed") }}</p>
+                    <div class="pd-chips">
+                      @for (label of survey.cropsPracticed; track label) {
+                        <span class="pd-chip">{{ label }}</span>
+                      } @empty {
+                        <span class="sub">—</span>
                       }
-                    </dd>
+                    </div>
                   </div>
                 </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="accessibility" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.detail.handicap") }}</dt>
-                    <dd>{{ yesNo(current.handicap) }}</dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="landscape" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.plotCount") }}</dt>
-                    <dd [class.zero]="survey.plotCount === null">
-                      {{ survey.plotCount === null ? "—" : nf.format(survey.plotCount) }}
-                    </dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="square_foot" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.totalArea") }}</dt>
-                    <dd [class.zero]="survey.totalAreaHa === null">
-                      {{ amount(survey.totalAreaHa, "producteurs.unit.ha") }}
-                    </dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="grass" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.cultivatedArea") }}</dt>
-                    <dd [class.zero]="survey.cultivatedAreaHa === null">
-                      {{ amount(survey.cultivatedAreaHa, "producteurs.unit.ha") }}
-                    </dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="payments" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.rotatingFund") }}</dt>
-                    <dd [class.zero]="survey.rotatingFund === null">
-                      {{ yesNo(survey.rotatingFund) }}
-                    </dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="pin_drop" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.interviewGps") }}</dt>
-                    <dd class="tabular-nums" [class.zero]="!survey.interviewGps">
-                      @if (survey.interviewGps; as gps) {
-                        {{ coordinates(gps.lat, gps.lng) }}
-                        @if (gps.precisionM !== null) {
-                          <span class="sub block">{{
-                            amount(gps.precisionM, "producteurs.unit.precision", nf1)
-                          }}</span>
-                        }
-                      } @else {
-                        —
-                      }
-                    </dd>
-                  </div>
-                </div>
-                <div class="fact">
-                  <span class="fact-ico"><ui-icon name="how_to_reg" [size]="18" /></span>
-                  <div>
-                    <dt>{{ t()("producteurs.survey.consent") }}</dt>
-                    <dd [class.zero]="!survey.consent">{{ survey.consent || "—" }}</dd>
-                  </div>
-                </div>
-              </dl>
-              <div class="band band-grid">
-                <div>
-                  <p class="lbl">{{ t()("producteurs.survey.cropsPracticed") }}</p>
-                  <div class="chips">
-                    @for (label of survey.cropsPracticed; track label) {
-                      <span
-                        class="badge"
-                        [style.background]="tone.culture.bg"
-                        [style.color]="tone.culture.fg"
-                        >{{ label }}</span
-                      >
-                    } @empty {
-                      <span class="sub">{{ t()("producteurs.survey.none") }}</span>
-                    }
-                  </div>
-                </div>
-                <div>
-                  <p class="lbl">{{ t()("producteurs.survey.difficulties") }}</p>
-                  <div class="chips">
+
+                <div class="pd-note">
+                  <p class="pd-note-title"><ui-icon name="warning" [size]="16" />{{ t()("producteurs.survey.difficulties") }}</p>
+                  <div class="pc-diffs">
                     @for (label of survey.difficulties; track label) {
-                      <span
-                        class="badge"
-                        [style.background]="tone.attente.bg"
-                        [style.color]="tone.attente.fg"
-                        >{{ label }}</span
-                      >
+                      <span class="pc-diff">{{ label }}</span>
                     } @empty {
-                      <span class="sub">{{ t()("producteurs.survey.none") }}</span>
+                      <span class="pd-note-text">{{ t()("producteurs.survey.noDifficulty") }}</span>
                     }
                   </div>
                 </div>
-                <div>
-                  <p class="lbl">{{ t()("producteurs.survey.needs") }}</p>
-                  <div class="chips">
+
+                <div class="pd-card">
+                  <p class="pd-card-title"><ui-icon name="info" [size]="16" />{{ t()("producteurs.survey.needs") }}</p>
+                  <div class="pd-chips">
                     @for (label of survey.needs; track label) {
-                      <span
-                        class="badge"
-                        [style.background]="tone.info.bg"
-                        [style.color]="tone.info.fg"
-                        >{{ label }}</span
-                      >
+                      <span class="pd-chip info">{{ label }}</span>
                     } @empty {
                       <span class="sub">{{ t()("producteurs.survey.none") }}</span>
                     }
                   </div>
+                  @if (survey.needsText) {
+                    <p class="ps-quote">{{ survey.needsText }}</p>
+                  }
                 </div>
-              </div>
-              @if (survey.needsText) {
-                <div class="band">
-                  <p class="lbl">{{ t()("producteurs.survey.needsText") }}</p>
-                  <p class="text-block">{{ survey.needsText }}</p>
-                </div>
-              }
-              <div class="band">
-                <div class="flex flex-wrap items-center gap-2">
-                  <p class="lbl">{{ t()("producteurs.survey.quality") }}</p>
-                  <span
-                    class="badge"
-                    [style.background]="surveyQualityTone(survey.qualityStatus).bg"
-                    [style.color]="surveyQualityTone(survey.qualityStatus).fg"
-                    >{{ survey.qualityStatus }}</span
-                  >
-                  <span class="badge" [style.background]="tone.neutre.bg" [style.color]="tone.neutre.fg"
-                    >{{ t()("producteurs.survey.phoneValid") }} : {{ yesNo(survey.phoneValid) }}</span
-                  >
-                  <span class="badge" [style.background]="tone.neutre.bg" [style.color]="tone.neutre.fg"
-                    >{{ t()("producteurs.survey.cniFormatValid") }} :
-                    {{ yesNo(survey.cniFormatValid) }}</span
-                  >
-                </div>
-                @if (survey.alerts.length) {
-                  <p class="sub mt-3">{{ t()("producteurs.survey.alerts") }}</p>
-                  <div class="chips">
-                    @for (alert of survey.alerts; track alert) {
-                      <span
-                        class="badge"
-                        [style.background]="tone.erreur.bg"
-                        [style.color]="tone.erreur.fg"
-                        ><ui-icon name="warning" [size]="14" />{{ alert }}</span
-                      >
+
+                <div class="pd-card">
+                  <p class="pd-card-title"><ui-icon name="task_alt" [size]="16" />{{ t()("producteurs.survey.quality") }}</p>
+                  <div class="pd-chips">
+                    <span class="pd-pill big" [class.ok]="survey.qualityStatus === 'Validée'" [class.no]="survey.qualityStatus !== 'Validée'">{{ survey.qualityStatus }}</span>
+                    <span class="pd-pill big" [class.ok]="survey.phoneValid === true" [class.no]="survey.phoneValid === false">{{ t()("producteurs.survey.phoneValid") }} : {{ yesNo(survey.phoneValid) }}</span>
+                    <span class="pd-pill big" [class.ok]="survey.cniFormatValid === true" [class.no]="survey.cniFormatValid === false">{{ t()("producteurs.survey.cniFormatValid") }} : {{ yesNo(survey.cniFormatValid) }}</span>
+                    @if (survey.interviewGps; as gps) {
+                      <span class="pd-pill big"><ui-icon name="pin_drop" [size]="14" />{{ coordinates(gps.lat, gps.lng) }}@if (gps.precisionM !== null) { · ± {{ nf.format(gps.precisionM) }} m }</span>
                     }
                   </div>
-                }
-                @if (survey.observations) {
-                  <p class="sub mt-3">{{ t()("producteurs.survey.observations") }}</p>
-                  <p class="text-block">{{ survey.observations }}</p>
-                }
+                  @if (survey.observations) {
+                    <p class="ps-quote">{{ survey.observations }}</p>
+                  }
+                </div>
               </div>
             </section>
           }
@@ -840,186 +1181,142 @@ const SEASON_KEYS = [
                       @if (expandedPlotId() === plot.id) {
                         <tr>
                           <td class="detail-cell" [attr.colspan]="plotColumnCount()">
-                            <dl class="facts">
+                            <div class="pd">
                               @if (plot.landmark || plot.village) {
-                                <div class="fact">
-                                  <span class="fact-ico"><ui-icon name="location_on" [size]="18" /></span>
-                                  <div>
-                                    <dt>{{ t()("producteurs.plots.landmark") }}</dt>
-                                    <dd>
-                                      {{ plot.landmark || "—" }}
-                                      @if (plot.village) {
-                                        <span class="sub block"
-                                          >{{ t()("producteurs.plots.village") }} : {{ plot.village }}</span
-                                        >
-                                      }
-                                    </dd>
-                                  </div>
-                                </div>
+                                <p class="pd-place">
+                                  <ui-icon name="location_on" [size]="18" />
+                                  @if (plot.landmark && plot.landmark.trim().toLowerCase() !== (plot.village ?? "").trim().toLowerCase()) {
+                                    <span class="pd-place-name">{{ plot.landmark }}</span>
+                                    @if (plot.village) {
+                                      <span class="pd-place-village">{{ plot.village }}</span>
+                                    }
+                                  } @else {
+                                    <span class="pd-place-name">{{ plot.village || plot.landmark }}</span>
+                                  }
+                                </p>
                               }
-                              <div class="fact">
-                                <span class="fact-ico"><ui-icon name="square_foot" [size]="18" /></span>
-                                <div>
-                                  <dt>{{ t()("producteurs.plots.declared") }}</dt>
-                                  <dd>
+
+                              <div class="pd-areas">
+                                <div class="pd-area">
+                                  <p class="pd-area-label">{{ t()("producteurs.plots.declared") }}</p>
+                                  <p class="pd-area-value" [class.zero]="plot.declaredKnown === false">
                                     {{
                                       plot.declaredKnown === false
                                         ? t()("producteurs.plots.declaredUnknown")
                                         : amount(plot.declared, "producteurs.unit.ha")
                                     }}
-                                  </dd>
+                                  </p>
+                                </div>
+                                <div class="pd-area">
+                                  <p class="pd-area-label">{{ t()("producteurs.plots.measured") }}</p>
+                                  <p class="pd-area-value">{{ amount(plot.measured, "producteurs.unit.ha") }}</p>
+                                  @if (plot.areaGapPct !== null && plot.areaGapPct !== undefined) {
+                                    <span class="pd-area-gap">
+                                      {{ t()("producteurs.plots.gap") }} {{ amount(plot.areaGapPct, "producteurs.unit.pct", nf1) }}
+                                    </span>
+                                  }
+                                </div>
+                                <div class="pd-area">
+                                  <p class="pd-area-label">{{ t()("producteurs.plots.cultivated") }}</p>
+                                  <p class="pd-area-value" [class.zero]="plot.cultivatedAreaHa == null">
+                                    {{ amount(plot.cultivatedAreaHa, "producteurs.unit.ha") }}
+                                  </p>
                                 </div>
                               </div>
-                              <div class="fact">
-                                <span class="fact-ico"><ui-icon name="square_foot" [size]="18" /></span>
-                                <div>
-                                  <dt>{{ t()("producteurs.plots.measured") }}</dt>
-                                  <dd>
-                                    {{ amount(plot.measured, "producteurs.unit.ha") }}
-                                    @if (plot.areaGapPct !== null && plot.areaGapPct !== undefined) {
-                                      <span class="sub block"
-                                        >{{ t()("producteurs.plots.gap") }} :
-                                        {{ amount(plot.areaGapPct, "producteurs.unit.pct", nf1) }}</span
-                                      >
-                                    }
-                                  </dd>
-                                </div>
-                              </div>
-                              @if (plot.cultivatedAreaHa !== null && plot.cultivatedAreaHa !== undefined) {
-                                <div class="fact">
-                                  <span class="fact-ico"><ui-icon name="grass" [size]="18" /></span>
-                                  <div>
-                                    <dt>{{ t()("producteurs.plots.cultivated") }}</dt>
-                                    <dd>{{ amount(plot.cultivatedAreaHa, "producteurs.unit.ha") }}</dd>
-                                  </div>
-                                </div>
-                              }
-                              @if (plot.perimeterM !== null && plot.perimeterM !== undefined) {
-                                <div class="fact">
-                                  <span class="fact-ico"><ui-icon name="square_foot" [size]="18" /></span>
-                                  <div>
-                                    <dt>{{ t()("producteurs.plots.perimeter") }}</dt>
-                                    <dd>{{ amount(plot.perimeterM, "producteurs.unit.meters", nf) }}</dd>
-                                  </div>
-                                </div>
-                              }
-                              <div class="fact">
-                                <span class="fact-ico"><ui-icon name="map" [size]="18" /></span>
-                                <div>
-                                  <dt>{{ t()("producteurs.plots.contour") }}</dt>
-                                  <dd>
+
+                              <div class="pd-cols">
+                                <div class="pd-card">
+                                  <p class="pd-card-title"><ui-icon name="map" [size]="16" />{{ t()("producteurs.plots.contour") }}</p>
+                                  <p class="pd-status" [class.warn]="plot.contourRepaired || plot.repaired || plot.contourValid === false">
                                     {{ contourLabel(plot) }}
                                     @if (plot.contourPoints) {
-                                      <span class="sub block">{{
-                                        t()("producteurs.plots.contourPoints", {
-                                          count: nf.format(plot.contourPoints),
-                                        })
-                                      }}</span>
+                                      <span class="pd-status-sub">· {{ t()("producteurs.plots.contourPoints", { count: nf.format(plot.contourPoints) }) }}</span>
                                     }
-                                  </dd>
+                                  </p>
+                                  <dl class="pd-list">
+                                    <div>
+                                      <dt>{{ t()("producteurs.plots.perimeter") }}</dt>
+                                      <dd>{{ amount(plot.perimeterM, "producteurs.unit.meters", nf) }}</dd>
+                                    </div>
+                                    @if (plot.centroid; as centre) {
+                                      <div>
+                                        <dt>{{ t()("producteurs.plots.centroid") }}</dt>
+                                        <dd>{{ coordinates(centre.lat, centre.lng) }}</dd>
+                                      </div>
+                                    }
+                                    <div>
+                                      <dt>{{ t()("producteurs.plots.neighbour") }}</dt>
+                                      <dd>{{ amount(plot.distanceNeighbourKm, "producteurs.unit.km") }}</dd>
+                                    </div>
+                                  </dl>
                                 </div>
-                              </div>
-                              @if (plot.centroid; as centre) {
-                                <div class="fact">
-                                  <span class="fact-ico"><ui-icon name="pin_drop" [size]="18" /></span>
-                                  <div>
-                                    <dt>{{ t()("producteurs.plots.centroid") }}</dt>
-                                    <dd class="tabular-nums">{{ coordinates(centre.lat, centre.lng) }}</dd>
-                                  </div>
-                                </div>
-                              }
-                              @if (plot.distanceNeighbourKm !== null && plot.distanceNeighbourKm !== undefined) {
-                                <div class="fact">
-                                  <span class="fact-ico"><ui-icon name="landscape" [size]="18" /></span>
-                                  <div>
-                                    <dt>{{ t()("producteurs.plots.neighbour") }}</dt>
-                                    <dd>{{ amount(plot.distanceNeighbourKm, "producteurs.unit.km") }}</dd>
-                                  </div>
-                                </div>
-                              }
-                              @if (plot.landDocument !== undefined) {
-                                <div class="fact">
-                                  <span class="fact-ico"><ui-icon name="description" [size]="18" /></span>
-                                  <div>
-                                    <dt>{{ t()("producteurs.plots.landDocument") }}</dt>
-                                    <dd [class.zero]="plot.landDocument === null">
-                                      {{ yesNo(plot.landDocument) }}
-                                    </dd>
-                                  </div>
-                                </div>
-                              }
-                              @if (plot.waterSource) {
-                                <div class="fact">
-                                  <span class="fact-ico"><ui-icon name="water_drop" [size]="18" /></span>
-                                  <div>
-                                    <dt>{{ t()("producteurs.plots.col.water") }}</dt>
-                                    <dd>{{ plot.waterSource }}</dd>
-                                  </div>
-                                </div>
-                              }
-                            </dl>
-                            @if (plot.infrastructures?.length) {
-                              <div class="band">
-                                <p class="lbl">{{ t()("producteurs.plots.infrastructures") }}</p>
-                                <div class="chips">
-                                  @for (label of plot.infrastructures; track label) {
-                                    <span
-                                      class="badge"
-                                      [style.background]="tone.succes.bg"
-                                      [style.color]="tone.succes.fg"
-                                      >{{ label }}</span
-                                    >
+
+                                <div class="pd-card">
+                                  <p class="pd-card-title"><ui-icon name="description" [size]="16" />{{ t()("producteurs.plots.landAndWater") }}</p>
+                                  <dl class="pd-list">
+                                    <div>
+                                      <dt>{{ t()("producteurs.plots.landDocument") }}</dt>
+                                      <dd>
+                                        <span class="pd-pill" [class.ok]="plot.landDocument === true" [class.no]="plot.landDocument === false">{{ yesNo(plot.landDocument) }}</span>
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt>{{ t()("producteurs.plots.col.water") }}</dt>
+                                      <dd>
+                                        <span class="pd-water"><ui-icon name="water_drop" [size]="15" />{{ plot.waterSource || "—" }}</span>
+                                      </dd>
+                                    </div>
+                                  </dl>
+                                  <p class="pd-card-title mt-3"><ui-icon name="grass" [size]="16" />{{ t()("producteurs.plots.infrastructures") }}</p>
+                                  @if (plot.infrastructures?.length) {
+                                    <div class="pd-chips">
+                                      @for (label of plot.infrastructures; track label) {
+                                        <span class="pd-chip">{{ label }}</span>
+                                      }
+                                    </div>
+                                  } @else {
+                                    <p class="sub">—</p>
                                   }
                                 </div>
                               </div>
-                            }
-                            @if (plot.alerts?.length || plot.observations) {
-                              <div class="band">
-                                @if (plot.alerts?.length) {
-                                  <p class="lbl">{{ t()("producteurs.plots.alerts") }}</p>
-                                  <div class="chips">
-                                    @for (alert of plot.alerts; track alert) {
-                                      <span
-                                        class="badge"
-                                        [style.background]="tone.erreur.bg"
-                                        [style.color]="tone.erreur.fg"
-                                        ><ui-icon name="warning" [size]="14" />{{ alert }}</span
-                                      >
+
+                              @if (plot.alerts?.length) {
+                                <div class="pd-note alert">
+                                  <p class="pd-note-title"><ui-icon name="warning" [size]="16" />{{ t()("producteurs.plots.alerts") }}</p>
+                                  @for (alert of plot.alerts; track alert) {
+                                    <p class="pd-note-text">{{ alert }}</p>
+                                  }
+                                </div>
+                              }
+                              @if (plot.observations) {
+                                <div class="pd-note">
+                                  <p class="pd-note-title"><ui-icon name="info" [size]="16" />{{ t()("producteurs.plots.observations") }}</p>
+                                  <p class="pd-note-text">{{ plot.observations }}</p>
+                                </div>
+                              }
+
+                              @if (plot.cropDetails) {
+                                <div>
+                                  <p class="pd-card-title"><ui-icon name="agriculture" [size]="16" />{{ t()("producteurs.plots.crops") }}</p>
+                                  <div class="pd-crops">
+                                    @for (detail of plot.cropDetails; track detail.id) {
+                                      <div class="pd-crop">
+                                        <span class="pd-crop-ico">{{ detail.crop.slice(0, 2).toUpperCase() }}</span>
+                                        <div class="min-w-0">
+                                          <p class="pd-crop-name">{{ detail.crop }}@if (detail.variety) {<span class="pd-crop-variety"> · {{ detail.variety }}</span>}</p>
+                                          <p class="pd-crop-share">
+                                            {{ amount(detail.sharePct, "producteurs.unit.pct", nf) }} ·
+                                            {{ amount(detail.areaHa, "producteurs.unit.ha") }}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    } @empty {
+                                      <p class="sub">{{ t()("producteurs.plots.noCrop") }}</p>
                                     }
                                   </div>
-                                }
-                                @if (plot.observations) {
-                                  <p class="lbl" [class.mt-3]="plot.alerts?.length">
-                                    {{ t()("producteurs.plots.observations") }}
-                                  </p>
-                                  <p class="text-block">{{ plot.observations }}</p>
-                                }
-                              </div>
-                            }
-                            @if (plot.cropDetails) {
-                              <div class="band pb-0">
-                                <p class="lbl">{{ t()("producteurs.plots.crops") }}</p>
-                              </div>
-                              @for (detail of plot.cropDetails; track detail.id) {
-                                <div class="crop-line">
-                                  <span class="avatar" style="height: 30px; width: 30px; font-size: 11px">{{
-                                    detail.crop.slice(0, 2).toUpperCase()
-                                  }}</span>
-                                  <span class="min-w-0 flex-1 font-bold"
-                                    >{{ detail.crop }}
-                                    @if (detail.variety) {
-                                      <span class="sub"> · {{ detail.variety }}</span>
-                                    }
-                                  </span>
-                                  <span class="sub tabular-nums">
-                                    {{ amount(detail.sharePct, "producteurs.unit.pct", nf) }} ·
-                                    {{ amount(detail.areaHa, "producteurs.unit.ha") }}
-                                  </span>
                                 </div>
-                              } @empty {
-                                <p class="sub px-5 pb-4">{{ t()("producteurs.plots.noCrop") }}</p>
                               }
-                            }
+                            </div>
                           </td>
                         </tr>
                       }
@@ -1044,9 +1341,11 @@ const SEASON_KEYS = [
                   }}<span class="n">{{ nf.format(cropDetails().length) }}</span>
                 </h2>
                 @if (productionValue()) {
-                  <span class="sub tabular-nums">{{
-                    t()("producteurs.production.totalValue", { value: nf.format(productionValue()) })
-                  }}</span>
+                  <span class="head-pill strong">
+                    <ui-icon name="payments" [size]="18" />{{
+                      t()("producteurs.production.totalValue", { value: nf.format(productionValue()) })
+                    }}
+                  </span>
                 }
               </div>
               @for (entry of cropDetails(); track entry.detail.id) {
@@ -1067,127 +1366,103 @@ const SEASON_KEYS = [
                       </p>
                     </div>
                   </div>
-                  <dl class="mini-facts">
-                    <div>
-                      <dt>{{ t()("producteurs.production.variety") }}</dt>
-                      <dd [class.zero]="!entry.detail.variety">{{ entry.detail.variety || "—" }}</dd>
+                  <div class="pc-tiles">
+                    <div class="pc-tile">
+                      <p class="pd-area-label">{{ t()("producteurs.production.variety") }}</p>
+                      <p class="pc-tile-text" [class.zero]="!entry.detail.variety">{{ entry.detail.variety || "—" }}</p>
                     </div>
-                    <div>
-                      <dt>{{ t()("producteurs.production.share") }}</dt>
-                      <dd>{{ amount(entry.detail.sharePct, "producteurs.unit.pct", nf) }}</dd>
+                    <div class="pc-tile">
+                      <p class="pd-area-label">{{ t()("producteurs.production.share") }}</p>
+                      <p class="pd-area-value">{{ amount(entry.detail.sharePct, "producteurs.unit.pct", nf) }}</p>
                     </div>
-                    <div>
-                      <dt>{{ t()("producteurs.production.area") }}</dt>
-                      <dd>{{ amount(entry.detail.areaHa, "producteurs.unit.ha") }}</dd>
+                    <div class="pc-tile">
+                      <p class="pd-area-label">{{ t()("producteurs.production.area") }}</p>
+                      <p class="pd-area-value">{{ amount(entry.detail.areaHa, "producteurs.unit.ha") }}</p>
                     </div>
-                    <div>
-                      <dt>{{ t()("producteurs.production.potentialYield") }}</dt>
-                      <dd>{{ amount(entry.detail.potentialYieldKgHa, "producteurs.unit.kgHa", nf) }}</dd>
+                    <div class="pc-tile">
+                      <p class="pd-area-label">{{ t()("producteurs.production.potentialYield") }}</p>
+                      <p class="pd-area-value">{{ amount(entry.detail.potentialYieldKgHa, "producteurs.unit.kgHa", nf) }}</p>
                     </div>
-                    <div>
-                      <dt>{{ t()("producteurs.production.potentialProduction") }}</dt>
-                      <dd>{{ amount(entry.detail.potentialProductionKg, "producteurs.unit.kg", nf) }}</dd>
+                    <div class="pc-tile">
+                      <p class="pd-area-label">{{ t()("producteurs.production.potentialProduction") }}</p>
+                      <p class="pd-area-value">{{ amount(entry.detail.potentialProductionKg, "producteurs.unit.kg", nf) }}</p>
                     </div>
-                    <div>
-                      <dt>{{ t()("producteurs.production.agroecology") }}</dt>
-                      <dd>
-                        @if (entry.detail.agroecology.length) {
-                          <span class="chips">
-                            @for (practice of entry.detail.agroecology; track practice) {
-                              <span
-                                class="badge"
-                                [style.background]="tone.succes.bg"
-                                [style.color]="tone.succes.fg"
-                                >{{ practice }}</span
-                              >
-                            }
-                          </span>
-                        } @else {
-                          <span class="sub">{{
-                            entry.detail.agroecologyUsed === null
-                              ? "—"
-                              : t()("producteurs.production.agroecologyNone")
-                          }}</span>
-                        }
-                      </dd>
-                    </div>
-                  </dl>
-                  <div class="season-tbl overflow-x-auto">
-                    <table class="tbl min-w-[720px]">
-                      <thead>
-                        <tr>
-                          <th>{{ t()("producteurs.production.season") }}</th>
-                          <th class="text-right">{{ t()("producteurs.production.quantity") }}</th>
-                          <th class="text-right">{{ t()("producteurs.production.yield") }}</th>
-                          <th class="text-right">{{ t()("producteurs.production.price") }}</th>
-                          <th class="text-right">{{ t()("producteurs.production.value") }}</th>
-                          <th>{{ t()("producteurs.production.destinations") }}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        @for (seasonKey of seasonKeys; track seasonKey.key) {
-                          @let season = entry.detail.seasons[seasonKey.key];
-                          <tr>
-                            <td class="font-semibold">{{ t()(seasonKey.label) }}</td>
-                            @if (season && season.produced) {
-                              <td class="text-right tabular-nums">
-                                {{ amount(season.quantityKg, "producteurs.unit.kg", nf) }}
-                              </td>
-                              <td class="text-right tabular-nums">
-                                {{ amount(season.yieldKgHa, "producteurs.unit.kgHa", nf) }}
-                              </td>
-                              <td class="text-right tabular-nums">
-                                {{ amount(season.pricePerKg, "producteurs.unit.fcfaKg", nf) }}
-                              </td>
-                              <td class="text-right font-extrabold tabular-nums">
-                                {{ amount(season.valueFcfa, "producteurs.unit.fcfa", nf) }}
-                              </td>
-                              <td>
-                                <span class="chips mt-0">
-                                  @for (destination of season.destinations; track destination) {
-                                    <span
-                                      class="badge"
-                                      [style.background]="tone.info.bg"
-                                      [style.color]="tone.info.fg"
-                                      >{{ destination }}</span
-                                    >
-                                  } @empty {
-                                    <span class="zero">—</span>
-                                  }
-                                </span>
-                              </td>
-                            } @else {
-                              <td colspan="5" class="sub">
-                                {{ t()("producteurs.production.notProduced") }}
-                              </td>
-                            }
-                          </tr>
-                        }
-                      </tbody>
-                    </table>
                   </div>
-                  @if (entry.detail.difficulties.length || entry.detail.alerts.length) {
-                    <div class="chips mt-3">
-                      @for (label of entry.detail.difficulties; track label) {
-                        <span
-                          class="badge"
-                          [style.background]="tone.attente.bg"
-                          [style.color]="tone.attente.fg"
-                          >{{ label }}</span
-                        >
-                      }
+
+                  <div class="pd-card mt-3">
+                    <p class="pd-card-title"><ui-icon name="grass" [size]="16" />{{ t()("producteurs.production.agroecology") }}</p>
+                    @if (entry.detail.agroecology.length) {
+                      <div class="pd-chips">
+                        @for (practice of entry.detail.agroecology; track practice) {
+                          <span class="pd-chip">{{ practice }}</span>
+                        }
+                      </div>
+                    } @else {
+                      <p class="sub">
+                        {{ entry.detail.agroecologyUsed === null ? "—" : t()("producteurs.production.agroecologyNone") }}
+                      </p>
+                    }
+                  </div>
+
+                  <div class="pc-seasons mt-3">
+                    @for (seasonKey of seasonKeys; track seasonKey.key) {
+                      @let season = entry.detail.seasons[seasonKey.key];
+                      <div class="pc-season" [class.off]="!(season && season.produced)">
+                        <p class="pd-card-title"><ui-icon name="payments" [size]="16" />{{ t()(seasonKey.label) }}</p>
+                        @if (season && season.produced) {
+                          <p class="pc-value">{{ amount(season.valueFcfa, "producteurs.unit.fcfa", nf) }}</p>
+                          <dl class="pd-list">
+                            <div>
+                              <dt>{{ t()("producteurs.production.quantity") }}</dt>
+                              <dd>{{ amount(season.quantityKg, "producteurs.unit.kg", nf) }}</dd>
+                            </div>
+                            <div>
+                              <dt>{{ t()("producteurs.production.yield") }}</dt>
+                              <dd>{{ amount(season.yieldKgHa, "producteurs.unit.kgHa", nf) }}</dd>
+                            </div>
+                            <div>
+                              <dt>{{ t()("producteurs.production.price") }}</dt>
+                              <dd>{{ amount(season.pricePerKg, "producteurs.unit.fcfaKg", nf) }}</dd>
+                            </div>
+                          </dl>
+                          <p class="pd-card-title mt-3">{{ t()("producteurs.production.destinations") }}</p>
+                          <div class="pd-chips">
+                            @for (destination of season.destinations; track destination) {
+                              <span class="pc-dest">{{ destination }}</span>
+                            } @empty {
+                              <span class="sub">—</span>
+                            }
+                          </div>
+                        } @else {
+                          <p class="sub">{{ t()("producteurs.production.notProduced") }}</p>
+                        }
+                      </div>
+                    }
+                  </div>
+
+                  @if (entry.detail.difficulties.length) {
+                    <div class="pd-note mt-3">
+                      <p class="pd-note-title"><ui-icon name="warning" [size]="16" />{{ t()("producteurs.production.difficulties") }}</p>
+                      <div class="pc-diffs">
+                        @for (label of entry.detail.difficulties; track label) {
+                          <span class="pc-diff">{{ label }}</span>
+                        }
+                      </div>
+                    </div>
+                  }
+                  @if (entry.detail.alerts.length) {
+                    <div class="pd-note alert mt-3">
+                      <p class="pd-note-title"><ui-icon name="warning" [size]="16" />{{ t()("producteurs.plots.alerts") }}</p>
                       @for (alert of entry.detail.alerts; track alert) {
-                        <span
-                          class="badge"
-                          [style.background]="tone.erreur.bg"
-                          [style.color]="tone.erreur.fg"
-                          ><ui-icon name="warning" [size]="14" />{{ alert }}</span
-                        >
+                        <p class="pd-note-text">{{ alert }}</p>
                       }
                     </div>
                   }
                   @if (entry.detail.observations) {
-                    <p class="text-block sub">{{ entry.detail.observations }}</p>
+                    <div class="pd-note mt-3">
+                      <p class="pd-note-title"><ui-icon name="info" [size]="16" />{{ t()("producteurs.plots.observations") }}</p>
+                      <p class="pd-note-text">{{ entry.detail.observations }}</p>
+                    </div>
                   }
                 </article>
               }
@@ -1311,6 +1586,23 @@ const SEASON_KEYS = [
               </ol>
             </section>
           </div>
+
+          <!-- Photo du producteur agrandie (clic sur la photo de l'en-tête) -->
+          @if (heroPhotoOpen() && current.photoUrl) {
+            <ui-modal
+              [open]="true"
+              [title]="current.firstName + ' ' + current.lastName"
+              [description]="current.code"
+              icon="photo_library"
+              [width]="860"
+              [closeLabel]="t()('common.close')"
+              (closed)="heroPhotoOpen.set(false)"
+            >
+              <div class="viewer mb-5">
+                <img [src]="current.photoUrl" [alt]="current.firstName + ' ' + current.lastName" />
+              </div>
+            </ui-modal>
+          }
 
           <!-- Visionneuse de photos -->
           @if (viewerPhoto(); as viewed) {
@@ -1520,6 +1812,14 @@ const SEASON_KEYS = [
           }}</a>
         </div>
       }
+      <!-- Contacter la coopérative (mode API, administrateur CRADESC) -->
+      <ui-contact-scoop-modal
+        [open]="contactTargets().length > 0"
+        kind="fiche"
+        [targets]="contactTargets()"
+        [link]="contactLink()"
+        (closed)="contactTargets.set([])"
+      />
     </app-shell>
   `,
 })
@@ -1610,6 +1910,7 @@ export default class ProducteurDetailPage {
     })).filter((group) => group.items.length);
   });
 
+  readonly heroPhotoOpen = signal(false);
   readonly viewerIndex = signal<number | null>(null);
 
   readonly viewerPhoto = computed(() => {
@@ -1639,6 +1940,7 @@ export default class ProducteurDetailPage {
       untracked(() => {
         this.fetchedPhotos.set(null);
         this.viewerIndex.set(null);
+        this.heroPhotoOpen.set(false);
         this.expandedPlotId.set(null);
         this.photoState.set("idle");
         if (producerId && this.browser && isApiMode()) void this.loadPhotos(producerId);
@@ -1714,6 +2016,63 @@ export default class ProducteurDetailPage {
     if (!p) return false;
     return inScope([p], this.store.state().session).length === 1;
   });
+
+  /**
+   * Ce qu'il y a à vérifier sur la fiche : les alertes signalées par le CRADESC lors du nettoyage, au niveau du
+   * producteur (enquête), de ses parcelles et de leurs cultures. Vide si rien n'est signalé.
+   */
+  readonly checkItems = computed(() => {
+    const translate = this.t();
+    const current = this.producer();
+    if (!current) return [];
+    const items: { id: string; where: string; place: string; text: string }[] = [];
+    (current.survey?.alerts ?? []).forEach((text, index) =>
+      items.push({ id: `p-${index}`, where: translate("producteurs.check.whereProducer"), place: "", text }),
+    );
+    for (const plot of this.plots()) {
+      (plot.alerts ?? []).forEach((text, index) =>
+        items.push({
+          id: `${plot.id}-${index}`,
+          where: translate("producteurs.check.wherePlot", { code: plot.code }),
+          place: plot.code,
+          text,
+        }),
+      );
+      for (const crop of plot.cropDetails ?? []) {
+        crop.alerts.forEach((text, index) =>
+          items.push({
+            id: `${crop.id}-${index}`,
+            where: translate("producteurs.check.whereCrop", { crop: crop.crop, code: plot.code }),
+            place: `${crop.crop} · ${plot.code}`,
+            text,
+          }),
+        );
+      }
+    }
+    return items;
+  });
+
+  /** Mode API : « Contacter la coopérative » au sujet de cette fiche (administrateur CRADESC). */
+  readonly canContact = computed(() => isApiMode() && this.store.can("coop_request.send"));
+  readonly contactTargets = signal<CoopRequestTarget[]>([]);
+  readonly contactLink = computed(() => `/dashboard/producteurs/${this.id()}`);
+
+  /** Demande à la coopérative de la fiche : les points signalés en langage simple, jamais de téléphone ni de CNI. */
+  openContact(): void {
+    const current = this.producer();
+    if (!current) return;
+    this.contactTargets.set([
+      {
+        scoopId: current.scoopId,
+        items: [producerItem(current)],
+        ...sheetDraft({
+          code: current.code,
+          name: `${current.firstName} ${current.lastName}`,
+          points: this.checkItems().map((item) => ({ text: item.text, place: item.place })),
+        }),
+      },
+    ]);
+  }
 
   readonly plots = computed(() => {
     const id = this.id();
