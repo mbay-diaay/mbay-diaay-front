@@ -3,7 +3,7 @@ import { actions, getState } from "../store";
 import { apiFetch } from "./client";
 import { isApiMode } from "./config";
 import { fetchAllPages } from "./pagination";
-import { listScoops, managerRowsFromScoops, scoopFromApi } from "./scoops";
+import { fetchScoopStats, listScoops, managerRowsFromScoops, scoopFromApi } from "./scoops";
 import { clearTokens, getAccessToken } from "./tokens";
 
 type MeResponse = {
@@ -52,8 +52,23 @@ export async function loadScoopsFromApi(): Promise<void> {
   try {
     const scoops = await fetchAllPages((query) => listScoops(query));
     actions.replaceScoopsFromApi(scoops.map(scoopFromApi));
-    actions.mergeUsersFromApi(managerRowsFromScoops(scoops));
+    actions.syncManagersFromApi(scoops.map((scoop) => scoop.id), managerRowsFromScoops(scoops));
   } catch {
     // Silencieux : voir ci-dessus.
+  }
+  await loadScoopStatsFromApi();
+}
+
+/**
+ * Mode API : les chiffres des coopératives (producteurs, femmes, jeunes, parcelles, hectares) viennent de
+ * `GET /scoops/stats`. Sans réponse, les écrans affichent « — » : jamais un chiffre de démonstration.
+ */
+export async function loadScoopStatsFromApi(scoopId?: string): Promise<void> {
+  try {
+    const items = await fetchScoopStats(scoopId);
+    if (scoopId) actions.mergeScoopStatsFromApi(items);
+    else actions.setScoopStatsFromApi(items);
+  } catch {
+    // Silencieux : les compteurs restent à « — ».
   }
 }

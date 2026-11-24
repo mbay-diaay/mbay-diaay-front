@@ -3,6 +3,8 @@ import { NgTemplateOutlet } from "@angular/common";
 import { RouterLink } from "@angular/router";
 import type { ChartConfiguration } from "chart.js";
 
+import { isApiMode } from "@/lib/api/config";
+import { collectQualityPoints } from "@/lib/quality-real";
 import { inScope } from "@/lib/store";
 import { membershipCounts } from "@/lib/membership";
 import { scopedDossiers, scopedMembers, scopedPayments, scopedRules } from "@/lib/scope";
@@ -858,7 +860,8 @@ export default class IndexPage {
       youthCount: youth.length,
       pendingDossiers: pendingDossiers.length,
       oldestDays,
-      openAlerts: openAlerts.length,
+      // Mode API : points signalés à l'import Kobo (pas d'alertes de démonstration).
+      openAlerts: isApiMode() ? collectQualityPoints(s).length : openAlerts.length,
       criticalAlerts,
       lateDues,
       producersInScope,
