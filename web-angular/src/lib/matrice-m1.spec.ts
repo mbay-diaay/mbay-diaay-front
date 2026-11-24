@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   DEFAULT_ROLE_PERMISSIONS,
+  delegablePermissions,
   PERMISSION_GROUPS,
   PERMISSION_LABEL,
   type Permission,
@@ -53,6 +54,27 @@ describe("matrice M1 par défaut", () => {
     expect(allows("admin", "role.configure")).toBe(false);
     expect(allows("surveillance", "meeting.manage")).toBe(false);
     expect(DEFAULT_ROLE_PERMISSIONS.superadmin.length).toBe(Object.keys(PERMISSION_LABEL).length);
+  });
+});
+
+describe("demandes du CRADESC aux coopératives", () => {
+  it("l'administrateur envoie, le gestionnaire reçoit et règle, les autres rôles n'y ont pas accès", () => {
+    expect(allows("admin", "coop_request.send")).toBe(true);
+    expect(allows("admin", "coop_request.read")).toBe(true);
+    expect(allows("admin", "coop_request.resolve")).toBe(true);
+    expect(allows("superadmin", "coop_request.send")).toBe(true);
+    expect(allows("gestionnaire", "coop_request.send")).toBe(false);
+    expect(allows("gestionnaire", "coop_request.read")).toBe(true);
+    expect(allows("gestionnaire", "coop_request.resolve")).toBe(true);
+    for (const role of ["faitiere", "technicien", "representant", "secretaire", "ventes", "rapports", "bureau", "surveillance"] as const) {
+      expect(allows(role, "coop_request.send")).toBe(false);
+      expect(allows(role, "coop_request.read")).toBe(false);
+      expect(allows(role, "coop_request.resolve")).toBe(false);
+    }
+  });
+
+  it("l'envoi d'une demande n'est jamais délégué à un sous-rôle", () => {
+    expect(delegablePermissions(DEFAULT_ROLE_PERMISSIONS.admin)).not.toContain("coop_request.send");
   });
 });
 

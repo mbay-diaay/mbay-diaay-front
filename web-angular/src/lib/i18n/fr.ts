@@ -9,6 +9,7 @@ import { errors } from "./messages/errors";
 import { dashboard } from "./messages/dashboard";
 import { producteurs } from "./messages/producteurs";
 import { qualite } from "./messages/qualite";
+import { demandes } from "./messages/demandes";
 import { cooperative } from "./messages/cooperative";
 import { admin } from "./messages/admin";
 import { auth } from "./messages/auth";
@@ -83,6 +84,7 @@ export const fr = {
   ...dashboard,
   ...producteurs,
   ...qualite,
+  ...demandes,
   ...cooperative,
   ...admin,
   ...auth,

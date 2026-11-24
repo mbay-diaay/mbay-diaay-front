@@ -225,7 +225,7 @@ export const NAV: NavGroup[] = [
         to: "/dashboard/qualite",
         labelKey: "nav.item.qualite",
         icon: ShieldCheck,
-        perm: ["quality.review", "alert.manage", "correction.manage"],
+        perm: ["quality.review", "alert.manage", "correction.manage", "coop_request.read"],
       }),
       // M2–M5 : visibles sur la page modules comme « à venir », absents du menu cliquable.
       soon("nav.item.stocks", Boxes, "commercial"),
