@@ -15,6 +15,9 @@ export type Permission =
   | "org.manage"
   | "quality.review"
   | "quality.merge"
+  | "coop_request.send"
+  | "coop_request.read"
+  | "coop_request.resolve"
   | "alert.manage"
   | "map.read"
   | "plot.validate"
@@ -176,6 +179,7 @@ export const NON_DELEGABLE_PERMISSIONS: readonly Permission[] = [
   "account.manage",
   "audit.read",
   "quality.merge",
+  "coop_request.send",
   "producer.export_nominatif",
   "identity.read_full",
   "contact.read",
@@ -256,6 +260,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<BuiltInRoleId, Permission[]> = {
     "producer.edit",
     "org.manage",
     "quality.review",
+    "coop_request.read",
+    "coop_request.resolve",
     "correction.manage",
     "alert.manage",
     "map.read",
@@ -496,6 +502,9 @@ export const PERMISSION_GROUPS: readonly { key: string; permissions: readonly Pe
     permissions: [
       "quality.review",
       "quality.merge",
+      "coop_request.send",
+      "coop_request.read",
+      "coop_request.resolve",
       "alert.manage",
       "correction.manage",
       "import.manage",
