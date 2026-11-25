@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, input, output, signal, untracked }
 
 import {
   COOP_REQUEST_ITEMS_MAX,
+  COOP_REQUEST_KINDS,
   COOP_REQUEST_MESSAGE_MAX,
   COOP_REQUEST_SUBJECT_MAX,
   coopRequestErrorKey,
@@ -11,7 +12,7 @@ import {
   type CoopRequestItem,
   type CoopRequestKind,
 } from "@/lib/api/coop-requests";
-import { isDashboardLink } from "@/lib/coop-request-templates";
+import { isDashboardLink, KIND_LABEL_KEY } from "@/lib/coop-request-templates";
 import type { MessageKey } from "@/lib/i18n";
 import { LocaleService } from "@shared/locale.service";
 import { StoreService } from "@shared/store.service";
@@ -220,6 +221,17 @@ const VISIBLE_ITEMS = 12;
           }
 
           <div>
+            <p class="lbl mb-2">{{ t()("demandes.modal.kind") }}</p>
+            <ui-select
+              [options]="kindOptions()"
+              [value]="chosenKind()"
+              [label]="t()('demandes.modal.kind')"
+              leadingIcon="fact_check"
+              (valueChange)="chosenKind.set($any($event))"
+            />
+          </div>
+
+          <div>
             <ui-text-field
               [label]="t()('demandes.modal.subject')"
               [value]="subject()"
@@ -284,6 +296,11 @@ export class ContactScoopModalComponent {
   protected readonly messageMax = COOP_REQUEST_MESSAGE_MAX;
 
   protected readonly targetIndex = signal(0);
+  /** Type de la demande : celui que l'écran appelant propose, modifiable avant l'envoi. */
+  protected readonly chosenKind = signal<CoopRequestKind>("autre");
+  protected readonly kindOptions = computed<SelectOption[]>(() =>
+    COOP_REQUEST_KINDS.map((kind) => ({ value: kind, label: this.t()(KIND_LABEL_KEY[kind]) })),
+  );
   protected readonly subject = signal("");
   protected readonly message = signal("");
   protected readonly busy = signal(false);
@@ -353,6 +370,7 @@ export class ContactScoopModalComponent {
         }
         this.subject.set(target.subject);
         this.message.set(target.message);
+        this.chosenKind.set(this.kind());
         void this.loadRecipient(target.scoopId);
       });
     });
@@ -397,7 +415,7 @@ export class ContactScoopModalComponent {
     try {
       const created = await createCoopRequest({
         scoopId: target.scoopId,
-        kind: this.kind(),
+        kind: this.chosenKind(),
         subject: this.subject().trim(),
         message: this.message().trim(),
         ...(target.items.length ? { items: target.items.slice(0, COOP_REQUEST_ITEMS_MAX) } : {}),

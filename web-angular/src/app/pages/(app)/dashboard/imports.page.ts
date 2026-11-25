@@ -883,13 +883,6 @@ interface Loaded {
               <lucide-angular [img]="icons.warn" class="mt-0.5 size-4 shrink-0" />
               <span>
                 {{ t()("imports.done.demo") }}
-                @if (store.can("data.backup")) {
-                  {{ t()("imports.done.backupBefore") }}
-                  <a routerLink="/dashboard/donnees" class="font-semibold underline">{{
-                    t()("imports.done.backupLink")
-                  }}</a>
-                  {{ t()("imports.done.backupAfter") }}
-                }
               </span>
             </p>
           </section>

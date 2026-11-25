@@ -1,7 +1,8 @@
 import { Component, computed, effect, inject, input, output, signal, untracked } from "@angular/core";
+import { RouterLink } from "@angular/router";
 
 import { fmtAge } from "@/lib/format";
-import { mergeErrorKey, mergeProducers } from "@/lib/api/producers";
+import { compareProducers, differingFieldLabels, mergeErrorKey, mergeProducers } from "@/lib/api/producers";
 import { suggestedKeepId, type DuplicateGroup } from "@/lib/quality-real";
 import { LocaleService } from "@shared/locale.service";
 import { ProducerWorkflow } from "@shared/producer-workflow.service";
@@ -15,7 +16,7 @@ import { IconComponent, initialsOf, ModalComponent, SnackbarService, V2_PAGE_STY
  */
 @Component({
   selector: "app-merge-producers-modal",
-  imports: [IconComponent, ModalComponent],
+  imports: [IconComponent, ModalComponent, RouterLink],
   styles: [
     V2_PAGE_STYLES,
     `
@@ -148,6 +149,28 @@ import { IconComponent, initialsOf, ModalComponent, SnackbarService, V2_PAGE_STY
           }
         </div>
         <p class="sub mt-4 font-semibold">{{ mergeSummary() }}</p>
+        <!-- Règle stricte : le serveur doit confirmer que les fiches sont identiques avant toute fusion -->
+        @if (check().state === "loading") {
+          <p class="sub mt-3" aria-live="polite">{{ t()("qualite.strict.verdict.checking") }}</p>
+        } @else if (check().state === "error") {
+          <div class="alerte mt-3" role="alert">
+            <span class="alerte-ico" aria-hidden="true"><ui-icon name="warning" [size]="20" /></span>
+            <p class="alerte-texte">{{ t()("qualite.strict.verdict.errorBody") }}</p>
+          </div>
+        } @else if (check().state === "differ") {
+          <div class="alerte mt-3" role="alert">
+            <span class="alerte-ico" aria-hidden="true"><ui-icon name="warning" [size]="20" /></span>
+            <div>
+              <p class="alerte-texte">{{ t()("qualite.strict.differHint") }}</p>
+              @if (check().labels.length) {
+                <p class="alerte-texte mt-1">{{ t()("qualite.merge.differences", { fields: check().labels.join(", ") }) }}</p>
+              }
+              <a class="mt-2 inline-block font-extrabold underline" [routerLink]="['/dashboard/qualite/doublons/comparer']" [queryParams]="{ fiches: compareCodes() }" (click)="close()">
+                {{ t()("qualite.compare.decision.openSheets") }}
+              </a>
+            </div>
+          </div>
+        }
         <label class="lbl mt-4 block" for="merge-comment">{{ t()("qualite.merge.comment") }}</label>
         <textarea
           id="merge-comment"
@@ -164,7 +187,7 @@ import { IconComponent, initialsOf, ModalComponent, SnackbarService, V2_PAGE_STY
         modal-footer
         type="button"
         class="btn btn-primary"
-        [disabled]="busy() || scoopMismatch() || !keepId()"
+        [disabled]="busy() || scoopMismatch() || !keepId() || check().state !== 'identical'"
         (click)="confirm()"
       >
         {{ busy() ? t()("qualite.merge.running") : t()("qualite.merge.confirm")
@@ -188,6 +211,15 @@ export class MergeProducersModalComponent {
   protected readonly fmtAge = fmtAge;
 
   protected readonly keepId = signal("");
+  /**
+   * Comparaison stricte de la fiche gardée avec chacune des autres (`GET /producers/:keepId/compare`) : la fusion n'est
+   * possible que si le serveur répond « identiques » pour toutes. `labels` : champs qui diffèrent, en français.
+   */
+  protected readonly check = signal<{ state: "idle" | "loading" | "error" | "identical" | "differ"; labels: string[] }>({
+    state: "idle",
+    labels: [],
+  });
+  private checkToken = 0;
   protected readonly comment = signal("");
   protected readonly busy = signal(false);
 
@@ -200,6 +232,34 @@ export class MergeProducersModalComponent {
         this.keepId.set(current ? suggestedKeepId(current.members, (id) => this.plotCount(id)) : "");
       });
     });
+  }
+
+  /** Codes des fiches du groupe, pour ouvrir la page « Comparer les fiches ». */
+  protected readonly compareCodes = computed(() => (this.group()?.members ?? []).map((member) => member.code).join(","));
+
+  private readonly runCheck = effect(() => {
+    const current = this.group();
+    const keep = this.keepId();
+    untracked(() => void this.verify(current?.members.map((member) => member.id) ?? [], keep));
+  });
+
+  private async verify(ids: string[], keep: string): Promise<void> {
+    const token = ++this.checkToken;
+    const others = ids.filter((id) => id !== keep);
+    if (!keep || !others.length) {
+      this.check.set({ state: "idle", labels: [] });
+      return;
+    }
+    this.check.set({ state: "loading", labels: [] });
+    try {
+      const results = await Promise.all(others.map((id) => compareProducers(keep, id)));
+      if (token !== this.checkToken) return;
+      const labels = [...new Set(results.flatMap((result) => result.fields.map((field) => field.label)))];
+      this.check.set({ state: results.every((result) => result.identical) ? "identical" : "differ", labels });
+    } catch {
+      if (token !== this.checkToken) return;
+      this.check.set({ state: "error", labels: [] });
+    }
   }
 
   protected readonly suggestedId = computed(() => {
@@ -241,7 +301,7 @@ export class MergeProducersModalComponent {
   protected async confirm() {
     const current = this.group();
     const keepId = this.keepId();
-    if (!current || !keepId || this.scoopMismatch() || this.busy()) return;
+    if (!current || !keepId || this.scoopMismatch() || this.busy() || this.check().state !== "identical") return;
     const keep = current.members.find((member) => member.id === keepId);
     const others = current.members.filter((member) => member.id !== keepId);
     if (!keep) return;
@@ -253,7 +313,12 @@ export class MergeProducersModalComponent {
         await mergeProducers(keepId, other.id, this.comment());
         done += 1;
       } catch (error) {
-        failure = { code: other.code, reason: this.t()(mergeErrorKey(error)) };
+        const labels = differingFieldLabels(error);
+        const reason = this.t()(mergeErrorKey(error));
+        failure = {
+          code: other.code,
+          reason: labels.length ? `${reason} ${this.t()("qualite.merge.differences", { fields: labels.join(", ") })}` : reason,
+        };
         break;
       }
     }

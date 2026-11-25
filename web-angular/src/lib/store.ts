@@ -186,6 +186,7 @@ import { clearTokens } from "./api/tokens";
 import { resetPreferences } from "./api/preferences";
 import { DEMO_MODE } from "./auth/config";
 import { tNow, type MessageKey, type TranslateParams } from "./i18n";
+import { differingFicheFields, FICHE_FIELD_LABEL } from "./fiches-strictes";
 import {
   canDecide,
   canTransition,
@@ -299,6 +300,11 @@ export interface State {
   dossiers: ProducerDossier[];
   documents: DocumentMeta[];
   scoops: Scoop[];
+  /**
+   * Mode API : coopératives techniques (« Hors coopérative — à rattacher »), visibles seulement pour qui a le droit de
+   * transfert. À part de `scoops` : elles ne sont jamais comptées parmi les coopératives (les 11).
+   */
+  technicalScoops: Scoop[];
   campaigns: Campaign[];
   expenses: Expense[];
   inputItems: InputItem[];
@@ -568,6 +574,7 @@ let state: State = {
   dossiers: isApiMode() ? [] : DOSSIERS,
   documents: [...DOCUMENTS, ...LIBRARY_DOCUMENTS],
   scoops: isApiMode() ? [] : SCOOPS,
+  technicalScoops: [],
   campaigns: CAMPAIGN_LIST,
   expenses: EXPENSES,
   inputItems: INPUT_ITEMS,
@@ -892,7 +899,7 @@ function producerFromDraft(d: ProducerDossier, approver: string, at: string): Pr
     age: draft.age,
     handicap: false,
     phone: draft.phone.trim(),
-    cni: draft.cni.replace(/\D/g, ""),
+    cni: draft.cni.trim(),
     village: draft.village,
     scoopId: d.scoopId,
     orgId: draft.orgId,
@@ -1103,13 +1110,30 @@ export const actions = {
     set((s) => ({ cases: s.cases.map((c) => (c.id === id ? { ...c, status, comment } : c)) }));
     audit("Classement doublon", `Cas ${id.toUpperCase()}`, `${status} : ${comment}`);
   },
-  mergeCase(id: string, comment: string) {
+  /**
+   * Démonstration locale : fusionne le cas `id`. Règle stricte (décision Q-02) : refus tant qu'une seule information
+   * diffère entre les deux fiches (parcelles et données spatiales comprises) ; il faut d'abord corriger. En mode API,
+   * la fusion passe par le serveur (`POST /producers/:keepId/merge`), qui applique la même règle.
+   */
+  mergeCase(id: string, comment: string): ActionResult {
     assertApiAvailable();
     requirePermission("quality.merge");
     const c = state.cases.find((x) => x.id === id);
-    if (!c || c.status === "fusionné") return;
+    if (!c || c.status === "fusionné") return { ok: true };
+    const a = state.producers.find((p) => p.id === c.aId);
     const b = state.producers.find((p) => p.id === c.bId);
-    if (!b) return;
+    if (!a || !b) return { ok: true };
+    const differing = differingFicheFields(
+      a,
+      b,
+      state.plots.filter((pl) => pl.producerId === a.id),
+      state.plots.filter((pl) => pl.producerId === b.id),
+    );
+    if (differing.length) {
+      const fields = differing.map((field) => tNow(FICHE_FIELD_LABEL[field])).join(", ");
+      audit("Fusion refusée", `Cas ${id.toUpperCase()}`, `Fiches différentes : ${differing.join(", ")}`);
+      return fail("qualite.strict.demoRefused", { fields });
+    }
     const plotIds = state.plots.filter((pl) => pl.producerId === b.id).map((pl) => pl.id);
     set((s) => ({
       merges: { ...s.merges, [id]: { caseId: id, b, plotIds, prevStatus: c.status } },
@@ -1122,6 +1146,7 @@ export const actions = {
       `Cas ${id.toUpperCase()}`,
       `${b.code} fusionné dans la fiche principale, identifiants d'origine conservés`,
     );
+    return { ok: true };
   },
   undoMerge(id: string) {
     assertApiAvailable();
@@ -2074,58 +2099,6 @@ export const actions = {
       `Lot ${batch.id}`,
       `${batch.file} : ${plan.producers.length} producteur(s), ${plan.plots.length} parcelle(s), ${plan.orgs.length} organisation(s)`,
     );
-  },
-  /** Sauvegarde complète des données (hors session) — format JSON versionné. */
-  exportSnapshot(): Snapshot {
-    requirePermission("data.backup");
-    const { session: _session, ...data } = state;
-    audit("Sauvegarde complète", "Données", "Export JSON");
-    return {
-      format: SNAPSHOT_FORMAT,
-      exportedAt: new Date().toISOString(),
-      data: { ...data, audit: state.audit },
-    };
-  },
-  restoreSnapshot(snap: Snapshot) {
-    assertApiAvailable();
-    requirePermission("data.backup");
-    // Une sauvegarde incomplète ou abîmée mélangerait ancien et nouvel état : on la refuse en bloc.
-    if (!isSnapshot(snap)) throw new Error("Format de sauvegarde non reconnu");
-    // Une sauvegarde plus ancienne n'a pas les entités de la coopérative : on repart de listes vides.
-    set({
-      ...snap.data,
-      // `?? []` : les sauvegardes plus anciennes n'ont pas ces listes à l'exécution, même si le type les exige.
-      members: snap.data.members ?? [],
-      dossiers: snap.data.dossiers ?? [],
-      documents: snap.data.documents ?? [],
-      plans: snap.data.plans ?? [],
-      reports: snap.data.reports ?? [],
-      scoops: snap.data.scoops ?? SCOOPS,
-      campaigns: snap.data.campaigns ?? CAMPAIGN_LIST,
-      expenses: snap.data.expenses ?? EXPENSES,
-      inputItems: snap.data.inputItems ?? INPUT_ITEMS,
-      stockLots: snap.data.stockLots ?? STOCK_LOTS,
-      stockMovements: snap.data.stockMovements ?? STOCK_MOVEMENTS,
-      credits: snap.data.credits ?? CREDITS,
-      repayments: snap.data.repayments ?? REPAYMENTS,
-      sales: snap.data.sales ?? SALES,
-      calendars: snap.data.calendars ?? CROP_CALENDARS,
-      operations: snap.data.operations ?? FIELD_OPERATIONS,
-      contributionRules: snap.data.contributionRules ?? [],
-      payments: snap.data.payments ?? [],
-      paymentLinks: [],
-      meetings: (snap.data.meetings ?? []).map((meeting) => ({
-        ...meeting,
-        decisions: meeting.decisions ?? [],
-      })),
-      deletedDocuments: snap.data.deletedDocuments ?? [],
-      reminderSettings: snap.data.reminderSettings ?? {},
-      // La matrice des rôles est un réglage de sécurité, pas une donnée : une restauration ne la change pas.
-      rolePermissions: state.rolePermissions,
-      customRoles: state.customRoles,
-      session: state.session,
-    });
-    audit("Restauration", "Données", `Sauvegarde du ${snap.exportedAt}`);
   },
   // ============ Membres (plan 4.5, P1) ============
 
@@ -3752,7 +3725,11 @@ export const actions = {
   },
   /** Mode API : remplace la liste locale des coopératives par celle du serveur (source de vérité). */
   replaceScoopsFromApi(items: Scoop[]) {
-    set({ scoops: items });
+    set({ scoops: items.filter((scoop) => !scoop.technical) });
+  },
+  /** Mode API : coopératives techniques lues sur le serveur (vide pour un compte sans le droit de transfert). */
+  setTechnicalScoopsFromApi(items: Scoop[]) {
+    set({ technicalScoops: items.filter((scoop) => scoop.technical) });
   },
   /**
    * Mode API : ajoute ou met à jour une coopérative renvoyée par le serveur. Le compte gestionnaire créé avec elle
@@ -4653,67 +4630,6 @@ export const actions = {
     audit("Référentiel seuils", key, `${state.seuils[key]} → ${value}`);
   },
 };
-
-export const SNAPSHOT_FORMAT = "mbay-diaay/sauvegarde@1";
-export interface Snapshot {
-  format: string;
-  exportedAt: string;
-  data: Omit<State, "session">;
-}
-/** Listes qu'une sauvegarde doit toujours contenir ; les listes plus récentes (coopérative, modules) sont facultatives. */
-const REQUIRED_LISTS = [
-  "producers",
-  "orgs",
-  "plots",
-  "cases",
-  "alerts",
-  "audit",
-  "users",
-  "imports",
-  "corrections",
-  "devices",
-  "linkCandidates",
-  "links",
-  "cropRefs",
-  "cropAliases",
-] as const;
-const OPTIONAL_LISTS = [
-  "members",
-  "dossiers",
-  "documents",
-  "plans",
-  "reports",
-  "scoops",
-  "campaigns",
-  "expenses",
-  "inputItems",
-  "stockLots",
-  "stockMovements",
-  "credits",
-  "repayments",
-  "sales",
-  "calendars",
-  "operations",
-  "contributionRules",
-  "payments",
-  "meetings",
-] as const;
-
-export function isSnapshot(x: unknown): x is Snapshot {
-  const s = x as Partial<Snapshot> | null;
-  if (!s || s.format !== SNAPSHOT_FORMAT || typeof s.exportedAt !== "string" || !s.data)
-    return false;
-  const d = s.data as unknown as Record<string, unknown>;
-  return (
-    REQUIRED_LISTS.every((k) => Array.isArray(d[k])) &&
-    OPTIONAL_LISTS.every((k) => d[k] === undefined || Array.isArray(d[k])) &&
-    typeof d["youthMaxAge"] === "number" &&
-    !!d["seuils"] &&
-    typeof d["seuils"] === "object" &&
-    !!d["merges"] &&
-    typeof d["merges"] === "object"
-  );
-}
 
 export function cropFamilyOf(crop: string, cropRefs: CropRef[]): CropFamily {
   return cropRefs.find((r) => r.name === crop)?.family ?? "Céréales et légumineuses";

@@ -1,14 +1,22 @@
-import { Component, computed, effect, inject, signal } from "@angular/core";
+import { Component, computed, effect, inject, signal, untracked } from "@angular/core";
 import { ActivatedRoute, type ParamMap, Router } from "@angular/router";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { map } from "rxjs";
 
+import { isApiMode } from "@/lib/api/config";
 import { actions, can, inScope } from "@/lib/store";
 import { CROPS, VILLAGES, type Quality } from "@/lib/mock/data";
 import { AGE_BANDS, ageAtMost, ageBand, downloadCsv, fmtDate, maskPhone, nf } from "@/lib/format";
+import { describeSourceFact, SOURCE_FILTER_IDS, sourceOfRecord, type DataSourceId } from "@/lib/data-source";
 import type { MessageKey } from "@/lib/i18n";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
+import { CniAlertBadgeComponent } from "@shared/cni-alert-badge.component";
+import { CniAlertsService } from "@shared/cni-alerts.service";
+import { MoveToOrganisationModalComponent, type MoveRequest } from "@shared/move-to-organisation-modal.component";
+import { PlacementBadgeComponent } from "@shared/placement-badge.component";
+import { SourceBadgeComponent } from "@shared/source-badge.component";
+import { TransferScoopModalComponent, type TransferRequest } from "@shared/transfer-scoop-modal.component";
 import { StoreService } from "@shared/store.service";
 import { createPager } from "@shared/pager";
 import {
@@ -34,7 +42,14 @@ import { GlobalFiltersComponent } from "@shared/global-filters.component";
 
 const ALL = "__all";
 
-type FilterKey = "village" | "sexe" | "age" | "qualite" | "culture";
+type FilterKey = "village" | "sexe" | "age" | "qualite" | "culture" | "source";
+
+const SOURCE_LABEL: Record<DataSourceId, MessageKey> = {
+  kobo: "qualite.source.kobo",
+  consolidee: "qualite.source.consolidee",
+  application: "qualite.source.application",
+  cradesc: "qualite.source.cradesc",
+};
 
 interface ProducteursUrlState {
   q: string;
@@ -43,6 +58,7 @@ interface ProducteursUrlState {
   age: string;
   qualite: string;
   culture: string;
+  source: string;
   scoop: string;
   campagne: string;
 }
@@ -56,6 +72,7 @@ function parseProducteursQuery(m: ParamMap): ProducteursUrlState {
     age: get("age") ?? ALL,
     qualite: get("qualite") ?? ALL,
     culture: get("culture") ?? ALL,
+    source: get("source") ?? ALL,
     scoop: get("scoop") ?? "",
     campagne: get("campagne") ?? "",
   };
@@ -87,6 +104,11 @@ const STATUS = {
     GlobalFiltersComponent,
     AppShellComponent,
     AvatarComponent,
+    PlacementBadgeComponent,
+    SourceBadgeComponent,
+    CniAlertBadgeComponent,
+    MoveToOrganisationModalComponent,
+    TransferScoopModalComponent,
     IconComponent,
     ModalComponent,
     DetailModalComponent,
@@ -113,6 +135,37 @@ const STATUS = {
       }
       .reset:hover {
         text-decoration: underline;
+      }
+      .bulk {
+        position: sticky;
+        bottom: 16px;
+        z-index: 20;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        border-radius: 20px;
+        background: var(--v2-foret);
+        padding: 10px 10px 10px 18px;
+        color: var(--v2-blanc);
+        box-shadow: var(--v2-ombre-flottant);
+      }
+      .bulk .b {
+        display: inline-flex;
+        height: 40px;
+        align-items: center;
+        gap: 6px;
+        border-radius: 12px;
+        padding: 0 14px;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .tbl input[type="checkbox"] {
+        height: 18px;
+        width: 18px;
+        accent-color: var(--v2-foret);
+        cursor: pointer;
       }
       .code {
         font-family: var(--v2-font-mono);
@@ -244,6 +297,8 @@ const STATUS = {
                     <span class="sub block truncate"
                       >{{ producer.village }} · {{ ageLabel(producer.age) }}</span
                     >
+                    <app-placement-badge [record]="producer" />
+                    <app-cni-alert-badge [producerId]="producer.id" />
                   </span>
                   <span
                     class="badge"
@@ -258,9 +313,19 @@ const STATUS = {
 
           <!-- Tablette et bureau : tableau -->
           <div class="hidden overflow-x-auto md:block">
-            <table class="tbl min-w-[860px]">
+            <table class="tbl min-w-[980px]">
               <thead>
                 <tr>
+                  @if (canSelect()) {
+                    <th class="w-10">
+                      <input
+                        type="checkbox"
+                        [checked]="allPageSelected()"
+                        [attr.aria-label]="t()('transfert.selectPage')"
+                        (change)="togglePage($any($event.target).checked)"
+                      />
+                    </th>
+                  }
                   <th>{{ t()("producteurs.index.colProducer") }}</th>
                   <th>{{ t()("producteurs.index.colSexAge") }}</th>
                   <th>{{ t()("producteurs.col.village") }}</th>
@@ -268,12 +333,23 @@ const STATUS = {
                   <th class="hidden lg:table-cell">{{ t()("producteurs.col.phone") }}</th>
                   <th>{{ t()("producteurs.col.status") }}</th>
                   <th>{{ t()("producteurs.col.quality") }}</th>
+                  <th>{{ t()("qualite.source.col") }}</th>
                   <th class="text-right">{{ t()("producteurs.index.colActions") }}</th>
                 </tr>
               </thead>
               <tbody>
                 @for (producer of pager.items(); track producer.id) {
                   <tr class="row-link" (click)="openDetail(producer.id)">
+                    @if (canSelect()) {
+                      <td (click)="$event.stopPropagation()">
+                        <input
+                          type="checkbox"
+                          [checked]="selected().includes(producer.id)"
+                          [attr.aria-label]="t()('transfert.selectOne', { name: producer.firstName + ' ' + producer.lastName })"
+                          (change)="toggle(producer.id)"
+                        />
+                      </td>
+                    }
                     <td>
                       <span class="flex items-center gap-3">
                         @if (producer.photoUrl) {
@@ -295,6 +371,8 @@ const STATUS = {
                             >{{ producer.firstName }} {{ producer.lastName }}</span
                           >
                           <span class="code block">{{ producer.code }}</span>
+                          <app-placement-badge [record]="producer" />
+                          <app-cni-alert-badge [producerId]="producer.id" />
                         </span>
                       </span>
                     </td>
@@ -331,6 +409,7 @@ const STATUS = {
                         >{{ t()(quality[producer.quality].label) }}</span
                       >
                     </td>
+                    <td><app-source-badge [record]="producer" [showPlace]="true" /></td>
                     <td>
                       <span class="flex justify-end">
                         <button
@@ -374,7 +453,48 @@ const STATUS = {
       </section>
 
       <!-- ───── Détail ───── -->
-      <ui-detail-modal [view]="detail()" (closed)="detailId.set(null)" />
+      <ui-detail-modal [view]="detail()" (closed)="detailId.set(null)">
+        @if (canTransfer() && detailId(); as openedId) {
+          <button detail-actions type="button" class="btn btn-ghost" (click)="detailId.set(null); openTransfer([openedId])">
+            <ui-icon name="apartment" [size]="18" />{{ t()("transfert.single") }}
+          </button>
+        }
+      </ui-detail-modal>
+
+      <!-- ───── Actions groupées : transfert vers une coopérative ───── -->
+      @if (canSelect() && selected().length) {
+        <div class="bulk mt-4" role="region" [attr.aria-label]="t()('transfert.bar.selected', { count: selected().length })">
+          <span class="flex-1 text-[14px] font-extrabold">{{ t()("transfert.bar.selected", { count: selected().length }) }}</span>
+          @if (selected().length < rows().length) {
+            <button type="button" class="b" style="color: var(--v2-blanc)" (click)="selectAllRows()">
+              {{ t()("transfert.bar.selectAll", { count: rows().length }) }}
+            </button>
+          }
+          <button type="button" class="b" style="color: var(--v2-blanc)" (click)="selected.set([])">
+            {{ t()("transfert.bar.clear") }}
+          </button>
+          @if (canMove()) {
+            <button type="button" class="b" style="background: var(--v2-blanc); color: var(--v2-foret)" (click)="openMove(selected())">
+              <ui-icon name="arrow_forward" [size]="16" />{{ t()("deplacer.action") }}
+            </button>
+          }
+          @if (canTransfer()) {
+            <button type="button" class="b" style="background: var(--v2-citron); color: var(--v2-foret)" (click)="openTransfer(selected())">
+              <ui-icon name="apartment" [size]="16" />{{ t()("transfert.bar.action") }}
+            </button>
+          }
+        </div>
+      }
+      <app-transfer-scoop-modal
+        [request]="transferRequest()"
+        (closed)="transferRequest.set(null)"
+        (done)="selected.set([])"
+      />
+      <app-move-to-organisation-modal
+        [request]="moveRequest()"
+        (closed)="moveRequest.set(null)"
+        (done)="selected.set([])"
+      />
 
       <!-- ───── Export ───── -->
       <ui-modal
@@ -413,6 +533,11 @@ export default class ProducteursPage {
   protected readonly initials = initialsOf;
   protected readonly quality = QUALITY;
   protected readonly status = STATUS;
+  private readonly cniAlerts = inject(CniAlertsService);
+  /** Pastille rouge « CNI proches » : la liste des fiches signalées vient du serveur, pour qui a le droit de la voir. */
+  private readonly _loadCniAlerts = effect(() => {
+    if (this.cniAlerts.canView()) untracked(() => void this.cniAlerts.refresh());
+  });
 
   /** Route query (leaf) — same keys as React `validateSearch` on `/dashboard/producteurs/`. */
   private readonly queryState = toSignal(
@@ -434,6 +559,7 @@ export default class ProducteursPage {
     age: this.queryState().age,
     qualite: this.queryState().qualite,
     culture: this.queryState().culture,
+    source: this.queryState().source,
   });
 
   private readonly _syncFromUrl = effect(() => {
@@ -445,6 +571,7 @@ export default class ProducteursPage {
       age: s.age,
       qualite: s.qualite,
       culture: s.culture,
+      source: s.source,
     });
   });
 
@@ -501,6 +628,13 @@ export default class ProducteursPage {
         t("producteurs.col.crop"),
         "grass",
         CROPS.map((c) => [c, c]),
+      ),
+      // Base d'origine enregistrée par le serveur (Kobo, consolidée, saisie dans l'application).
+      def(
+        "source",
+        t("qualite.source.filter.label"),
+        "database",
+        SOURCE_FILTER_IDS.map((id) => [id, t(SOURCE_LABEL[id])]),
       ),
     ];
   });
@@ -609,12 +743,63 @@ export default class ProducteursPage {
         (f.sexe === ALL || p.sex === f.sexe) &&
         (f.age === ALL || ageBand(p.age) === f.age) &&
         (skipQuality || f.qualite === ALL || p.quality === f.qualite) &&
-        (f.culture === ALL || p.crops.some((c) => c.crop === f.culture)),
+        (f.culture === ALL || p.crops.some((c) => c.crop === f.culture)) &&
+        (f.source === ALL || sourceOfRecord(p).id === f.source),
     );
   }
 
   /** Pagination : mêmes règles que l'API (`GET /v1/producers?page=&limit=`). */
   protected readonly pager = createPager(() => this.rows());
+
+  // ── Transfert vers une coopérative (mode API, droit `scoop.transfer`) ──
+  protected readonly canTransfer = computed(() => isApiMode() && this.store.can("scoop.transfer"));
+  // ── Déplacement vers une organisation (mode API, droit `org.manage` ou `scoop.transfer`) ──
+  protected readonly canMove = computed(() => isApiMode() && (this.store.can("org.manage") || this.store.can("scoop.transfer")));
+  protected readonly canSelect = computed(() => this.canTransfer() || this.canMove());
+  protected readonly moveRequest = signal<MoveRequest | null>(null);
+  protected readonly selected = signal<string[]>([]);
+  protected readonly transferRequest = signal<TransferRequest | null>(null);
+
+  protected readonly allPageSelected = computed(() => {
+    const ids = this.pager.items().map((producer) => producer.id);
+    return ids.length > 0 && ids.every((id) => this.selected().includes(id));
+  });
+
+  protected toggle(id: string): void {
+    this.selected.update((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
+  }
+
+  protected togglePage(on: boolean): void {
+    const ids = this.pager.items().map((producer) => producer.id);
+    this.selected.update((list) => (on ? [...new Set([...list, ...ids])] : list.filter((id) => !ids.includes(id))));
+  }
+
+  protected selectAllRows(): void {
+    this.selected.set(this.rows().map((producer) => producer.id));
+  }
+
+  protected openTransfer(ids: string[]): void {
+    const chosen = this.store.state().producers.filter((producer) => ids.includes(producer.id));
+    if (!chosen.length) return;
+    this.transferRequest.set({
+      kind: "producers",
+      ids: chosen.map((producer) => producer.id),
+      labels: chosen.map((producer) => `${producer.firstName} ${producer.lastName} (${producer.code})`),
+      fromScoopIds: [...new Set(chosen.map((producer) => producer.scoopId))],
+    });
+  }
+
+  protected openMove(ids: string[]): void {
+    const chosen = this.store.state().producers.filter((producer) => ids.includes(producer.id));
+    if (!chosen.length) return;
+    this.moveRequest.set({
+      kind: "producers",
+      ids: chosen.map((producer) => producer.id),
+      labels: chosen.map((producer) => `${producer.firstName} ${producer.lastName} (${producer.code})`),
+      scoopIds: chosen.map((producer) => producer.scoopId),
+      orgIds: chosen.map((producer) => producer.orgId),
+    });
+  }
 
   protected ageLabel(age: number | null): string {
     return age === null ? "—" : this.t()("cooperatives.fiche.detail.ageValue", { count: age });
@@ -636,7 +821,7 @@ export default class ProducteursPage {
     const t = this.t();
     const plots = s.plots.filter((pl) => pl.producerId === p.id);
     const area = plots.reduce((sum, pl) => sum + (pl.measured || pl.declared || 0), 0);
-    const scoop = s.scoops.find((c) => c.id === p.scoopId);
+    const scoop = [...s.scoops, ...s.technicalScoops].find((c) => c.id === p.scoopId);
     const org = this.orgName(p.orgId);
     const crops = [...p.crops].sort((a, b) => b.campaign.localeCompare(a.campaign));
     const q = QUALITY[p.quality];
@@ -680,6 +865,17 @@ export default class ProducteursPage {
         detailFact(t("producteurs.col.village"), p.village, "location_on"),
         detailFact(t("producteurs.col.organisation"), org || null, "hub"),
         detailFact(t("producteurs.quick.cooperative"), scoop?.name, "apartment"),
+        detailFact(t("qualite.source.col"), describeSourceFact(p, t), "database", { wide: true }),
+        ...(p.placementAConfirmer
+          ? [
+              detailFact(
+                t("placement.fact"),
+                `${t("placement.badge")} · ${p.placementNote || t("placement.noteDefault")}`,
+                "help",
+                { wide: true, tone: TONE.attente },
+              ),
+            ]
+          : []),
         detailFact(t("producteurs.quick.enumerator"), p.enumerator, "badge"),
         detailFact(
           t("producteurs.quick.createdAt"),
@@ -738,6 +934,7 @@ export default class ProducteursPage {
       age: null,
       qualite: null,
       culture: null,
+      source: null,
     });
   }
 

@@ -558,6 +558,22 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
         }
       </header>
 
+      <!-- ───── Coopérative technique « Hors coopérative » : visible de qui peut transférer, jamais comptée ───── -->
+      @for (technical of technicalScoops(); track technical.id) {
+        <a class="card mt-6 flex items-center gap-4 p-4" [routerLink]="['/dashboard/cooperatives', technical.id]">
+          <span
+            class="grid size-11 shrink-0 place-items-center rounded-[14px]"
+            style="background: var(--v2-attente-bg); color: var(--v2-attente-fg)"
+            ><ui-icon name="layers" [size]="22"
+          /></span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-[16px] font-extrabold">{{ technical.name }}</span>
+            <span class="sub block">{{ t()("placement.technicalLead") }}</span>
+          </span>
+          <ui-icon name="arrow_forward" [size]="20" />
+        </a>
+      }
+
       <!-- ───── Structure du réseau : Faîtière › Coopératives › GIE › Producteurs ───── -->
       <section class="mt-8">
         <ui-collapsible
@@ -1346,6 +1362,9 @@ export default class CooperativesPage {
   } | null>(null);
 
   protected readonly canManage = computed(() => this.store.can("scoop.manage"));
+
+  /** Coopérative technique (vide sans le droit de transfert) : hors de la liste et des décomptes, accessible d'ici. */
+  protected readonly technicalScoops = computed(() => (this.store.can("scoop.transfer") ? this.store.state().technicalScoops : []));
 
   protected readonly rows = computed(() => {
     const s = this.store.state();

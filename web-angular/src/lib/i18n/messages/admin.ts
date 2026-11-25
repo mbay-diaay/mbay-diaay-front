@@ -319,10 +319,10 @@ export const admin = {
   "referentiels.family.autres": "Autres",
   "referentiels.orgType.gie": "GIE",
   "referentiels.orgType.section": "Section",
-  "referentiels.orgType.association": "Association",
   "referentiels.orgType.groupement": "Groupement",
-  "referentiels.orgType.individuel": "Individuel",
-  "referentiels.orgType.membreDirect": "Membre direct",
+  "referentiels.orgType.union": "Union",
+  "referentiels.orgType.op": "OP",
+  "referentiels.orgType.aPreciser": "À préciser",
   "referentiels.regles.title": "Règles de contrôle",
   "referentiels.regles.summary": "4 seuils qui déclenchent un signalement",
   "referentiels.regles.intro":

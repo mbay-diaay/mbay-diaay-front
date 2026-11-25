@@ -7,7 +7,7 @@ import { buildFixtureData, CAMPAIGN } from "./fixture";
 export type Sex = "F" | "H";
 export type Quality = "validé" | "à vérifier" | "doublon" | "invalide";
 export type OrgType =
-  "GIE" | "Section" | "Association" | "Groupement" | "Individuel" | "Membre direct";
+  "GIE" | "Union" | "Groupement" | "Section" | "OP" | "À préciser";
 export type PlotStatus = "relevée" | "validée" | "à reprendre" | "chevauchement";
 
 export interface Scoop {
@@ -23,8 +23,28 @@ export interface Scoop {
   archived?: boolean;
   /** Logo : aperçu local (`data:`) ou lien signé de l'API. */
   logoUrl?: string | undefined;
+  /** Coopérative technique (« Hors coopérative — à rattacher ») : pas une vraie coopérative, jamais comptée. */
+  technical?: boolean | undefined;
 }
-export interface Org {
+
+/**
+ * Origine d'une fiche telle que le serveur l'enregistre (colonnes `source_*`) : lue, jamais déduite.
+ * `sourceBase` nul = créée sur la plateforme ; champs absents = serveur plus ancien ou mode démonstration.
+ */
+export interface RecordOrigin {
+  sourceBase?: "KOBO" | "CONSOLIDE" | null | undefined;
+  /** Feuille du fichier d'origine. */
+  sourceSheet?: string | null | undefined;
+  /** Numéro de ligne dans le fichier d'origine (l'en-tête est la ligne 1). */
+  sourceRow?: number | null | undefined;
+  /** Fichier d'origine (cartographie consolidée). */
+  sourceFile?: string | null | undefined;
+  /** Rattachement provisoire à la coopérative : mention « Coopérative à confirmer ». */
+  placementAConfirmer?: boolean | undefined;
+  placementNote?: string | null | undefined;
+}
+
+export interface Org extends RecordOrigin {
   id: string;
   name: string;
   type: OrgType | null;
@@ -43,7 +63,7 @@ export interface HistoryEntry {
   from: string;
   to: string;
 }
-export interface Producer {
+export interface Producer extends RecordOrigin {
   id: string;
   code: string;
   firstName: string;
@@ -171,6 +191,8 @@ export interface Plot {
   centroid?: { lat: number; lng: number; precisionM: number | null } | null | undefined;
   /** Superficie déclarée connue (sinon `declared` reprend la superficie mesurée). */
   declaredKnown?: boolean | undefined;
+  /** Parcelle de la base consolidée sans superficie : « Superficie non renseignée (unité à confirmer par le CRADESC) ». */
+  areaUnknown?: boolean | undefined;
   areaGapPct?: number | null | undefined;
   cultivatedAreaHa?: number | null | undefined;
   perimeterM?: number | null | undefined;
@@ -232,11 +254,11 @@ const FX = buildFixtureData();
 export const CAMPAIGNS = [CAMPAIGN] as const;
 export const ORG_TYPES: OrgType[] = [
   "GIE",
-  "Section",
-  "Association",
+  "Union",
   "Groupement",
-  "Individuel",
-  "Membre direct",
+  "Section",
+  "OP",
+  "À préciser",
 ];
 
 /** Données issues du jeu complet (`data/fixtures/`) : volumes de la base CRADESC du 05/10/2026. */

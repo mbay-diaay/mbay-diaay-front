@@ -118,4 +118,8 @@ export const KIND_LABEL_KEY: Record<CoopRequestKind, MessageKey> = {
   organisation: "demandes.kind.organisation",
   fiche: "demandes.kind.fiche",
   autre: "demandes.kind.autre",
+  correction_avant_fusion: "demandes.kind.correction_avant_fusion",
+  cni_proches: "demandes.kind.cni_proches",
+  scoop_manquante: "demandes.kind.scoop_manquante",
+  nom_manquant: "demandes.kind.nom_manquant",
 };

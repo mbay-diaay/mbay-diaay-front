@@ -1095,11 +1095,9 @@ export default class QualiteDoublonsPage {
   }
   protected readonly reasonFilter = signal<"" | DuplicateReason | "merged">("");
   protected readonly reasonLabel: Record<DuplicateReason, MessageKey> = {
-    cni: "qualite.real.dbl.reason.cni",
     phone: "qualite.real.dbl.reason.phone",
   };
   protected readonly reasonTone: Record<DuplicateReason, { bg: string; fg: string }> = {
-    cni: TONE.erreur,
     phone: TONE.attente,
   };
   protected readonly allGroups = computed<DuplicateGroup[]>(() =>
@@ -1123,7 +1121,7 @@ export default class QualiteDoublonsPage {
     const t = this.t();
     return [
       { id: "" as "" | DuplicateReason | "merged", label: t("qualite.real.dbl.reasonAll"), count: all.length },
-      ...(["cni", "phone"] as const).map((reason) => ({
+      ...(["phone"] as const).map((reason) => ({
         id: reason as "" | DuplicateReason | "merged",
         label: t(this.reasonLabel[reason]),
         count: all.filter((group) => group.reason === reason).length,
@@ -1298,13 +1296,6 @@ export default class QualiteDoublonsPage {
         icon: "group",
         bg: "",
         fg: "",
-      },
-      {
-        label: t("qualite.real.dbl.stat.cni"),
-        value: nf.format(ofReason("cni").length),
-        sub: t("qualite.real.dbl.stat.cniSub"),
-        icon: "badge",
-        ...TONE.erreur,
       },
       {
         label: t("qualite.real.dbl.stat.phone"),
@@ -1492,7 +1483,12 @@ export default class QualiteDoublonsPage {
   protected confirmMerge() {
     const sel = this.sel();
     if (!sel || this.comment().trim().length < 3) return;
-    this.store.actions.mergeCase(sel.id, this.comment().trim());
+    // Règle stricte : refusée tant qu'une seule information diffère (il faut d'abord corriger les fiches).
+    const result = this.store.actions.mergeCase(sel.id, this.comment().trim());
+    if (!result.ok) {
+      this.snackbar.error(result.error);
+      return;
+    }
     this.comment.set("");
     this.mergeOpen.set(false);
     this.snackbar.success(this.t()("qualite.v2.dbl.merged"));

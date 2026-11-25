@@ -46,10 +46,10 @@ describe("summarizeRows", () => {
 });
 
 describe("verdictOf et similarityReasons", () => {
-  it("dit « même personne » quand toutes les fiches ont la même CNI", () => {
+  it("ne conclut rien d'une même CNI : une CNI répétée est normale (Q-12)", () => {
     const members = [producer("a1", "Moussa", "Diop", ["CNI identique à : A2"]), producer("a2", "Mamadou", "Diop")];
-    expect(verdictOf(members).kind).toBe("same");
-    expect(similarityReasons(members)).toContain("cni");
+    expect(verdictOf(members).kind).toBe("different");
+    expect(similarityReasons(members)).toEqual([]);
   });
 
   it("dit « personnes différentes » pour un simple téléphone partagé", () => {

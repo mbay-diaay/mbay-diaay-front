@@ -25,7 +25,7 @@ export const audit = {
   "audit.family.all": "Toutes",
   "audit.family.sensibles": "Actions sensibles",
   "audit.family.sensibles.hint":
-    "Données personnelles affichées, exports, sauvegardes, fusions de fiches et accès coupés.",
+    "Données personnelles affichées, exports, fusions de fiches et accès coupés.",
   "audit.family.qualite": "Qualité",
   "audit.family.qualite.hint": "Doublons, alertes, corrections et validation des parcelles.",
   "audit.family.donnees": "Données",

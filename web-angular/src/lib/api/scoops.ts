@@ -25,6 +25,8 @@ export type ApiScoop = {
   commune: string;
   region: string | null;
   archived: boolean;
+  /** Coopérative technique « Hors coopérative » : exclue des décomptes, sélectionnable pour un transfert. */
+  technical?: boolean;
   createdAt: string;
   /** Lien signé du logo (1 h), `null` sans logo. */
   logoUrl?: string | null;
@@ -49,9 +51,16 @@ export type ScoopCreateBody = {
 export type ScoopUpdateBody = { name?: string; commune?: string; code?: string; region?: string };
 
 /** Une page de coopératives (filtres : `q`, `archived`). */
-export function listScoops(query: PageQuery & { q?: string; archived?: boolean } = {}) {
-  const { archived, ...rest } = query;
-  return apiFetch<Page<ApiScoop>>(withPage("/scoops", { ...rest, ...(archived !== undefined && { archived: String(archived) }) }));
+export function listScoops(query: PageQuery & { q?: string; archived?: boolean; includeTechnical?: boolean } = {}) {
+  const { archived, includeTechnical, ...rest } = query;
+  return apiFetch<Page<ApiScoop>>(
+    withPage("/scoops", {
+      ...rest,
+      ...(archived !== undefined && { archived: String(archived) }),
+      // Ignoré par le serveur pour un compte sans le droit de transfert.
+      ...(includeTechnical && { includeTechnical: "true" }),
+    }),
+  );
 }
 
 export function getScoop(id: string) {
@@ -85,6 +94,7 @@ export function scoopFromApi(apiScoop: Omit<ApiScoop, "manager">): Scoop {
     ...(apiScoop.region && { region: apiScoop.region }),
     createdAt: apiScoop.createdAt,
     ...(apiScoop.archived && { archived: true }),
+    ...(apiScoop.technical && { technical: true }),
     // Lien relatif de l'API (`/v1/media/…`) : on le rend absolu, sinon le navigateur le cherche sur le site.
     ...(apiScoop.logoUrl && { logoUrl: mediaSrc(apiScoop.logoUrl) ?? apiScoop.logoUrl }),
   };
@@ -177,4 +187,70 @@ export type ScoopStatsDto = {
 export async function fetchScoopStats(scoopId?: string): Promise<ScoopStatsDto[]> {
   const response = await apiFetch<{ items: ScoopStatsDto[] }>(withPage("/scoops/stats", scoopId ? { scoopId } : {}));
   return response.items;
+}
+
+// ------------------------------------------------------------------ Transfert
+
+/** Sorte d'éléments déplaçables d'une coopérative à une autre (`POST /scoops/transfer`). */
+export type TransferKind = "organisations" | "producers" | "members";
+
+export type TransferBody = {
+  kind: TransferKind;
+  /** 500 identifiants au plus : un transfert est une seule transaction. */
+  ids: string[];
+  targetScoopId: string;
+  reason?: string;
+};
+
+/** Éléments réellement déplacés : ceux demandés et ceux qui leur sont rattachés. */
+export type TransferResult = {
+  batchId: string;
+  targetScoopId: string;
+  fromScoopIds: string[];
+  moved: {
+    organisations: number;
+    producers: number;
+    members: number;
+    plots: number;
+    plotCrops: number;
+    dossiers: number;
+    corrections: number;
+    accountLinks: number;
+  };
+};
+
+/** Nombre maximal d'éléments par transfert (limite du serveur). */
+export const TRANSFER_MAX_ITEMS = 500;
+
+/** Déplace des organisations, producteurs ou membres vers une autre coopérative (droit `scoop.transfer`, audité). */
+export const transferToScoop = (body: TransferBody) =>
+  apiFetch<TransferResult>("/scoops/transfer", {
+    method: "POST",
+    body: {
+      kind: body.kind,
+      ids: body.ids,
+      targetScoopId: body.targetScoopId,
+      ...(body.reason?.trim() && { reason: body.reason.trim() }),
+    },
+  });
+
+/** Clé du message français pour un refus de transfert. */
+export function transferErrorKey(error: unknown): MessageKey {
+  if (error instanceof ApiError) {
+    const cause = (error.details as { code?: string } | undefined)?.code ?? error.code;
+    switch (cause) {
+      case "SCOOP_ARCHIVED":
+        return "transfert.err.archived";
+      case "TRANSFER_ALREADY_THERE":
+        return "transfert.err.alreadyThere";
+      case "TRANSFER_MERGED_PRODUCER":
+        return "transfert.err.merged";
+      case "ORG_NAME_TAKEN":
+        return "transfert.err.nameTaken";
+    }
+    if (error.status === 0) return "transfert.err.network";
+    if (error.status === 403) return "transfert.err.forbidden";
+    if (error.status === 404) return "transfert.err.notFound";
+  }
+  return "transfert.err.generic";
 }

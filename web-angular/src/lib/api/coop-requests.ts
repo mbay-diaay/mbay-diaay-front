@@ -4,8 +4,27 @@ import { type Page, type PageQuery, withPage } from "./pagination";
 
 /** Demandes du CRADESC aux coopératives (`/coop-requests`, mode API uniquement). */
 
-export type CoopRequestKind = "doublon" | "alerte" | "organisation" | "fiche" | "autre";
-export const COOP_REQUEST_KINDS: readonly CoopRequestKind[] = ["doublon", "alerte", "organisation", "fiche", "autre"];
+export type CoopRequestKind =
+  | "doublon"
+  | "alerte"
+  | "organisation"
+  | "fiche"
+  | "autre"
+  | "correction_avant_fusion"
+  | "cni_proches"
+  | "scoop_manquante"
+  | "nom_manquant";
+export const COOP_REQUEST_KINDS: readonly CoopRequestKind[] = [
+  "doublon",
+  "alerte",
+  "organisation",
+  "fiche",
+  "autre",
+  "correction_avant_fusion",
+  "cni_proches",
+  "scoop_manquante",
+  "nom_manquant",
+];
 
 export type CoopRequestStatus = "ouverte" | "réglée" | "annulée";
 export const COOP_REQUEST_STATUSES: readonly CoopRequestStatus[] = ["ouverte", "réglée", "annulée"];

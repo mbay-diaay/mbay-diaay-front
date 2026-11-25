@@ -39,7 +39,7 @@ export const SCHEMA: Record<EntityKey, EntitySchema> = {
         key: "type",
         label: "Type",
         aliases: ["type organisation", "categorie"],
-        hint: "GIE, Section, Association, Groupement, Individuel ou Membre direct (vide = à qualifier)",
+        hint: "GIE, Union, Groupement, Section, OP ou À préciser (vide = à qualifier)",
         example: "GIE",
       },
       {

@@ -78,6 +78,57 @@ describe("demandes du CRADESC aux coopératives", () => {
   });
 });
 
+describe("fusion, demandes et transferts : des droits, jamais un rôle codé en dur", () => {
+  const PERMISSIONS: Permission[] = ["quality.merge", "coop_request.send", "scoop.transfer"];
+
+  it("les trois droits ont un libellé et une famille de l'éditeur", () => {
+    for (const permission of PERMISSIONS) {
+      expect(PERMISSION_LABEL[permission]).toBeTruthy();
+      expect(PERMISSION_GROUPS.some((group) => group.permissions.includes(permission))).toBe(true);
+    }
+  });
+
+  it("par défaut : administrateur et super administrateur ; le gestionnaire ne transfère ni n'envoie de demande", () => {
+    for (const permission of PERMISSIONS) {
+      expect(allows("admin", permission)).toBe(true);
+      expect(allows("superadmin", permission)).toBe(true);
+    }
+    expect(allows("gestionnaire", "quality.merge")).toBe(true);
+    expect(allows("gestionnaire", "coop_request.send")).toBe(false);
+    expect(allows("gestionnaire", "scoop.transfer")).toBe(false);
+  });
+
+  it("le super administrateur les donne à n'importe quel rôle (secrétaire), puis rétablit le défaut", () => {
+    superAdmin();
+    for (const permission of PERMISSIONS) expect(allows("secretaire", permission)).toBe(false);
+    const granted = [...DEFAULT_ROLE_PERMISSIONS.secretaire, ...PERMISSIONS];
+    expect(actions.setRolePermissions("secretaire", granted).ok).toBe(true);
+    loginAs("secretaire", "aminata.ba@scoop-kms.example", "Aminata Bâ");
+    for (const permission of PERMISSIONS) expect(getState().session?.permissions).toContain(permission);
+    superAdmin();
+    actions.resetRolePermissions("secretaire");
+  });
+
+  it("un gestionnaire ne peut pas confier ces droits à un sous-rôle", () => {
+    for (const permission of PERMISSIONS) {
+      expect(delegablePermissions(DEFAULT_ROLE_PERMISSIONS.superadmin)).not.toContain(permission);
+    }
+  });
+});
+
+describe("fusion en démonstration : règle stricte", () => {
+  it("refuse de fusionner deux fiches qui diffèrent et ne change rien", () => {
+    superAdmin();
+    const target = getState().cases.find((candidate) => candidate.status !== "fusionné");
+    expect(target).toBeDefined();
+    const result = actions.mergeCase(target!.id, "essai");
+    // Les fiches de démonstration diffèrent (au moins une information) : refus, aucune fiche marquée fusionnée.
+    expect(result.ok).toBe(false);
+    expect(getState().producers.find((producer) => producer.id === target!.bId)?.mergedInto).toBeUndefined();
+    expect(getState().audit[0]?.action).toBe("Fusion refusée");
+  });
+});
+
 describe("super administrateur : matrice et rôles modifiables", () => {
   it("modifie les droits d'un rôle, trace la modification, puis rétablit le défaut", () => {
     superAdmin();

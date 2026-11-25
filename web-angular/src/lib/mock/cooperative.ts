@@ -4,7 +4,7 @@
  * (compte) sont deux champs différents. Être membre ne donne aucun droit et ne crée aucun producteur.
  * Données de démonstration déterministes, entièrement fictives.
  */
-import { CAMPAIGNS, ORGS, PLOTS, PRODUCERS, type Producer, type Sex } from "./data";
+import { CAMPAIGNS, ORGS, PLOTS, PRODUCERS, type Producer, type RecordOrigin, type Sex } from "./data";
 
 // ============ Membres ============
 
@@ -16,7 +16,8 @@ export const MEMBERSHIP_STATUSES: readonly MembershipStatus[] = [
   "sorti",
 ];
 
-export interface Member {
+/** Les colonnes d'origine (`sourceBase`, feuille, ligne) viennent de l'API ; un membre sans nom (ligne d'organisation du fichier consolidé) a prénom et nom vides. */
+export interface Member extends RecordOrigin {
   id: string;
   scoopId: string;
   /** Organisation de base ou GIE de la personne ; `null` pour un membre direct. */

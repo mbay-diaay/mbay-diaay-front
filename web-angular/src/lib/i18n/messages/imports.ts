@@ -57,9 +57,6 @@ export const imports = {
   "imports.done.again": "Nouvel import",
   "imports.done.demo":
     "Mode démonstration : les données importées disparaissent au rechargement de la page.",
-  "imports.done.backupBefore": "Pensez à faire une",
-  "imports.done.backupLink": "sauvegarde",
-  "imports.done.backupAfter": ".",
   "imports.history.title": "Historique des lots",
   "imports.history.batch": "Lot",
   "imports.history.file": "Fichier",

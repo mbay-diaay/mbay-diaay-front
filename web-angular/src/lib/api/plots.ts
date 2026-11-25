@@ -60,6 +60,10 @@ export type ApiPlot = {
   village: string | null;
   centroid: { lat: number; lng: number; precisionM: number | null } | null;
   areaHa: number | null;
+  /** Base d'origine de la parcelle (`CONSOLIDE` : aucune superficie n'est chargée, voir `areaUnknown`). */
+  sourceBase?: "KOBO" | "CONSOLIDE" | null;
+  /** Le serveur signale une superficie à confirmer par le CRADESC (parcelle consolidée, unité inconnue). */
+  areaToConfirm?: boolean;
   declaredAreaHa: number | null;
   areaGapPct: number | null;
   cultivatedAreaHa: number | null;
@@ -184,6 +188,8 @@ export function plotFromApi(row: ApiPlot): Plot {
     village: row.village ?? "",
     centroid: row.centroid,
     declaredKnown: declared !== null,
+    // Parcelle consolidée sans aucune superficie : on ne devine rien, l'écran dit « non renseignée » (unité à confirmer).
+    ...((row.areaToConfirm ?? row.sourceBase === "CONSOLIDE") && toNumber(row.areaHa) === null && declared === null && { areaUnknown: true }),
     areaGapPct: toNumber(row.areaGapPct),
     cultivatedAreaHa: toNumber(row.cultivatedAreaHa),
     perimeterM: toNumber(row.perimeterM),

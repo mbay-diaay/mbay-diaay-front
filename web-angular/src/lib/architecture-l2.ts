@@ -138,7 +138,7 @@ export const ROLE_DOCS: Record<DocRoleId, RoleDoc> = {
       "Créer et inviter les utilisateurs, attribuer les rôles",
       "Importer des données, fusionner les doublons, corriger",
       "Consulter le journal complet",
-      "Gérer référentiels, appareils, sauvegardes et exports",
+      "Gérer référentiels, appareils et exports",
       "Exporter la liste nominative des producteurs",
       "Voir une CNI complète, avec un motif gardé au journal",
     ],

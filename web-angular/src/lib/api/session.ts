@@ -1,5 +1,5 @@
 import type { Permission, RoleId } from "../permissions";
-import { actions, getState } from "../store";
+import { actions, can, getState } from "../store";
 import { apiFetch, refreshSession } from "./client";
 import { isApiMode } from "./config";
 import { loadPreferences } from "./preferences";
@@ -52,8 +52,12 @@ export async function hydrateSessionFromApi(): Promise<boolean> {
  */
 export async function loadScoopsFromApi(): Promise<void> {
   try {
-    const scoops = await fetchAllPages((query) => listScoops(query));
+    // La coopérative technique n'est demandée qu'à qui peut transférer : elle reste hors des décomptes (les 11).
+    const withTechnical = can(getState().session, "scoop.transfer");
+    const received = await fetchAllPages((query) => listScoops({ ...query, includeTechnical: withTechnical }));
+    const scoops = received.filter((scoop) => !scoop.technical);
     actions.replaceScoopsFromApi(scoops.map(scoopFromApi));
+    actions.setTechnicalScoopsFromApi(received.filter((scoop) => scoop.technical).map(scoopFromApi));
     actions.syncManagersFromApi(scoops.map((scoop) => scoop.id), managerRowsFromScoops(scoops));
   } catch {
     // Silencieux : voir ci-dessus.

@@ -2,10 +2,11 @@ import { Component, computed, effect, inject, input, model, signal, untracked } 
 
 import { isApiMode } from "@/lib/api/config";
 import { createOrganisation, orgFromApi, organisationApiError } from "@/lib/api/organisations";
-import type { OrgType } from "@/lib/mock/data";
+import { ORG_TYPES, type OrgType } from "@/lib/mock/data";
 import { inScope } from "@/lib/scope";
 
 import { LocaleService } from "./locale.service";
+import { OrgTypeHelpComponent } from "./org-type-help.component";
 import { StoreService } from "./store.service";
 import { IconComponent } from "./ui/icon.component";
 import { ModalComponent } from "./ui/modal.component";
@@ -14,8 +15,8 @@ import { SnackbarService } from "./ui/snackbar.service";
 import { TextFieldComponent } from "./ui/text-field.component";
 import { V2_PAGE_STYLES } from "./ui/v2-page.styles";
 
-const ORG_TYPES: readonly OrgType[] = ["GIE", "Section", "Association", "Groupement", "Individuel", "Membre direct"];
-const NO_TYPE = "none";
+/** Type proposé par défaut : « À préciser » est un vrai type, à compléter quand le CRADESC donnera l'information. */
+const DEFAULT_TYPE: OrgType = "À préciser";
 
 /**
  * Nouveau GIE ou organisation dans une coopérative (charte V2). Droit `org.manage` ; le serveur vérifie aussi le périmètre.
@@ -23,7 +24,7 @@ const NO_TYPE = "none";
  */
 @Component({
   selector: "app-organisation-dialog",
-  imports: [IconComponent, ModalComponent, SelectComponent, TextFieldComponent],
+  imports: [IconComponent, ModalComponent, OrgTypeHelpComponent, SelectComponent, TextFieldComponent],
   styles: [
     V2_PAGE_STYLES,
     `
@@ -54,6 +55,9 @@ const NO_TYPE = "none";
           <ui-select class="mt-2 block" [label]="t()('orgs.add.type')" leadingIcon="badge" [options]="typeOptions()" [value]="type()" (valueChange)="type.set($event)" />
         </div>
         <ui-text-field preset="village" [label]="t()('orgs.add.village')" [value]="village()" (valueChange)="village.set($event)" />
+        <div class="sm:col-span-2">
+          <app-org-type-help [type]="type()" />
+        </div>
       </div>
       <button modal-footer type="button" class="btn btn-ghost" (click)="open.set(false)">{{ t()("common.cancel") }}</button>
       <button modal-footer type="button" class="btn btn-primary" [disabled]="saving()" (click)="submit()">
@@ -72,7 +76,7 @@ export class OrganisationDialogComponent {
   protected readonly t = inject(LocaleService).t;
 
   protected readonly name = signal("");
-  protected readonly type = signal<string>(NO_TYPE);
+  protected readonly type = signal<string>(DEFAULT_TYPE);
   protected readonly village = signal("");
   protected readonly nameError = signal("");
   protected readonly saving = signal(false);
@@ -92,7 +96,6 @@ export class OrganisationDialogComponent {
 
   protected readonly typeOptions = computed<SelectOption[]>(() => [
     ...ORG_TYPES.map((value) => ({ value, label: value })),
-    { value: NO_TYPE, label: this.t()("orgs.add.typeNone") },
   ]);
 
   constructor() {
@@ -100,7 +103,7 @@ export class OrganisationDialogComponent {
       if (!this.open()) return;
       untracked(() => {
         this.name.set("");
-        this.type.set(NO_TYPE);
+        this.type.set(DEFAULT_TYPE);
         this.village.set("");
         this.nameError.set("");
         this.scoopError.set("");
@@ -124,7 +127,7 @@ export class OrganisationDialogComponent {
       this.scoopError.set(this.t()("errors.roles.scoopRequired"));
       return;
     }
-    const type = this.type() === NO_TYPE ? null : (this.type() as OrgType);
+    const type = this.type() as OrgType;
     const village = this.village().trim();
     this.saving.set(true);
     try {
