@@ -16,6 +16,8 @@ export type ApiUser = {
   sex?: "F" | "H" | null;
   age?: number | null;
   photoUrl?: string | null;
+  /** Technicien : identifiants des GIE suivis (vide : toute la coopérative). */
+  organisationIds?: string[];
   /** Technicien : vrai tant qu'il n'a pas utilisé son code temporaire pour choisir son mot de passe. */
   activationPending?: boolean;
   /** Gestionnaire invité : n'a pas encore choisi son mot de passe avec le lien reçu par e-mail. */
@@ -49,9 +51,28 @@ export function toggleUserActive(id: string) {
 /** Modifie un compte (rôle, SCOOP…). Attribuer ou retirer le rôle super administrateur exige `role.configure`. */
 export function updateUser(
   id: string,
-  body: { role?: RoleId; scoopId?: string | null; scoopIds?: string[]; name?: string; phone?: string | null },
+  body: {
+    role?: RoleId;
+    scoopId?: string | null;
+    scoopIds?: string[];
+    name?: string;
+    phone?: string | null;
+    sex?: "F" | "H" | null;
+    age?: number | null;
+  },
 ) {
   return apiFetch<ApiUser>(`/users/${id}`, { method: "PATCH", body });
+}
+
+/**
+ * GIE suivis par un technicien (droit `user.manage` ou `technician.invite`). Remplace les liaisons du périmètre de la
+ * session ; une liste vide veut dire « toute la coopérative ». Le serveur trace le changement.
+ */
+export function setTechnicianOrganisations(id: string, organisationIds: string[]) {
+  return apiFetch<ApiUser>(`/users/${encodeURIComponent(id)}/organisations`, {
+    method: "PUT",
+    body: { organisationIds },
+  });
 }
 
 /** Supprime définitivement un compte (droit `user.manage`, adresse e-mail retapée pour confirmer). */

@@ -656,21 +656,18 @@ export default class PersonnelPage {
   }
 
   /**
-   * Mode API : nom, téléphone et rôle sont enregistrés par le serveur, puis la réponse est fusionnée dans le store.
-   * Le sexe et l'âge n'ont pas de route : si on les change, rien n'est modifié (jamais gardés seulement dans le
-   * navigateur). La photo est envoyée au serveur.
+   * Mode API : nom, téléphone, sexe, âge et rôle sont enregistrés par le serveur, puis la réponse est fusionnée dans
+   * le store (rien n'est gardé seulement dans le navigateur). La photo est envoyée au serveur.
    */
   private async saveEditOnApi(person: AppUser, ageValue: number): Promise<void> {
     const t = this.t();
     const newRole = this.pickedRole() && this.pickedRole() !== person.role ? (this.pickedRole() as RoleId) : undefined;
-    if ((person.sex ?? "") !== this.editSex() || (person.age ?? 0) !== ageValue) {
-      this.snackbar.error(this.locale.tNow("errors.api.unavailable"));
-      return;
-    }
     try {
       const updated = await updateUser(person.id, {
         name: this.editName().trim().replace(/\s+/g, " "),
         phone: this.editPhone().trim(),
+        sex: this.editSex() as "F" | "H",
+        age: ageValue,
         ...(newRole ? { role: newRole } : {}),
       });
       this.store.actions.mergeUsersFromApi([updated]);
