@@ -183,6 +183,7 @@ import { isApiMode } from "./api/config";
 import type { ScoopStatsDto } from "./api/scoops";
 import { mediaSrc } from "./api/media";
 import { clearTokens } from "./api/tokens";
+import { resetPreferences } from "./api/preferences";
 import { DEMO_MODE } from "./auth/config";
 import { tNow, type MessageKey, type TranslateParams } from "./i18n";
 import {
@@ -214,6 +215,8 @@ export interface AuditEntry {
   detail: string;
   /** SCOOP concernée : base du journal limité à sa SCOOP. Absente pour les actions qui visent toute la plateforme. */
   scoopId?: string | undefined;
+  /** Famille d'événement renvoyée par le serveur (`consultations`, `acces_refuses`, `connexions`, `operations`). */
+  category?: string | undefined;
 }
 export interface AppUser {
   id: string;
@@ -334,28 +337,6 @@ const TOKEN_MS = 60 * 60 * 1000;
 /** Durée de validité du lien d'invitation d'un gestionnaire (hypothèse, à valider). */
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-/**
- * Liens de paiement : gardés dans le navigateur pour que la page `/payer/…` s'ouvre dans un autre onglet (démonstration).
- * Avec l'API, ils vivront sur le serveur et le membre les ouvrira depuis n'importe quel téléphone.
- */
-const PAYMENT_LINKS_KEY = "mbd.paymentLinks";
-function loadPaymentLinks(): PaymentLink[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(PAYMENT_LINKS_KEY) ?? "[]");
-    return Array.isArray(parsed) ? (parsed as PaymentLink[]) : [];
-  } catch {
-    return [];
-  }
-}
-function persistPaymentLinks(): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(PAYMENT_LINKS_KEY, JSON.stringify(state.paymentLinks));
-  } catch {
-    /* stockage indisponible : le lien reste valable dans cet onglet */
-  }
-}
 /** Un code temporaire de technicien vaut 72 heures. */
 const TECHNICIAN_CODE_TTL_MS = 72 * 60 * 60 * 1000;
 
@@ -601,7 +582,7 @@ let state: State = {
   reports: [],
   contributionRules: CONTRIBUTION_RULES,
   payments: isApiMode() ? [] : CONTRIBUTION_PAYMENTS,
-  paymentLinks: loadPaymentLinks(),
+  paymentLinks: [],
   meetings: isApiMode() ? [] : MEETINGS,
   rolePermissions: cloneDefaultMatrix(),
   customRoles: [],
@@ -650,36 +631,6 @@ function audit(action: string, entity: string, detail: string, scoopId?: string)
       ...s.audit,
     ],
   }));
-}
-
-const SESSION_KEY = "mbd.session";
-
-function browserLocalStorage(): Storage | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-function readSessionRaw(): string | null {
-  try {
-    return browserLocalStorage()?.getItem(SESSION_KEY) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function writeSessionRaw(value: string | null) {
-  try {
-    const storage = browserLocalStorage();
-    if (!storage) return;
-    if (value === null) storage.removeItem(SESSION_KEY);
-    else storage.setItem(SESSION_KEY, value);
-  } catch {
-    /* mode privé / SSR : ignorer */
-  }
 }
 
 /** Seul ce qui identifie la session est conservé : droits et périmètre sont recalculés à la restauration. */
@@ -1044,64 +995,7 @@ function libraryDocumentFromApi(row: ApiDocumentRow): DocumentMeta {
 
 export const actions = {
   restoreSession() {
-    try {
-      const raw = readSessionRaw();
-      if (!raw) return;
-      // Mode API : session locale seulement si un jeton d'accès est encore là (rafraîchi via /auth/refresh).
-      if (isApiMode()) {
-        const s = JSON.parse(raw) as Partial<StoredSession>;
-        if (
-          typeof s.name === "string" &&
-          typeof s.email === "string" &&
-          typeof s.expiresAt === "number" &&
-          s.expiresAt > Date.now() &&
-          isRole(s.role)
-        ) {
-          set({
-            session: buildSession({
-              name: s.name,
-              email: s.email,
-              role: s.role,
-              expiresAt: s.expiresAt,
-            }),
-          });
-          return;
-        }
-        writeSessionRaw(null);
-        return;
-      }
-      // Hors mode démonstration sans API : pas de session navigateur seule.
-      if (!DEMO_MODE) {
-        writeSessionRaw(null);
-        return;
-      }
-      const s = JSON.parse(raw) as Partial<StoredSession>;
-      if (
-        typeof s.name === "string" &&
-        typeof s.email === "string" &&
-        typeof s.expiresAt === "number" &&
-        s.expiresAt > Date.now()
-      ) {
-        // Le rôle se relit dans les comptes : on ne croit jamais celui qui est écrit dans le stockage du navigateur.
-        const user = state.users.find((u) => u.email.toLowerCase() === s.email!.toLowerCase());
-        if (!user || !user.active || !isRole(user.role)) {
-          writeSessionRaw(null);
-          return;
-        }
-        set({
-          session: buildSession({
-            name: s.name,
-            email: s.email,
-            role: user.role,
-            expiresAt: s.expiresAt,
-          }),
-        });
-      } else {
-        writeSessionRaw(null);
-      }
-    } catch {
-      writeSessionRaw(null);
-    }
+    // La session n'est jamais écrite dans le navigateur : elle vit en mémoire (API : retrouvée par cookie HttpOnly).
   },
   login(
     name: string,
@@ -1111,14 +1005,13 @@ export const actions = {
     serverScoopIds?: readonly string[],
   ) {
     const stored: StoredSession = { name, email, role, expiresAt: Date.now() + TOKEN_MS };
-    writeSessionRaw(JSON.stringify(stored));
     set({ session: buildSession(stored, serverPermissions, serverScoopIds) });
     audit("Connexion", "Session", `Profil ${role}`);
   },
   logout() {
     if (state.session) audit("Déconnexion", "Session", state.session.role);
     if (isApiMode()) clearTokens();
-    writeSessionRaw(null);
+    resetPreferences();
     set({ session: null });
   },
   switchRole(role: RoleId) {
@@ -2215,7 +2108,7 @@ export const actions = {
       operations: snap.data.operations ?? FIELD_OPERATIONS,
       contributionRules: snap.data.contributionRules ?? [],
       payments: snap.data.payments ?? [],
-      paymentLinks: loadPaymentLinks(),
+      paymentLinks: [],
       meetings: (snap.data.meetings ?? []).map((meeting) => ({
         ...meeting,
         decisions: meeting.decisions ?? [],
@@ -4088,7 +3981,6 @@ export const actions = {
         link,
       ],
     }));
-    persistPaymentLinks();
     audit(
       "Lien de paiement créé",
       `Membre ${member.firstName} ${member.lastName}`,
@@ -4108,7 +4000,6 @@ export const actions = {
     set((s) => ({
       paymentLinks: s.paymentLinks.map((l) => (l.id === id ? { ...l, status: "annulé" as const } : l)),
     }));
-    persistPaymentLinks();
     audit("Lien de paiement annulé", `Lien ${link.id}`, `période ${link.period}`, link.scoopId);
     return { ok: true };
   },
@@ -4152,7 +4043,6 @@ export const actions = {
           : l,
       ),
     }));
-    persistPaymentLinks();
     audit(
       "Cotisation payée en ligne",
       `Membre ${member.firstName} ${member.lastName}`,

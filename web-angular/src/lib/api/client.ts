@@ -1,5 +1,5 @@
 import { apiBaseUrl } from "./config";
-import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "./tokens";
+import { clearTokens, getAccessToken, setAccessToken } from "./tokens";
 
 export class ApiError extends Error {
   constructor(
@@ -46,6 +46,7 @@ export async function apiFetch<T>(path: string, opts: RequestOpts = {}): Promise
 
   const headers: Record<string, string> = {
     Accept: "application/json",
+    "X-Client": "web",
   };
   const isForm = typeof FormData !== "undefined" && opts.body instanceof FormData;
   // FormData : le navigateur pose lui-même le Content-Type multipart (avec sa frontière).
@@ -58,13 +59,14 @@ export async function apiFetch<T>(path: string, opts: RequestOpts = {}): Promise
   const init: RequestInit = {
     method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
     headers,
+    credentials: "include",
   };
   if (opts.body !== undefined) init.body = isForm ? (opts.body as FormData) : JSON.stringify(opts.body);
 
   const res = await fetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, init);
 
   if (res.status === 401 && opts.auth !== false && !opts._retry) {
-    const refreshed = await tryRefresh();
+    const refreshed = await refreshSession();
     if (refreshed) return apiFetch<T>(path, { ...opts, _retry: true });
     clearTokens();
   }
@@ -74,19 +76,35 @@ export async function apiFetch<T>(path: string, opts: RequestOpts = {}): Promise
   return (await res.json()) as T;
 }
 
-async function tryRefresh(): Promise<boolean> {
-  const refresh = getRefreshToken();
+/** Renouvellement en cours : partagé entre toutes les requêtes et les onglets de la page (anti-course). */
+let refreshInFlight: Promise<boolean> | null = null;
+
+/**
+ * Retrouve la session avec le cookie HttpOnly `mbd_refresh` (POST /auth/refresh sans corps).
+ * Une seule requête à la fois : les appels simultanés attendent la même réponse.
+ */
+export function refreshSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+async function doRefresh(): Promise<boolean> {
   const base = apiBaseUrl();
-  if (!refresh || !base) return false;
+  if (!base) return false;
   try {
     const res = await fetch(`${base}/auth/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ refreshToken: refresh }),
+      headers: { Accept: "application/json", "X-Client": "web" },
+      credentials: "include",
     });
     if (!res.ok) return false;
-    const data = (await res.json()) as { accessToken: string; refreshToken: string };
-    setTokens(data.accessToken, data.refreshToken);
+    const data = (await res.json()) as { accessToken?: string };
+    if (!data.accessToken) return false;
+    setAccessToken(data.accessToken);
     return true;
   } catch {
     return false;

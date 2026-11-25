@@ -35,6 +35,7 @@ import { BRAND, CRADESC } from "@/config/brand";
 import { can } from "@/lib/store";
 import { loadMeetingsIntoStore } from "@/lib/api/meetings";
 import { LocaleService } from "./locale.service";
+import { PreferencesService } from "./preferences.service";
 import { ProducerWorkflow } from "./producer-workflow.service";
 import { StoreService } from "./store.service";
 import { SidebarNavComponent } from "./sidebar-nav.component";
@@ -44,8 +45,6 @@ import { UiModalA11yDirective } from "./ui/modal-a11y.directive";
 import { BrandLogoComponent } from "./ui/brand-logo.component";
 import { SnackbarComponent } from "./ui/snackbar.component";
 import { IconComponent, type IconName } from "./ui/icon.component";
-
-const SIDEBAR_KEY = "mbd.sidebar.collapsed";
 
 /** Une seule hydratation par chargement de page (plusieurs `<app-shell>` possibles). */
 let sessionHydration: Promise<void> | null = null;
@@ -676,7 +675,9 @@ export class AppLayoutComponent {
 
   protected readonly mobileOpen = signal(false);
   /** Menu latéral replié en rail d'icônes (grand écran), mémorisé dans le navigateur. */
-  protected readonly collapsed = signal(false);
+  private readonly preferences = inject(PreferencesService);
+  /** Menu replié : préférence du compte (serveur), dépliée par défaut. */
+  protected readonly collapsed = computed(() => this.preferences.preferences().sidebarCollapsed ?? false);
   protected readonly accountMenuOpen = signal(false);
   /** Panneau ouvert dans la barre du haut (notifications, aide, paramètres). */
   protected readonly topMenu = signal<"notif" | "help" | "settings" | null>(null);
@@ -813,11 +814,6 @@ export class AppLayoutComponent {
       if (typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent)) {
         this.modKey.set("⌘");
       }
-      try {
-        this.collapsed.set(window.localStorage.getItem(SIDEBAR_KEY) === "1");
-      } catch {
-        /* stockage indisponible : menu déplié par défaut */
-      }
       void ensureSessionHydrated().finally(() => {
         this.ready.set(true);
         // Mode API : les réunions viennent du serveur (aucun effet en démonstration).
@@ -864,13 +860,7 @@ export class AppLayoutComponent {
   }
 
   protected toggleCollapsed(): void {
-    const next = !this.collapsed();
-    this.collapsed.set(next);
-    try {
-      window.localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0");
-    } catch {
-      /* stockage indisponible : l'état n'est pas mémorisé */
-    }
+    this.preferences.update({ sidebarCollapsed: !this.collapsed() });
   }
 
   protected toggleAccountMenu(event: Event): void {

@@ -1,7 +1,8 @@
 import type { Permission, RoleId } from "../permissions";
 import { actions, getState } from "../store";
-import { apiFetch } from "./client";
+import { apiFetch, refreshSession } from "./client";
 import { isApiMode } from "./config";
+import { loadPreferences } from "./preferences";
 import { fetchAllPages } from "./pagination";
 import { fetchScoopStats, listScoops, managerRowsFromScoops, scoopFromApi } from "./scoops";
 import { clearTokens, getAccessToken } from "./tokens";
@@ -19,23 +20,24 @@ type MeResponse = {
 };
 
 /**
- * Restaure la session depuis l'API (jeton + GET /me).
- * Sans jeton valide → déconnexion propre.
- * En mode démo (pas d'API) → restoreSession locale.
+ * Retrouve la session auprès de l'API : le jeton d'accès n'est qu'en mémoire, donc au chargement (ou dans un
+ * nouvel onglet) on le redemande avec le cookie HttpOnly de renouvellement (POST /auth/refresh), puis GET /me.
+ * Sans session valide → déconnexion propre (écran de connexion).
+ * En mode démo (pas d'API) : la session n'existe qu'en mémoire, rien à restaurer.
  */
 export async function hydrateSessionFromApi(): Promise<boolean> {
   if (!isApiMode()) {
     actions.restoreSession();
     return getState().session !== null;
   }
-  if (!getAccessToken()) {
+  if (!getAccessToken() && !(await refreshSession())) {
     actions.logout();
     return false;
   }
   try {
     const me = await apiFetch<MeResponse>("/me");
     actions.login(me.name, me.email, me.role, me.permissions, me.scoopIds ?? (me.scoopId ? [me.scoopId] : []));
-    await loadScoopsFromApi();
+    await Promise.all([loadScoopsFromApi(), loadPreferences()]);
     return true;
   } catch {
     clearTokens();

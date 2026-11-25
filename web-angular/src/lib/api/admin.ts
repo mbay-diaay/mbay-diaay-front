@@ -28,6 +28,8 @@ export type ApiAuditEntry = {
   target: string;
   detail: string;
   scoopId?: string | null;
+  /** Famille d'événement du serveur : consultations, acces_refuses, connexions ou operations. */
+  category?: string | null;
 };
 
 export const listScoops = (q: PageQuery = {}) => apiFetch<Page<ApiScoop>>(withPage("/scoops", q));
