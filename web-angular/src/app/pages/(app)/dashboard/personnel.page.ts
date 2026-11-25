@@ -612,13 +612,17 @@ export default class PersonnelPage {
   }
 
   /**
-   * Mode API : nom, téléphone et rôle sont enregistrés par le serveur (comme sur les pages Techniciens et
-   * Utilisateurs) ; sexe, âge et photo complètent la fiche dans le navigateur. Sans cet appel, la modification
-   * n'existait que dans la mémoire de la page et disparaissait au rechargement.
+   * Mode API : nom, téléphone et rôle sont enregistrés par le serveur, puis la réponse est fusionnée dans le store.
+   * Le sexe et l'âge n'ont pas de route : si on les change, rien n'est modifié (jamais gardés seulement dans le
+   * navigateur). La photo est envoyée au serveur.
    */
   private async saveEditOnApi(person: AppUser, ageValue: number): Promise<void> {
     const t = this.t();
     const newRole = this.pickedRole() && this.pickedRole() !== person.role ? (this.pickedRole() as RoleId) : undefined;
+    if ((person.sex ?? "") !== this.editSex() || (person.age ?? 0) !== ageValue) {
+      this.snackbar.error(this.locale.tNow("errors.api.unavailable"));
+      return;
+    }
     try {
       const updated = await updateUser(person.id, {
         name: this.editName().trim().replace(/\s+/g, " "),
@@ -630,12 +634,6 @@ export default class PersonnelPage {
       this.snackbar.error(this.locale.tNow(technicianApiError(error).key));
       return;
     }
-    // Sexe, âge et photo : gardés dans le navigateur (l'API ne les modifie pas pour le personnel).
-    this.store.actions.updateStaff(person.id, {
-      sex: this.editSex() as "F" | "H",
-      age: ageValue,
-      photoUrl: this.photo(),
-    });
     this.editing.set(null);
     void this.syncPhoto(person.id);
     this.snackbar.success(t("personnel.edit.done", { name: this.editName().trim() }));

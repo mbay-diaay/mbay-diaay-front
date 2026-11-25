@@ -31,6 +31,8 @@ import { cn } from "@/lib/utils";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
 import { StoreService } from "@shared/store.service";
+import { SnackbarService } from "@shared/ui";
+import { isApiMode } from "@/lib/api/config";
 import {
   PaginationComponent,
   UiButtonComponent,
@@ -554,7 +556,18 @@ export default class ReferentielsPage {
     map: MapPin,
   };
 
+  private readonly snackbar = inject(SnackbarService);
   private readonly router = inject(Router);
+
+  /**
+   * Mode API : ces réglages (familles, alias, seuils, âge des jeunes) n'ont pas de route serveur ; on prévient et on
+   * ne change rien (jamais de modification gardée seulement dans le navigateur).
+   */
+  private blockedByApi(): boolean {
+    if (!isApiMode()) return false;
+    this.snackbar.error(this.locale.tNow("errors.api.unavailable"));
+    return true;
+  }
   private readonly route = inject(ActivatedRoute);
 
   private readonly sectionParam = toSignal(
@@ -681,6 +694,7 @@ export default class ReferentielsPage {
   }
 
   onFamilyChange(crop: string, family: CropFamily): void {
+    if (this.blockedByApi()) return;
     actions.setCropFamily(crop, family);
   }
 
@@ -690,7 +704,7 @@ export default class ReferentielsPage {
 
   validateAlias(alias: string): void {
     const crop = this.aliasChoice()[alias];
-    if (!crop) return;
+    if (!crop || this.blockedByApi()) return;
     actions.attachAlias(alias, crop);
     this.aliasChoice.update((m) => {
       const n = { ...m };
@@ -744,7 +758,7 @@ export default class ReferentielsPage {
 
   saveRule(key: SeuilKey): void {
     const n = Number(this.ruleDraft()[key].replace(",", "."));
-    if (!Number.isFinite(n) || n <= 0) return;
+    if (!Number.isFinite(n) || n <= 0 || this.blockedByApi()) return;
     actions.setSeuil(key, n);
   }
 
@@ -787,7 +801,7 @@ export default class ReferentielsPage {
   }
 
   saveYouth(): void {
-    if (!this.canSaveYouth()) return;
+    if (!this.canSaveYouth() || this.blockedByApi()) return;
     actions.setYouthMaxAge(this.youthNum());
   }
 

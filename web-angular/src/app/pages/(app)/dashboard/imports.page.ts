@@ -1300,6 +1300,10 @@ export default class ImportsPage {
   protected runDry(): void {
     const L = this.loaded();
     if (!L) return;
+    if (this.koboMode) {
+      this.flash.set(this.t()("errors.api.unavailable"));
+      return;
+    }
     const st = getState();
     const id = this.nextId();
     const p = buildPlan(
@@ -1332,6 +1336,10 @@ export default class ImportsPage {
   protected confirm(): void {
     const L = this.loaded();
     if (!L) return;
+    if (this.koboMode) {
+      this.flash.set(this.t()("errors.api.unavailable"));
+      return;
+    }
     const st = getState();
     const id = this.nextId();
     const p = buildPlan(

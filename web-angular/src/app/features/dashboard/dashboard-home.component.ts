@@ -1,9 +1,11 @@
-import { Component, DOCUMENT, computed, inject } from "@angular/core";
+import { Component, DOCUMENT, computed, effect, inject, signal, untracked } from "@angular/core";
 import { NgTemplateOutlet } from "@angular/common";
 import { RouterLink } from "@angular/router";
 import type { ChartConfiguration } from "chart.js";
 
 import { isApiMode } from "@/lib/api/config";
+import { fetchRecentAudit } from "@/lib/api/audit";
+import type { AuditEntry } from "@/lib/store";
 import { collectQualityPoints } from "@/lib/quality-real";
 import { inScope } from "@/lib/store";
 import { membershipCounts } from "@/lib/membership";
@@ -758,6 +760,8 @@ function sparkPaths(series: number[]): { line: string; area: string } {
                   >{{ fmtDateTime(entry.at) }}</span
                 >
               </li>
+            } @empty {
+              <li class="sub">—</li>
             }
           </ol>
         </section>
@@ -771,6 +775,29 @@ export default class IndexPage {
   protected readonly t = this.localeService.t;
   protected readonly fmtDateTime = fmtDateTime;
   private readonly document = inject(DOCUMENT);
+
+  /** Mode API : activité récente lue sur le serveur (jamais dans le navigateur). */
+  private readonly serverActivity = signal<AuditEntry[]>([]);
+
+  constructor() {
+    if (!isApiMode()) return;
+    effect(() => {
+      const session = this.store.state().session;
+      const allowed = !!session && (session.permissions.includes("audit.read") || session.permissions.includes("audit.read.scoop"));
+      untracked(() => {
+        if (!allowed) {
+          this.serverActivity.set([]);
+          return;
+        }
+        fetchRecentAudit(6)
+          .then((entries) => this.serverActivity.set(entries))
+          .catch((error: unknown) => {
+            console.error("[ERROR][IndexPage.activity]", error);
+            this.serverActivity.set([]);
+          });
+      });
+    });
+  }
 
   /** Valeur calculée d'un token CSS (axes et légendes Chart.js) ; `undefined` au rendu serveur. */
   private token(name: string): string | undefined {
@@ -867,7 +894,7 @@ export default class IndexPage {
       producersInScope,
       plotsInScope,
       measuredHa: plotsInScope.reduce((sum, p) => sum + (p.measured || 0), 0),
-      recentAudit: s.audit.slice(0, 6),
+      recentAudit: isApiMode() ? this.serverActivity() : s.audit.slice(0, 6),
     };
   });
 

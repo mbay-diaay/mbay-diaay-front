@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 
+import { isApiMode } from "@/lib/api/config";
 import { actions, can, getState, isSnapshot } from "@/lib/store";
 import { downloadCsv, fmtDateTime, nf } from "@/lib/format";
 import { ENTITY_ORDER, SCHEMA, type EntityKey } from "@/lib/io/schema";
@@ -292,7 +293,8 @@ export default class DonneesPage {
       },
       {
         label: t("sauvegarde.volume.journal"),
-        value: nf.format(c.audit),
+        // Mode API : le journal est lu sur le serveur (page Journal d'audit), pas dans le navigateur.
+        value: isApiMode() ? "—" : nf.format(c.audit),
         sub: this.lastBackup()
           ? t("sauvegarde.backup.last", {
               date: fmtDateTime(this.lastBackup()!.at),
@@ -497,6 +499,12 @@ export default class DonneesPage {
   protected confirmRestore(): void {
     const p = this.pending();
     if (!p) return;
+    // Mode API : restaurer une sauvegarde ne changerait que le navigateur ; le serveur n'a pas cette route.
+    if (isApiMode()) {
+      this.pending.set(null);
+      this.snackbar.error(this.locale.tNow("errors.api.unavailable"));
+      return;
+    }
     actions.restoreSnapshot(p.snap);
     this.pending.set(null);
     this.snackbar.success(this.t()("sauvegarde.restore.done"));

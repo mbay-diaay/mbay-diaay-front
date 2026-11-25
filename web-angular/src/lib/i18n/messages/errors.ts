@@ -203,6 +203,7 @@ export const errors = {
   "errors.roles.selfDemote": "Vous ne pouvez pas retirer votre propre rôle de super administrateur.",
   "errors.roles.scoopRequired": "Choisissez au moins une coopérative pour ce rôle.",
   "errors.roles.oneScoop": "Ce rôle couvre une seule coopérative (seul le technicien peut en suivre plusieurs).",
+  "errors.api.unavailable": "Cette modification n'est pas encore disponible avec le serveur.",
   "errors.roles.api": "Le serveur a refusé la modification des droits. Réessayez.",
   "errors.library.versionNotAllowed": "Déposer une nouvelle version demande le droit de gérer les documents.",
   "errors.contribution.reversalLocked": "Une contre-écriture ne s'annule pas.",
