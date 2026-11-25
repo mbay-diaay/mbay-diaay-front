@@ -8,7 +8,7 @@ import { technicianApiError } from "@/lib/api/technician-errors";
 import { listOrganisations, orgFromApi } from "@/lib/api/organisations";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { loadScoopStatsFromApi } from "@/lib/api/session";
-import { inviteUser, listUsers, updateUser } from "@/lib/api/users";
+import { inviteUser, isEmailTakenError, listUsers, replaceScoopManager, updateUser } from "@/lib/api/users";
 import { organisationDraft } from "@/lib/coop-request-templates";
 import { memberDues } from "@/lib/contributions";
 import { fmtDate, fmtDateTime, nf, nf1 } from "@/lib/format";
@@ -1906,9 +1906,9 @@ export default class CooperativeDetailPage {
     const email = this.newManagerEmail().trim().toLowerCase();
     const phone = this.newManagerPhone().trim();
     if (!currentScoop || !name || !email || this.replaceManagerInProgress()) return;
-    // Mode API : le serveur n'a pas de route pour remplacer un gestionnaire ; rien ne se fait dans le navigateur.
+    // Mode API : le serveur crée le compte, désactive l'ancien, invite par e-mail et audite ; rien dans le navigateur.
     if (isApiMode()) {
-      this.snackbar.error(this.locale.tNow("errors.api.unavailable"));
+      await this.replaceManagerOnApi(currentScoop.id, name, email, phone);
       return;
     }
     this.replaceManagerInProgress.set(true);
@@ -1926,6 +1926,31 @@ export default class CooperativeDetailPage {
       }
       this.replaceManagerDialogOpen.set(false);
       this.snackbar.success(this.t()("cooperatives.fiche.replaceModal.success", { name }));
+    } finally {
+      this.replaceManagerInProgress.set(false);
+    }
+  }
+
+  private async replaceManagerOnApi(scoopId: string, name: string, email: string, phone: string): Promise<void> {
+    this.replaceManagerInProgress.set(true);
+    try {
+      const result = await replaceScoopManager(scoopId, { name, email, ...(phone ? { phone } : {}) });
+      this.store.actions.mergeUsersFromApi(
+        result.previousManager ? [result.newManager, result.previousManager] : [result.newManager],
+      );
+      this.replaceManagerDialogOpen.set(false);
+      this.snackbar.success(
+        this.t()(
+          result.invitationSent
+            ? "cooperatives.fiche.replaceModal.successInvited"
+            : "cooperatives.fiche.replaceModal.successNoMail",
+          { name },
+        ),
+      );
+    } catch (error) {
+      this.snackbar.error(
+        this.t()(isEmailTakenError(error) ? "errors.technician.emailTaken" : "errors.users.api"),
+      );
     } finally {
       this.replaceManagerInProgress.set(false);
     }

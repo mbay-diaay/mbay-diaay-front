@@ -76,6 +76,26 @@ export async function apiFetch<T>(path: string, opts: RequestOpts = {}): Promise
   return (await res.json()) as T;
 }
 
+/** Récupère un fichier (réponse non JSON) en `Blob`, avec le jeton d'accès et le renouvellement de session. */
+export async function apiFetchBlob(path: string, _retry = false): Promise<Blob> {
+  const base = apiBaseUrl();
+  if (!base) throw new ApiError(0, "NO_API", "VITE_API_URL non configurée");
+  const headers: Record<string, string> = { "X-Client": "web" };
+  const token = getAccessToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
+    method: "GET",
+    headers,
+    credentials: "include",
+  });
+  if (res.status === 401 && !_retry) {
+    if (await refreshSession()) return apiFetchBlob(path, true);
+    clearTokens();
+  }
+  if (!res.ok) throw await parseError(res);
+  return res.blob();
+}
+
 /** Renouvellement en cours : partagé entre toutes les requêtes et les onglets de la page (anti-course). */
 let refreshInFlight: Promise<boolean> | null = null;
 

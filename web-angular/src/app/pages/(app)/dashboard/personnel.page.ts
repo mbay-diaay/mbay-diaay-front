@@ -3,7 +3,7 @@ import { Component, computed, effect, inject, signal, untracked } from "@angular
 import { isApiMode } from "@/lib/api/config";
 import { syncImage } from "@/lib/api/media";
 import { technicianApiError } from "@/lib/api/technician-errors";
-import { toggleUserActive, updateUser } from "@/lib/api/users";
+import { createUser, isEmailTakenError, toggleUserActive, updateUser } from "@/lib/api/users";
 import { nf } from "@/lib/format";
 import type { PreparedImage } from "@/lib/image";
 import { assignableRoles } from "@/lib/team";
@@ -243,6 +243,7 @@ type StaffErrors = Partial<Record<"firstName" | "lastName" | "email" | "phone" |
             <ui-text-field preset="lastName" [label]="t()('tech.dialog.lastName')" [value]="lastName()" [error]="errors().lastName ?? ''" (valueChange)="lastName.set($event)" />
             <ui-text-field class="sm:col-span-2" preset="email" [label]="t()('tech.dialog.email')" [hint]="t()('personnel.add.emailHint')" [value]="email()" [error]="errors().email ?? ''" (valueChange)="email.set($event)" />
             <ui-text-field preset="phone" [label]="t()('tech.dialog.phone')" [value]="phone()" [error]="errors().phone ?? ''" (valueChange)="phone.set($event)" />
+            @if (!apiMode) {
             <ui-text-field preset="age" [label]="t()('adherents.add.age')" [hint]="t()('tech.dialog.ageHint')" [value]="age()" [error]="errors().age ?? ''" (valueChange)="age.set($event)" />
             <div class="sm:col-span-2">
               <p class="lbl">{{ t()("adherents.add.sex") }}</p>
@@ -254,6 +255,7 @@ type StaffErrors = Partial<Record<"firstName" | "lastName" | "email" | "phone" |
                 <p class="field-err"><ui-icon name="warning" [size]="16" />{{ errors().sex }}</p>
               }
             </div>
+            }
           </div>
           @if (scoopOptions().length > 1) {
             <ui-select [label]="t()('adherents.add.scoop')" leadingIcon="apartment" [options]="scoopOptions()" [value]="scoopId()" (valueChange)="scoopId.set($event); role.set('')" />
@@ -351,7 +353,10 @@ export default class PersonnelPage {
   protected readonly query = signal("");
   protected readonly stateFilter = signal<"all" | StaffState>("all");
   protected readonly roleFilter = signal("all");
+  /** Mode serveur : le sexe et l'âge n'ont pas de route, ils ne sont ni demandés ni enregistrés. */
+  protected readonly apiMode = isApiMode();
   protected readonly addOpen = signal(false);
+  protected readonly adding = signal(false);
   protected readonly viewing = signal<AppUser | null>(null);
   protected readonly editing = signal<AppUser | null>(null);
   protected readonly editName = signal("");
@@ -534,13 +539,19 @@ export default class PersonnelPage {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email().trim())) errors.email = t("errors.technician.email");
     if (this.phone().replace(/\D/g, "").length < 9) errors.phone = t("errors.technician.phone");
     const ageValue = Number(this.age().trim());
-    if (!this.age().trim() || !Number.isInteger(ageValue) || ageValue < 15 || ageValue > 100) errors.age = t("errors.technician.age");
-    if (!this.sex()) errors.sex = t("errors.technician.sex");
+    if (!this.apiMode) {
+      if (!this.age().trim() || !Number.isInteger(ageValue) || ageValue < 15 || ageValue > 100) errors.age = t("errors.technician.age");
+      if (!this.sex()) errors.sex = t("errors.technician.sex");
+    }
     if (!this.role()) errors.role = t("personnel.add.roleRequired");
     this.errors.set(errors);
     if (Object.keys(errors).length) return;
 
     const fullName = `${this.firstName().trim()} ${this.lastName().trim()}`;
+    if (this.apiMode) {
+      void this.submitAddOnApi(fullName);
+      return;
+    }
     const result = this.store.actions.createStaff({
       name: fullName,
       email: this.email(),
@@ -559,6 +570,39 @@ export default class PersonnelPage {
     this.addOpen.set(false);
     void this.syncPhoto(result.userId);
     this.snackbar.success(t("personnel.add.done", { name: fullName }));
+  }
+
+  /**
+   * Mode serveur : le compte est créé sans mot de passe (`invite: true`), le serveur envoie l'invitation par e-mail
+   * et audite l'ajout ; la réponse est fusionnée dans le store.
+   */
+  private async submitAddOnApi(fullName: string): Promise<void> {
+    if (this.adding()) return;
+    const t = this.t();
+    this.adding.set(true);
+    try {
+      const created = await createUser({
+        name: fullName.replace(/\s+/g, " "),
+        email: this.email().trim().toLowerCase(),
+        role: this.role() as RoleId,
+        ...(this.scoopId() ? { scoopId: this.scoopId() } : {}),
+        ...(this.phone().trim() ? { phone: this.phone().trim() } : {}),
+        invite: true,
+      });
+      this.store.actions.mergeUsersFromApi([created]);
+      this.addOpen.set(false);
+      void this.syncPhoto(created.id);
+      this.snackbar.success(t(created.invitationSent ? "personnel.add.done" : "personnel.add.doneNoMail", { name: fullName }));
+    } catch (error) {
+      if (isEmailTakenError(error)) this.errors.set({ email: t("errors.technician.emailTaken") });
+      else {
+        const { key, field } = technicianApiError(error);
+        if (field === "email" || field === "phone") this.errors.set({ [field]: t(key) });
+        else this.snackbar.error(t(key));
+      }
+    } finally {
+      this.adding.set(false);
+    }
   }
 
   /** Ligne de la personne affichée (toujours à jour après une modification). */

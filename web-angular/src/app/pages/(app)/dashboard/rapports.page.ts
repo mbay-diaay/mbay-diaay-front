@@ -1,6 +1,20 @@
-import { Component, DOCUMENT, computed, inject, signal } from "@angular/core";
+import { Component, DOCUMENT, afterNextRender, computed, inject, signal } from "@angular/core";
 
 import { isApiMode } from "@/lib/api/config";
+import type { Page } from "@/lib/api/pagination";
+import {
+  buildGenerateBody,
+  countRecentReports,
+  downloadReportBlob,
+  generateReportOnApi,
+  latestReport,
+  listReportKinds,
+  listReports,
+  safeReportFileName,
+  saveBlobAsFile,
+  type ApiReport,
+  type ReportKind,
+} from "@/lib/api/reports";
 import { downloadCsv, fmtDateTime, nf } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
 import { downloadWorkbook } from "@/lib/io/workbook";
@@ -24,7 +38,7 @@ import {
   type IconName,
   type SelectOption,
 } from "@shared/ui";
-import { createPager } from "@shared/pager";
+import { createPager, type Pager } from "@shared/pager";
 
 /** Libellé, icône et couleurs (états de la charte V2) de chaque catégorie de rapport. */
 const CATEGORY: Record<
@@ -485,6 +499,7 @@ const fileName = (r: GeneratedReport, ext: string) =>
       @if (canGenerate()) {
         <div class="mt-8 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
           <!-- ───── Catalogue ───── -->
+          @if (!apiMode) {
           <section aria-labelledby="catalogue-title">
             <h2 id="catalogue-title" class="sr-only">{{ t()("rapports.studio.catalogue") }}</h2>
             <div class="toolbar card">
@@ -596,6 +611,67 @@ const fileName = (r: GeneratedReport, ext: string) =>
               <ui-pagination [pager]="reportPager" />
             }
           </section>
+          } @else {
+          <section aria-labelledby="catalogue-title">
+            <h2 id="catalogue-title" class="sr-only">{{ t()("rapports.studio.catalogue") }}</h2>
+            @if (kindsState() === "loading") {
+              <p class="card sub flex items-center gap-3 p-6">
+                <ui-icon name="progress_activity" [size]="20" class="spin" />{{ t()("rapports.api.loading") }}
+              </p>
+            } @else if (kindsState() === "error") {
+              <div class="card flex flex-wrap items-center justify-between gap-3 p-6">
+                <p class="sub flex items-center gap-3">
+                  <ui-icon name="warning" [size]="20" />{{ t()("rapports.api.kindsError") }}
+                </p>
+                <button type="button" class="btn btn-ghost" (click)="loadKinds()">
+                  <ui-icon name="refresh" [size]="18" />{{ t()("rapports.api.retry") }}
+                </button>
+              </div>
+            } @else if (kinds().length === 0) {
+              <p class="card sub p-6">{{ t()("rapports.api.kindsEmpty") }}</p>
+            } @else {
+              <div
+                class="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3"
+                role="listbox"
+                [attr.aria-label]="t()('rapports.studio.catalogue')"
+              >
+                @for (item of kinds(); track item.kind) {
+                  <button
+                    type="button"
+                    role="option"
+                    class="card report overflow-hidden"
+                    [class.on]="selectedKind() === item.kind"
+                    [attr.aria-selected]="selectedKind() === item.kind"
+                    (click)="selectedKind.set(item.kind)"
+                  >
+                    @if (selectedKind() === item.kind) {
+                      <span class="tick" aria-hidden="true"
+                        ><ui-icon name="check" [size]="18"
+                      /></span>
+                    }
+                    <span
+                      class="relative grid size-12 place-items-center rounded-[14px]"
+                      style="background: var(--v2-foret); color: var(--v2-sauge)"
+                    >
+                      <ui-icon name="summarize" [size]="24" />
+                    </span>
+                    <span class="relative min-w-0">
+                      <span class="block pr-8 text-[16px] font-extrabold leading-snug tracking-[-0.01em]">{{
+                        item.label
+                      }}</span>
+                    </span>
+                    <span
+                      class="relative mt-auto flex items-center gap-2 border-t pt-3 text-[12px] font-bold"
+                      style="border-color: var(--v2-separateur); color: var(--v2-gris-texte)"
+                    >
+                      <ui-icon name="table_view" [size]="15" />CSV
+                    </span>
+                  </button>
+                }
+              </div>
+            }
+          </section>
+          }
 
           <!-- ───── Configurer ───── -->
           <aside class="card p-6 lg:sticky lg:top-24" aria-labelledby="config-title">
@@ -613,7 +689,16 @@ const fileName = (r: GeneratedReport, ext: string) =>
 
             <div class="mt-5 rounded-[16px] p-4" style="background: var(--v2-creme)">
               <p class="mono" style="color: var(--v2-gris-texte)">{{ t()("rapports.selected") }}</p>
-              @if (selected(); as selectedReport) {
+              @if (apiMode) {
+                @if (selectedKindLabel(); as kindLabel) {
+                  <p class="mt-1 flex items-center gap-2 text-[15px] font-extrabold">
+                    <ui-icon name="summarize" [size]="18" style="color: var(--v2-foret)" />
+                    {{ kindLabel }}
+                  </p>
+                } @else {
+                  <p class="sub mt-1">{{ t()("rapports.generateNeedSelect") }}</p>
+                }
+              } @else if (selected(); as selectedReport) {
                 <p class="mt-1 flex items-center gap-2 text-[15px] font-extrabold">
                   <ui-icon
                     [name]="cat(selectedReport.category).icon"
@@ -637,6 +722,7 @@ const fileName = (r: GeneratedReport, ext: string) =>
                   [label]="t()('rapports.field.scoop')"
                 />
               </div>
+              @if (!apiMode) {
               <div class="space-y-2">
                 <span class="label">{{ t()("rapports.field.campaign") }}</span>
                 <ui-select
@@ -662,6 +748,7 @@ const fileName = (r: GeneratedReport, ext: string) =>
                   }
                 </div>
               </div>
+              }
             </div>
 
             <p class="sub mt-5 flex items-start gap-2">
@@ -672,7 +759,7 @@ const fileName = (r: GeneratedReport, ext: string) =>
             <button
               type="button"
               class="generate mt-5"
-              [disabled]="!selectedId() || busy()"
+              [disabled]="(apiMode ? !selectedKind() : !selectedId()) || busy()"
               (click)="run()"
             >
               <span>{{
@@ -692,6 +779,66 @@ const fileName = (r: GeneratedReport, ext: string) =>
         <p class="card sub mt-8 flex items-center gap-3 p-6">
           <ui-icon name="visibility" [size]="20" />{{ t()("rapports.noGenerate") }}
         </p>
+      }
+
+      <!-- ───── Résultat (mode serveur) ───── -->
+      @if (apiResult(); as apiReport) {
+        <section
+          id="rapport-resultat"
+          class="card mt-8 overflow-hidden"
+          aria-labelledby="result-title"
+        >
+          <div
+            class="flex flex-wrap items-start justify-between gap-4 p-6"
+            style="background: var(--v2-foret); color: var(--v2-blanc)"
+          >
+            <div class="min-w-0">
+              <p class="mono" style="color: var(--v2-citron)">{{ t()("rapports.result.title") }}</p>
+              <h2
+                id="result-title"
+                class="mt-1 text-[24px] font-extrabold leading-tight tracking-[-0.02em]"
+              >
+                {{ apiReport.label }}
+              </h2>
+              <p
+                class="mt-1 text-[14px] font-medium"
+                style="color: color-mix(in oklab, var(--v2-blanc) 75%, transparent)"
+              >
+                {{ apiScopeName(apiReport) }}
+              </p>
+              <p
+                class="mt-1 text-[13px] font-medium"
+                style="color: color-mix(in oklab, var(--v2-blanc) 60%, transparent)"
+              >
+                {{
+                  t()("rapports.result.meta", {
+                    rows: nf.format(apiReport.rows),
+                    when: fmtDateTime(apiReport.createdAt),
+                    who: apiReport.createdByName,
+                  })
+                }}
+              </p>
+            </div>
+            @if (canDownload()) {
+              <button
+                type="button"
+                class="btn"
+                style="background: var(--v2-citron); color: var(--v2-foret)"
+                [disabled]="downloadingId() === apiReport.id"
+                (click)="downloadApi(apiReport)"
+              >
+                <ui-icon name="download" [size]="18" />{{ t()("rapports.csv") }}
+              </button>
+            } @else {
+              <span
+                class="text-[13px] font-semibold"
+                style="color: color-mix(in oklab, var(--v2-blanc) 70%, transparent)"
+                >{{ t()("rapports.downloadDenied") }}</span
+              >
+            }
+          </div>
+          <p class="sub px-6 py-4">{{ t()("rapports.api.csvOnly") }}</p>
+        </section>
       }
 
       <!-- ───── Résultat ───── -->
@@ -813,6 +960,7 @@ const fileName = (r: GeneratedReport, ext: string) =>
           <h2 id="history-title" class="text-[20px] font-extrabold tracking-[-0.02em]">
             {{ t()("rapports.history.title") }}
           </h2>
+          @if (!apiMode) {
           @if (history().length === 0) {
             <p class="card sub mt-4 flex items-center gap-3 p-6">
               <ui-icon name="folder_open" [size]="22" />{{ t()("rapports.history.empty") }}
@@ -865,6 +1013,62 @@ const fileName = (r: GeneratedReport, ext: string) =>
             </ul>
             <ui-pagination [pager]="historyPager" />
           }
+          } @else {
+          @if (historyState() === "loading") {
+            <p class="card sub mt-4 flex items-center gap-3 p-6">
+              <ui-icon name="progress_activity" [size]="20" class="spin" />{{ t()("rapports.api.loading") }}
+            </p>
+          } @else if (historyState() === "error") {
+            <div class="card mt-4 flex flex-wrap items-center justify-between gap-3 p-6">
+              <p class="sub flex items-center gap-3">
+                <ui-icon name="warning" [size]="20" />{{ t()("rapports.api.historyError") }}
+              </p>
+              <button type="button" class="btn btn-ghost" (click)="loadHistory(apiHistory().page)">
+                <ui-icon name="refresh" [size]="18" />{{ t()("rapports.api.retry") }}
+              </button>
+            </div>
+          } @else if (apiHistory().items.length === 0) {
+            <p class="card sub mt-4 flex items-center gap-3 p-6">
+              <ui-icon name="folder_open" [size]="22" />{{ t()("rapports.history.empty") }}
+            </p>
+          } @else {
+            <ul class="card mt-4 overflow-hidden">
+              @for (report of apiHistory().items; track report.id; let first = $first) {
+                <li
+                  class="flex flex-wrap items-center gap-4 px-5 py-4"
+                  [style.border-top]="first ? 'none' : '1px solid var(--v2-separateur)'"
+                >
+                  <span
+                    class="grid size-11 shrink-0 place-items-center rounded-[14px]"
+                    style="background: var(--v2-sauge); color: var(--v2-foret)"
+                  >
+                    <ui-icon name="lab_profile" [size]="22" />
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate text-[15px] font-bold">{{ report.label }}</span>
+                    <span class="sub block truncate">
+                      {{ apiScopeName(report) }} · {{ fmtDateTime(report.createdAt) }} ·
+                      {{ report.createdByName }} ·
+                      {{ t()("rapports.history.rows", { rows: nf.format(report.rows) }) }}
+                    </span>
+                  </span>
+                  @if (canDownload()) {
+                    <button
+                      type="button"
+                      class="btn btn-forest"
+                      [disabled]="downloadingId() === report.id"
+                      [attr.aria-label]="t()('rapports.csv') + ' · ' + report.label"
+                      (click)="downloadApi(report)"
+                    >
+                      <ui-icon name="download" [size]="18" />{{ t()("rapports.csv") }}
+                    </button>
+                  }
+                </li>
+              }
+            </ul>
+            <ui-pagination [pager]="apiHistoryPager" />
+          }
+          }
         </section>
       }
 
@@ -895,6 +1099,88 @@ export default class RapportsPage {
   protected readonly query = signal("");
   protected readonly selectedId = signal<ReportId | null>(null);
   protected readonly busy = signal(false);
+
+  /** Mode serveur : types, génération, historique et téléchargement passent par l'API (`/reports`). */
+  protected readonly apiMode = isApiMode();
+  protected readonly kinds = signal<ReportKind[]>([]);
+  protected readonly kindsState = signal<"loading" | "ready" | "error">("loading");
+  protected readonly selectedKind = signal<string | null>(null);
+  protected readonly apiResult = signal<ApiReport | null>(null);
+  protected readonly apiHistory = signal<Page<ApiReport>>({ total: 0, page: 1, limit: 10, pages: 1, items: [] });
+  protected readonly historyState = signal<"loading" | "ready" | "error">("loading");
+  protected readonly downloadingId = signal<string | null>(null);
+  protected readonly selectedKindLabel = computed(
+    () => this.kinds().find((item) => item.kind === this.selectedKind())?.label ?? "",
+  );
+  protected readonly apiHistoryPager: Pager<ApiReport> = {
+    result: this.apiHistory,
+    items: computed(() => this.apiHistory().items),
+    setPage: (page) => void this.loadHistory(page),
+    setSize: (size) => void this.loadHistory(1, size),
+  };
+
+  constructor() {
+    if (!this.apiMode) return;
+    afterNextRender(() => {
+      void this.loadKinds();
+      void this.loadHistory(1);
+    });
+  }
+
+  protected async loadKinds(): Promise<void> {
+    this.kindsState.set("loading");
+    try {
+      this.kinds.set(await listReportKinds());
+      this.kindsState.set("ready");
+    } catch {
+      this.kindsState.set("error");
+    }
+  }
+
+  protected async loadHistory(page: number, limit = this.apiHistory().limit): Promise<void> {
+    this.historyState.set("loading");
+    try {
+      this.apiHistory.set(await listReports({ page, limit }));
+      this.historyState.set("ready");
+    } catch {
+      this.historyState.set("error");
+    }
+  }
+
+  /** Nom de la coopérative d'un rapport (le périmètre « toutes » s'affiche tel quel). */
+  protected apiScopeName(report: ApiReport): string {
+    if (!report.scoopId) return this.t()("rapports.field.allMine");
+    return this.store.state().scoops.find((scoop) => scoop.id === report.scoopId)?.name ?? report.scoopId;
+  }
+
+  private async runOnApi(kind: string): Promise<void> {
+    this.busy.set(true);
+    try {
+      const report = await generateReportOnApi(buildGenerateBody(kind, this.scoop()));
+      this.apiResult.set(report);
+      this.snackbar.success(this.t()("rapports.ready", { name: report.label }));
+      this.scrollToResult();
+      void this.loadHistory(1);
+    } catch {
+      this.snackbar.error(this.t()("rapports.api.generateError"));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  protected async downloadApi(report: ApiReport): Promise<void> {
+    if (this.downloadingId()) return;
+    this.downloadingId.set(report.id);
+    try {
+      saveBlobAsFile(await downloadReportBlob(report.id), safeReportFileName(report));
+      this.snackbar.success(this.t()("rapports.studio.downloaded", { format: "CSV" }));
+    } catch {
+      this.snackbar.error(this.t()("rapports.api.downloadError"));
+    } finally {
+      this.downloadingId.set(null);
+    }
+  }
+
   protected readonly preview = signal<GeneratedReport | null>(null);
 
   protected readonly session = computed(() => this.store.state().session);
@@ -936,6 +1222,48 @@ export default class RapportsPage {
   /** Statistiques réelles : catalogue, rapports générés, téléchargements (journal d'audit), dernier rapport. */
   protected readonly stats = computed(() => {
     const t = this.t();
+    if (this.apiMode) {
+      const loaded = this.apiHistory().items;
+      const lastReport = latestReport(loaded);
+      return [
+        {
+          label: t("rapports.studio.available"),
+          value: String(this.kinds().length),
+          sub: t("rapports.studio.availableSub", { count: 1 }),
+          icon: "summarize" as IconName,
+          bg: "var(--v2-sauge)",
+          fg: "var(--v2-foret)",
+          small: false,
+        },
+        {
+          label: t("rapports.studio.generatedLabel"),
+          value: String(this.apiHistory().total),
+          sub: t("rapports.studio.generatedSub", { count: countRecentReports(loaded, Date.now()) }),
+          icon: "lab_profile" as IconName,
+          bg: "var(--v2-info-bg)",
+          fg: "var(--v2-info-fg)",
+          small: false,
+        },
+        {
+          label: t("rapports.studio.downloads"),
+          value: "—",
+          sub: t("rapports.studio.downloadsSub"),
+          icon: "download" as IconName,
+          bg: "var(--v2-attente-bg)",
+          fg: "var(--v2-attente-fg)",
+          small: false,
+        },
+        {
+          label: t("rapports.studio.lastLabel"),
+          value: lastReport ? fmtDateTime(lastReport.createdAt) : "—",
+          sub: lastReport ? lastReport.label : t("rapports.studio.lastNone"),
+          icon: "history" as IconName,
+          bg: "var(--v2-culture-bg)",
+          fg: "var(--v2-culture-fg)",
+          small: true,
+        },
+      ];
+    }
     const history = this.history();
     const month = Date.now() - 30 * 86_400_000;
     const recent = history.filter((r) => new Date(r.generatedAt).getTime() >= month).length;
@@ -1007,6 +1335,7 @@ export default class RapportsPage {
       : this.visibleScoops().length > 1
         ? `${this.visibleScoops().length} coopératives`
         : this.appliedScopeName();
+    if (this.apiMode) return scoopPart;
     const campaignPart = this.campaign() || this.t()("rapports.field.allCampaigns");
     const periodLabel = this.periods.find((p) => p.id === this.period())!.label;
     return `${scoopPart} · ${campaignPart} · ${this.t()(periodLabel)}`;
@@ -1088,6 +1417,11 @@ export default class RapportsPage {
   }
 
   protected run(): void {
+    if (this.apiMode) {
+      const kind = this.selectedKind();
+      if (kind && !this.busy()) void this.runOnApi(kind);
+      return;
+    }
     const id = this.selectedId();
     if (!id || this.busy()) return;
     this.busy.set(true);

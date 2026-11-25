@@ -1,5 +1,7 @@
 import { Component, computed, inject, signal } from "@angular/core";
 
+import { isApiMode } from "@/lib/api/config";
+import { addMemberViaApi } from "@/lib/api/members";
 import { memberDues, scoopTotals, type DueState, type MemberDues } from "@/lib/contributions";
 import { activeMembers } from "@/lib/membership";
 import { aggregatorConnected, paymentLinkMessage, paymentLinkUrl } from "@/lib/payment-provider";
@@ -1706,7 +1708,33 @@ export default class CotisationsPage {
     this.enrollOpen.set(true);
   }
 
+  /** Mode API : le producteur devient membre par `POST /members` (le serveur décide et audite). */
+  private async enrollOnApi(): Promise<void> {
+    const producer = this.store.state().producers.find((candidate) => candidate.id === this.enrollPick());
+    if (!producer) return;
+    try {
+      await addMemberViaApi({
+        scoopId: producer.scoopId,
+        firstName: producer.firstName,
+        lastName: producer.lastName,
+        sex: producer.sex,
+        ...(producer.orgId ? { orgId: producer.orgId } : {}),
+        producerId: producer.id,
+        status: "membre",
+      });
+    } catch {
+      this.snackbar.error(this.t()("errors.users.api"));
+      return;
+    }
+    this.enrollOpen.set(false);
+    this.snackbar.success(this.t()("cotisations.enroll.done"));
+  }
+
   protected submitEnroll(): void {
+    if (isApiMode()) {
+      void this.enrollOnApi();
+      return;
+    }
     const result = actions.enrollProducerAsMember(this.enrollPick());
     if (!result.ok) {
       this.snackbar.error(result.error);
