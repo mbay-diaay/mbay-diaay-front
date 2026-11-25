@@ -31,6 +31,10 @@ export function mediaSrc(url: string | null | undefined): string | null {
   if (/^(https?:|data:|blob:)/.test(url)) return url;
   const base = apiBaseUrl();
   if (!base) return url;
+  // Proxy local (`VITE_API_URL=/v1`) : même origine que la page, le chemin API suffit.
+  if (base.startsWith("/")) {
+    return url.startsWith("/") ? url : `/${url}`;
+  }
   // `base` finit par /v1 : on garde l'origine seule, le lien reçu contient déjà son préfixe.
   return `${new URL(base).origin}${url.startsWith("/") ? url : `/${url}`}`;
 }

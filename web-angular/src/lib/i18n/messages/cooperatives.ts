@@ -385,6 +385,9 @@ export const cooperatives = {
   "techniciens.description":
     "Les agents de terrain qui suivent les producteurs : ajoutez-les, rattachez-les à un ou plusieurs GIE, ou laissez-les suivre toute la coopérative.",
   "techniciens.add": "Nouveau technicien",
+  "techniciens.refresh": "Actualiser",
+  "techniciens.refresh.aria": "Actualiser la liste des techniciens",
+  "techniciens.refreshed": "Liste actualisée.",
   "techniciens.search.placeholder": "Rechercher un nom, une adresse, un GIE…",
   "techniciens.search.aria": "Rechercher un technicien",
   "techniciens.count": "{shown} technicien(s) sur {total}",

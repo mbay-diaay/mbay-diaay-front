@@ -5,6 +5,7 @@ import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
 import { fetchAllPages } from "@/lib/api/pagination";
+import { fetchScoopStaff } from "@/lib/api/scoops";
 import { inviteUser, listUsers } from "@/lib/api/users";
 import { memberDues } from "@/lib/contributions";
 import { ageAtMost, fmtDate, fmtDateTime, nf } from "@/lib/format";
@@ -1682,15 +1683,26 @@ export default class CooperativeDetailPage {
   protected readonly apiMode = isApiMode();
 
   constructor() {
-    // Mode API : le gestionnaire de la coopérative est un compte du serveur ; on le charge pour qui peut les lister.
-    if (isApiMode() && this.store.can("user.manage")) void this.loadAccounts();
+    // Mode API : comptes du serveur (gestionnaire + techniciens).
+    // `technician.invite` suffit : un gestionnaire n'a pas `user.manage` mais doit voir son équipe.
+    if (isApiMode() && (this.store.can("user.manage") || this.store.can("technician.invite"))) {
+      void this.loadAccounts();
+    }
   }
 
   private async loadAccounts(): Promise<void> {
+    const scoopId = this.id();
     try {
       this.store.actions.mergeUsersFromApi(await fetchAllPages((query) => listUsers(query)));
     } catch {
-      // Silencieux : la fiche reste affichée, sans le gestionnaire.
+      // Gestionnaire sans user.manage : liste globale refusée.
+    }
+    if (!scoopId) return;
+    try {
+      const staff = await fetchScoopStaff(scoopId);
+      this.store.actions.markTechniciansActiveFromStaff(staff, scoopId);
+    } catch {
+      // Personnel hors périmètre : la fiche reste avec l'état local.
     }
   }
   protected readonly resending = signal(false);

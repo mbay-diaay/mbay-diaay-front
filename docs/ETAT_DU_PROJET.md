@@ -576,6 +576,7 @@ Ordre suggéré à présenter : **P1, P3, P8** (valeur immédiate et visible), p
 
 | Date | Changement | Preuve |
 |---|---|---|
+| 25 nov. 2026 | Techniciens (gestionnaire) : statut « Actif » après activation mobile — `mergeUsersFromApi` + personnel SCOOP (`GET /scoops/:id/staff`), bouton Actualiser ; proxy Vite `/v1` pour le dev local (CORS) ; retrait hydratation inutile (site statique) | Branche `fix/techniciens-sync-statut` ; page Techniciens locale |
 | 22 oct. 2026 | Rédaction des PRD Web, Backend, Mobile et des jetons de design | `docs/prd/` |
 | 21 à 22 oct. 2026 | Prototype web : écrans des lots 1 et 2 (plateforme Lovable) | Historique Git |
 | 23 oct. 2026 | Audit complet du dépôt : points forts, 19 points à traiter | Rapport d'audit de la session |

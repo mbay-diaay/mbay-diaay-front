@@ -33,9 +33,17 @@ export default defineConfig(({ mode }) => ({
     target: ["es2022"],
   },
   // Évite les reloads parasites quand un `pnpm build` écrit `dist/` à côté du dev server.
+  // Proxy `/v1` → API prod : le navigateur reste same-origin (pas de CORS sur localhost).
   server: {
     watch: {
       ignored: ["**/dist/**"],
+    },
+    proxy: {
+      "/v1": {
+        target: "https://api.mbaydiaay.com",
+        changeOrigin: true,
+        secure: true,
+      },
     },
   },
   resolve: {

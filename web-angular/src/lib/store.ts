@@ -1289,11 +1289,48 @@ export const actions = {
           if (!fresh) return user;
           incoming.delete(user.id);
           // Ce que l'API ne garde pas (GIE suivis) reste tel qu'il était dans le navigateur.
-          return { ...fresh, ...(user.orgIds && { orgIds: user.orgIds }) };
+          // `fresh` sans `activation` = code consommé sur mobile → statut Actif.
+          return { ...fresh, ...(user.orgIds?.length && !fresh.orgIds?.length && { orgIds: user.orgIds }) };
         }),
         ...incoming.values(),
       ],
     }));
+  },
+  /**
+   * Gestionnaire sans `user.manage` : `GET /users` est refusé. Le personnel actif de la SCOOP
+   * (`GET /scoops/:id/staff`) signale les techniciens déjà connectés sur mobile → on lève le badge « code à activer ».
+   */
+  markTechniciansActiveFromStaff(
+    members: { id: string; name: string; role: string }[],
+    scoopId: string,
+  ) {
+    const activeTechIds = new Set(
+      members.filter((member) => member.role === "technicien").map((member) => member.id),
+    );
+    if (!activeTechIds.size) return;
+    set((s) => {
+      const known = new Set(s.users.map((user) => user.id));
+      const updated = s.users.map((user) => {
+        if (!activeTechIds.has(user.id) || user.role !== "technicien") return user;
+        const { activation: _cleared, ...rest } = user;
+        const scoopIds = [...new Set([...(user.scoopIds ?? []), ...(user.scoopId ? [user.scoopId] : []), scoopId])];
+        return { ...rest, active: true, scoopIds, activation: undefined };
+      });
+      const missing = members
+        .filter((member) => member.role === "technicien" && !known.has(member.id))
+        .map(
+          (member): AppUser => ({
+            id: member.id,
+            name: member.name,
+            email: "",
+            phone: "",
+            role: "technicien",
+            active: true,
+            scoopIds: [scoopId],
+          }),
+        );
+      return { users: [...updated, ...missing] };
+    });
   },
   /** Retire un compte de la liste locale une fois supprimé sur l'API. */
   removeUserFromApi(userId: string) {

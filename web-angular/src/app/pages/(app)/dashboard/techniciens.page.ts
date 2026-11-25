@@ -4,6 +4,7 @@ import { isApiMode } from "@/lib/api/config";
 import { syncImage } from "@/lib/api/media";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { technicianApiError } from "@/lib/api/technician-errors";
+import { fetchScoopStaff } from "@/lib/api/scoops";
 import { deleteUser, isTechnicalEmail, listUsers, regenerateTechnicianCode, updateUser } from "@/lib/api/users";
 import { nf } from "@/lib/format";
 import type { PreparedImage } from "@/lib/image";
@@ -102,9 +103,16 @@ interface TechnicianRow {
           <h1 class="mt-2 text-[30px] font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-[38px]">{{ t()("techniciens.title") }}</h1>
           <p class="mt-2 max-w-2xl text-[16px] font-medium" style="color: var(--v2-gris-texte)">{{ t()("techniciens.description") }}</p>
         </div>
-        <button type="button" class="btn btn-primary" (click)="addOpen.set(true)">
-          {{ t()("techniciens.add") }}<span class="btn-chip"><ui-icon name="person_add" [size]="20" /></span>
-        </button>
+        <div class="flex flex-wrap gap-3">
+          @if (apiMode) {
+            <button type="button" class="btn" [attr.aria-label]="t()('techniciens.refresh.aria')" [disabled]="refreshing()" (click)="refresh()">
+              {{ t()("techniciens.refresh") }}<span class="btn-chip"><ui-icon name="refresh" [size]="20" /></span>
+            </button>
+          }
+          <button type="button" class="btn btn-primary" (click)="addOpen.set(true)">
+            {{ t()("techniciens.add") }}<span class="btn-chip"><ui-icon name="person_add" [size]="20" /></span>
+          </button>
+        </div>
       </header>
 
       <ui-stat-cards class="rise mt-8" [stats]="stats()" />
@@ -287,8 +295,23 @@ export default class TechniciensPage {
   protected readonly editOrgIds = signal<string[]>([]);
   protected readonly editError = signal("");
 
+  protected readonly apiMode = isApiMode();
+  protected readonly refreshing = signal(false);
+
   constructor() {
     if (isApiMode()) void this.loadFromApi();
+  }
+
+  /** Recharge depuis l'API (liste ou personnel SCOOP) pour refléter une activation mobile. */
+  protected async refresh(): Promise<void> {
+    if (this.refreshing()) return;
+    this.refreshing.set(true);
+    try {
+      await this.loadFromApi();
+      this.snackbar.success(this.t()("techniciens.refreshed"));
+    } finally {
+      this.refreshing.set(false);
+    }
   }
 
   /** L'adresse technique d'un technicien créé par téléphone seul ne s'affiche jamais. */
@@ -296,13 +319,35 @@ export default class TechniciensPage {
     return !!email && !isTechnicalEmail(email);
   }
 
-  /** Mode API : la liste vient du serveur, pour qu'un technicien créé survive au rechargement. */
+  /**
+   * Mode API : recharge l'équipe depuis le serveur.
+   * - Admin (`user.manage`) : `GET /users` complet.
+   * - Gestionnaire (`technician.invite` seul) : `GET /users` est refusé → on lit le
+   *   personnel actif de chaque SCOOP (`/scoops/:id/staff`) pour passer en « Actif »
+   *   les techniciens qui se sont déjà connectés sur mobile.
+   */
   private async loadFromApi(): Promise<void> {
     try {
-      this.store.actions.replaceUsersFromApi(await fetchAllPages(listUsers));
+      this.store.actions.mergeUsersFromApi(await fetchAllPages(listUsers));
     } catch {
-      // Un gestionnaire ne peut pas lister tous les comptes : il garde ce qu'il vient de créer ou de lier.
+      // Gestionnaire : pas de liste globale. Voir refresh via staff ci-dessous.
     }
+    await this.refreshActiveFromStaff();
+  }
+
+  /** Aligne le badge « Actif » avec les comptes déjà opérationnels sur le terrain. */
+  private async refreshActiveFromStaff(): Promise<void> {
+    const scoopIds = this.visibleScoopIds();
+    await Promise.all(
+      scoopIds.map(async (scoopId) => {
+        try {
+          const staff = await fetchScoopStaff(scoopId);
+          this.store.actions.markTechniciansActiveFromStaff(staff, scoopId);
+        } catch {
+          // SCOOP hors périmètre ou réseau : on garde l'état local.
+        }
+      }),
+    );
   }
 
   /** Une erreur de l'API, en message général. */
