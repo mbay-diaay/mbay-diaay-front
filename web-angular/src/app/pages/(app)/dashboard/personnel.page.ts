@@ -1,6 +1,9 @@
 import { Component, computed, effect, inject, signal, untracked } from "@angular/core";
 
+import { isApiMode } from "@/lib/api/config";
 import { syncImage } from "@/lib/api/media";
+import { technicianApiError } from "@/lib/api/technician-errors";
+import { toggleUserActive, updateUser } from "@/lib/api/users";
 import { nf } from "@/lib/format";
 import type { PreparedImage } from "@/lib/image";
 import { assignableRoles } from "@/lib/team";
@@ -587,6 +590,10 @@ export default class PersonnelPage {
     if (!this.editSex()) errors.sex = t("errors.technician.sex");
     this.editErrors.set(errors);
     if (Object.keys(errors).length) return;
+    if (isApiMode()) {
+      void this.saveEditOnApi(person, ageValue);
+      return;
+    }
     const result = this.store.actions.updateStaff(person.id, {
       name: this.editName(),
       phone: this.editPhone(),
@@ -604,7 +611,54 @@ export default class PersonnelPage {
     this.snackbar.success(t("personnel.edit.done", { name: this.editName().trim() }));
   }
 
+  /**
+   * Mode API : nom, téléphone et rôle sont enregistrés par le serveur (comme sur les pages Techniciens et
+   * Utilisateurs) ; sexe, âge et photo complètent la fiche dans le navigateur. Sans cet appel, la modification
+   * n'existait que dans la mémoire de la page et disparaissait au rechargement.
+   */
+  private async saveEditOnApi(person: AppUser, ageValue: number): Promise<void> {
+    const t = this.t();
+    const newRole = this.pickedRole() && this.pickedRole() !== person.role ? (this.pickedRole() as RoleId) : undefined;
+    try {
+      const updated = await updateUser(person.id, {
+        name: this.editName().trim().replace(/\s+/g, " "),
+        phone: this.editPhone().trim(),
+        ...(newRole ? { role: newRole } : {}),
+      });
+      this.store.actions.mergeUsersFromApi([updated]);
+    } catch (error) {
+      this.snackbar.error(this.locale.tNow(technicianApiError(error).key));
+      return;
+    }
+    // Sexe, âge et photo : gardés dans le navigateur (l'API ne les modifie pas pour le personnel).
+    this.store.actions.updateStaff(person.id, {
+      sex: this.editSex() as "F" | "H",
+      age: ageValue,
+      photoUrl: this.photo(),
+    });
+    this.editing.set(null);
+    void this.syncPhoto(person.id);
+    this.snackbar.success(t("personnel.edit.done", { name: this.editName().trim() }));
+  }
+
+  /** Mode API : suspension et réactivation passent par le serveur, qui coupe aussitôt les sessions d'un compte suspendu. */
+  private async toggleOnApi(person: AppUser): Promise<void> {
+    this.toggling.set(null);
+    try {
+      const updated = await toggleUserActive(person.id);
+      this.store.actions.mergeUsersFromApi([updated]);
+    } catch (error) {
+      this.snackbar.error(this.locale.tNow(technicianApiError(error).key));
+      return;
+    }
+    this.snackbar.success(this.t()(person.active ? "personnel.suspend.done" : "personnel.restore.done", { name: person.name }));
+  }
+
   protected confirmToggle(person: AppUser): void {
+    if (isApiMode()) {
+      void this.toggleOnApi(person);
+      return;
+    }
     const result = this.store.actions.updateStaff(person.id, { active: !person.active });
     this.toggling.set(null);
     if (!result.ok) {
