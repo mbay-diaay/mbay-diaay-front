@@ -63,6 +63,9 @@ const SCREEN_ICONS: Record<string, IconName> = {
   "/dashboard/reunions": "event",
   "/dashboard/documents": "description",
   "/dashboard/rappels": "notifications_active",
+  "/dashboard/stocks": "inventory_2",
+  "/dashboard/credits": "payments",
+  "/dashboard/ventes": "storefront",
   "/dashboard/techniciens": "badge",
   "/dashboard/roles-cooperative": "admin_panel_settings",
   "/dashboard/qualite": "verified",
@@ -86,7 +89,7 @@ const MODULE_GROUPS: ModuleGroup[] = [
   // Bloc à part, en tête et visible seulement avec `role.configure` (super administrateur).
   { id: "superadmin", section: "superadmin", labelKey: "nav.group.superadmin", icon: "lock", items: itemsOfSection("Super administration"), soon: false, defaultOpen: true },
   { id: "m1", section: "modules", labelKey: "modules.administratif.name", icon: "badge", items: byPath(M1_PATHS), soon: false, defaultOpen: true },
-  { id: "m2", section: "modules", labelKey: "modules.commercial.name", icon: "storefront", items: soonOf("commercial"), soon: true, defaultOpen: false },
+  { id: "m2", section: "modules", labelKey: "modules.commercial.name", icon: "storefront", items: byPath(["/dashboard/stocks", "/dashboard/credits", "/dashboard/ventes"]), soon: false, defaultOpen: false },
   { id: "m3", section: "modules", labelKey: "modules.exploitation.name", icon: "query_stats", items: soonOf("exploitation"), soon: true, defaultOpen: false },
   { id: "m4", section: "modules", labelKey: "modules.agronomique.name", icon: "potted_plant", items: soonOf("agronomique"), soon: true, defaultOpen: false },
   { id: "m5", section: "modules", labelKey: "modules.sig.name", icon: "pin_drop", items: soonOf("sig"), soon: true, defaultOpen: false },
