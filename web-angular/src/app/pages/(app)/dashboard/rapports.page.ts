@@ -1,5 +1,6 @@
 import { Component, DOCUMENT, computed, inject, signal } from "@angular/core";
 
+import { isApiMode } from "@/lib/api/config";
 import { downloadCsv, fmtDateTime, nf } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
 import { downloadWorkbook } from "@/lib/io/workbook";
@@ -938,9 +939,10 @@ export default class RapportsPage {
     const history = this.history();
     const month = Date.now() - 30 * 86_400_000;
     const recent = history.filter((r) => new Date(r.generatedAt).getTime() >= month).length;
-    const downloads = this.store
-      .state()
-      .audit.filter((a) => a.action === "Téléchargement de rapport").length;
+    // Mode API : le journal est sur le serveur, pas dans le navigateur ; le compte n'est pas disponible ici.
+    const downloads = isApiMode()
+      ? "—"
+      : String(this.store.state().audit.filter((a) => a.action === "Téléchargement de rapport").length);
     const last = history[0];
     const cats = new Set(this.catalogue().map((r) => r.category)).size;
     return [
@@ -964,7 +966,7 @@ export default class RapportsPage {
       },
       {
         label: t("rapports.studio.downloads"),
-        value: String(downloads),
+        value: downloads,
         sub: t("rapports.studio.downloadsSub"),
         icon: "download" as IconName,
         bg: "var(--v2-attente-bg)",

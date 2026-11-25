@@ -631,6 +631,8 @@ export const getState = () => state;
 
 /** `scoopId` : SCOOP concernée ; à défaut, celle de la session quand elle est limitée à une SCOOP. */
 function audit(action: string, entity: string, detail: string, scoopId?: string) {
+  // Mode API : le serveur est la seule source du journal ; rien n'est écrit dans le navigateur.
+  if (isApiMode()) return;
   const user = state.session?.name ?? "Système";
   const scoop = scoopId ?? state.session?.scope.scoopId;
   const auditId = nextId("au", state.audit);
@@ -774,6 +776,14 @@ const fail = (key: MessageKey, params?: TranslateParams): { ok: false; error: st
   ok: false,
   error: tNow(key, params),
 });
+/**
+ * Mode API : une action qui n'a pas de route serveur ne doit jamais réussir seulement dans le navigateur.
+ * Elle renvoie cet échec (ou lève la même erreur pour les actions sans résultat) et ne change rien.
+ */
+const apiUnavailable = (): { ok: false; error: string } => fail("errors.api.unavailable");
+const assertApiAvailable = (): void => {
+  if (isApiMode()) throw new Error(tNow("errors.api.unavailable"));
+};
 /** Garde commune des actions : l'échec à renvoyer, ou `null` quand le droit est présent (voir `checkAccess`). */
 function access(
   permission: Permission | readonly Permission[],
@@ -1120,6 +1130,7 @@ export const actions = {
   },
   audit,
   setYouthMaxAge(n: number) {
+    assertApiAvailable();
     requirePermission("config.manage");
     audit("Référentiel", "Définition « jeune »", `${state.youthMaxAge} → ${n} ans`);
     set({ youthMaxAge: n });
@@ -1191,11 +1202,13 @@ export const actions = {
     audit("Qualification", `${ids.length} organisation(s)`, `Type attribué : ${type}`);
   },
   classifyCase(id: string, status: CaseStatus, comment: string) {
+    assertApiAvailable();
     requirePermission("quality.review");
     set((s) => ({ cases: s.cases.map((c) => (c.id === id ? { ...c, status, comment } : c)) }));
     audit("Classement doublon", `Cas ${id.toUpperCase()}`, `${status} : ${comment}`);
   },
   mergeCase(id: string, comment: string) {
+    assertApiAvailable();
     requirePermission("quality.merge");
     const c = state.cases.find((x) => x.id === id);
     if (!c || c.status === "fusionné") return;
@@ -1215,6 +1228,7 @@ export const actions = {
     );
   },
   undoMerge(id: string) {
+    assertApiAvailable();
     requirePermission("quality.merge");
     const m = state.merges[id];
     if (!m) return;
@@ -1239,6 +1253,7 @@ export const actions = {
     );
   },
   updateAlerts(ids: string[], status: AlertStatus, comment: string) {
+    assertApiAvailable();
     requirePermission("alert.manage");
     set((s) => ({
       alerts: s.alerts.map((a) => (ids.includes(a.id) ? { ...a, status, comment } : a)),
@@ -1246,6 +1261,7 @@ export const actions = {
     audit("Traitement alertes", `${ids.length} alerte(s)`, `${status} : ${comment}`);
   },
   reviewPlot(id: string, status: "validée" | "à reprendre", reason?: string) {
+    assertApiAvailable();
     requirePermission("plot.validate");
     set((s) => ({
       plots: s.plots.map((p) =>
@@ -1542,6 +1558,7 @@ export const actions = {
    * lui-même n'entre pas dans le journal.
    */
   sendTechnicianCodeByEmail(userId: string, code: string): ActionResult<{ email: string }> {
+    if (isApiMode()) return apiUnavailable();
     const denied = access(["user.manage", "technician.invite"]);
     if (denied) return denied;
     const who = actor();
@@ -1956,6 +1973,7 @@ export const actions = {
     return { ok: true };
   },
   addImport(b: ImportBatch) {
+    assertApiAvailable();
     requirePermission("import.manage");
     set((s) => ({ imports: [b, ...s.imports] }));
     audit(b.mode === "réel" ? "Import réel" : "Import à blanc", `Lot ${b.id}`, b.file);
@@ -2126,17 +2144,20 @@ export const actions = {
     return true;
   },
   setCropFamily(crop: string, family: CropFamily) {
+    assertApiAvailable();
     requirePermission("config.manage");
     set((s) => ({ cropRefs: s.cropRefs.map((r) => (r.name === crop ? { ...r, family } : r)) }));
     audit("Référentiel cultures", crop, `Famille : ${family}`);
   },
   attachAlias(alias: string, crop: string) {
+    assertApiAvailable();
     requirePermission("config.manage");
     set((s) => ({ cropAliases: s.cropAliases.filter((a) => a !== alias) }));
     audit("Référentiel cultures", "Alias rattaché", `${alias} → ${crop}`);
   },
   /** Écrit un import à blanc validé : entités, alertes, doublons candidats, noms de cultures inconnus, lot. */
   ingestImport(plan: ImportPlan, batch: ImportBatch) {
+    assertApiAvailable();
     requirePermission("import.manage");
     set((s) => ({
       orgs: [...s.orgs, ...plan.orgs.filter((o) => !s.orgs.some((x) => x.id === o.id))],
@@ -2168,6 +2189,7 @@ export const actions = {
     };
   },
   restoreSnapshot(snap: Snapshot) {
+    assertApiAvailable();
     requirePermission("data.backup");
     // Une sauvegarde incomplète ou abîmée mélangerait ancien et nouvel état : on la refuse en bloc.
     if (!isSnapshot(snap)) throw new Error("Format de sauvegarde non reconnu");
@@ -2380,6 +2402,7 @@ export const actions = {
     scoopId: string;
     photoUrl?: string | undefined;
   }): ActionResult<{ userId: string }> {
+    if (isApiMode()) return apiUnavailable();
     const denied = access("role.assign");
     if (denied) return denied;
     const who = actor();
@@ -3923,6 +3946,7 @@ export const actions = {
       confirmed?: boolean;
     },
   ): ActionResult {
+    if (isApiMode()) return apiUnavailable();
     const denied = access("contribution.manage");
     if (denied) return denied;
     const who = actor();
@@ -3959,6 +3983,7 @@ export const actions = {
     /** Numéro de transaction (mobile money, virement). */
     reference?: string;
   }): ActionResult<{ id: string; receipt: string }> {
+    if (isApiMode()) return apiUnavailable();
     const denied = access("contribution.manage");
     if (denied) return denied;
     const who = actor();
@@ -4016,6 +4041,7 @@ export const actions = {
     period: string;
     amount: number;
   }): ActionResult<{ id: string; token: string; expiresAt: string }> {
+    if (isApiMode()) return apiUnavailable();
     const denied = access("contribution.manage");
     if (denied) return denied;
     const who = actor();
@@ -4072,6 +4098,7 @@ export const actions = {
     return { ok: true, id: link.id, token, expiresAt: link.expiresAt };
   },
   cancelPaymentLink(id: string): ActionResult {
+    if (isApiMode()) return apiUnavailable();
     const denied = access("contribution.manage");
     if (denied) return denied;
     const who = actor();
@@ -4093,6 +4120,7 @@ export const actions = {
     token: string,
     input: { method: PaymentMethod; reference: string; provider?: string },
   ): ActionResult<{ paymentId: string; receipt: string }> {
+    if (isApiMode()) return apiUnavailable();
     const link = state.paymentLinks.find((l) => l.token === token);
     if (!link) return fail("errors.contribution.linkNotFound");
     if (link.status === "payé") return fail("errors.contribution.linkPaid");
@@ -4138,6 +4166,7 @@ export const actions = {
    * cotisations (le producteur reste individuel ou dans son GIE).
    */
   enrollProducerAsMember(producerId: string): ActionResult<{ memberId: string }> {
+    if (isApiMode()) return apiUnavailable();
     const denied = access("member.manage");
     if (denied) return denied;
     const who = actor();
@@ -4173,6 +4202,7 @@ export const actions = {
   },
   /** Un paiement n'est jamais effacé : il est annulé avec un motif et reste dans l'historique. */
   voidPayment(id: string, reason: string): ActionResult {
+    if (isApiMode()) return apiUnavailable();
     const denied = access("contribution.manage");
     if (denied) return denied;
     const who = actor();
@@ -4725,6 +4755,7 @@ export const actions = {
     set((s) => ({ documents: s.documents.filter((d) => d.id !== id) }));
   },
   setSeuil(key: "gpsPrecisionMax" | "areaGapPct" | "minAreaM2" | "maxAreaHa", value: number) {
+    assertApiAvailable();
     set((s) => ({ seuils: { ...s.seuils, [key]: value } }));
     audit("Référentiel seuils", key, `${state.seuils[key]} → ${value}`);
   },

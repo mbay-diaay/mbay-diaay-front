@@ -550,8 +550,18 @@ export default class TechniciensPage {
     this.snackbar.success(this.t()("techniciens.edit.saved", { name: this.editName().trim() }));
   }
 
-  /** Mode API : nom et téléphone sont enregistrés par le serveur ; sexe, âge et GIE restent dans le navigateur. */
+  /**
+   * Mode API : nom et téléphone sont enregistrés par le serveur, puis la réponse est fusionnée dans le store.
+   * Sexe, âge et GIE suivis n'ont pas de route : si on les change, rien n'est modifié (jamais gardés seulement
+   * dans le navigateur).
+   */
   private async saveEditOnApi(user: AppUser): Promise<void> {
+    const sameOrgs =
+      [...(user.orgIds ?? [])].sort().join("|") === [...this.editOrgIds()].sort().join("|");
+    if ((user.sex ?? "") !== this.editSex() || (user.age ?? 0) !== Number(this.editAge().trim() || 0) || !sameOrgs) {
+      this.snackbar.error(this.locale.tNow("errors.api.unavailable"));
+      return;
+    }
     try {
       const updated = await updateUser(user.id, { name: this.editName().trim(), phone: this.editPhone() });
       this.store.actions.mergeUsersFromApi([updated]);
@@ -559,14 +569,6 @@ export default class TechniciensPage {
       this.showApiError(error);
       return;
     }
-    this.store.actions.updateTechnician(user.id, {
-      name: this.editName(),
-      phone: this.editPhone(),
-      sex: (this.editSex() || "F") as "F" | "H",
-      age: Number(this.editAge().trim()),
-      orgIds: this.editOrgIds(),
-      photoUrl: this.photo(),
-    });
     this.editing.set(null);
     void syncImage("user", user.id, this.photoFile).then((sent) => {
       if (!sent) this.snackbar.error(this.t()("ui.image.uploadFailed"));

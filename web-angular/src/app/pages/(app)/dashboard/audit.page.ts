@@ -1,5 +1,8 @@
 import { Component, computed, inject, signal } from "@angular/core";
 
+import { isApiMode } from "@/lib/api/config";
+import { fetchAuditJournal, filterAuditEntries } from "@/lib/api/audit";
+
 import { scopedAudit } from "@/lib/scope";
 import { downloadCsv, fmtDateTime, nf } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
@@ -84,7 +87,6 @@ const FAMILIES: {
 ];
 const familyOf = (a: AuditEntry) => FAMILIES.find((f) => f.test.test(a.action)) ?? FAMILIES[2]!;
 const ALL = "__all";
-const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 /**
  * Journal d'audit (charte V2) : statistiques, familles d'actions à compteurs, filtres utilisateur et période,
@@ -238,7 +240,22 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
       </div>
 
       <section class="card mt-3 overflow-hidden">
-        @if (shown().length) {
+        @if (loading()) {
+          <div class="flex flex-col items-center gap-3 p-10 text-center" aria-live="polite">
+            <p class="sub">{{ t()("audit.loading") }}</p>
+          </div>
+        } @else if (failed()) {
+          <div class="flex flex-col items-center gap-3 p-10 text-center" role="alert">
+            <span
+              class="grid size-14 place-items-center rounded-[16px]"
+              style="background: var(--v2-erreur-bg); color: var(--v2-erreur-fg)"
+              ><ui-icon name="warning" [size]="26"
+            /></span>
+            <p class="text-[16px] font-extrabold">{{ t()("audit.error.title") }}</p>
+            <p class="sub max-w-md">{{ t()("audit.error.text") }}</p>
+            <button type="button" class="btn btn-ghost" (click)="load()">{{ t()("audit.retry") }}</button>
+          </div>
+        } @else if (shown().length) {
           <div class="overflow-x-auto">
             <table class="tbl min-w-[900px]">
               <thead>
@@ -363,23 +380,44 @@ export default class AuditPage {
     ),
   );
 
+  /** Mode API : le journal vient uniquement du serveur (rien n'est gardé dans le navigateur). */
+  private readonly serverRows = signal<AuditEntry[]>([]);
+  protected readonly loading = signal(isApiMode());
+  protected readonly failed = signal(false);
+
+  constructor() {
+    if (isApiMode()) void this.load();
+  }
+
+  /** Lit le journal sur le serveur (le serveur applique le périmètre de la session). */
+  protected async load(): Promise<void> {
+    this.loading.set(true);
+    this.failed.set(false);
+    try {
+      this.serverRows.set(await fetchAuditJournal());
+    } catch (error) {
+      console.error("[ERROR][AuditPage.load]", error);
+      this.failed.set(true);
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
   protected readonly rows = computed(() =>
-    scopedAudit(this.store.state().audit, this.store.state().session),
+    isApiMode()
+      ? this.serverRows()
+      : scopedAudit(this.store.state().audit, this.store.state().session),
   );
 
   /** Tous les filtres sauf la famille (pour les compteurs). */
   protected readonly base = computed(() => {
-    const needle = norm(this.q().trim());
     const user = this.user();
-    const from = this.from();
-    const to = this.to();
-    return this.rows().filter(
-      (a) =>
-        (user === ALL || a.user === user) &&
-        (!from || a.at.slice(0, 10) >= from) &&
-        (!to || a.at.slice(0, 10) <= to) &&
-        (!needle || norm(`${a.action} ${a.user} ${a.entity} ${a.detail}`).includes(needle)),
-    );
+    return filterAuditEntries(this.rows(), {
+      search: this.q(),
+      user: user === ALL ? "" : user,
+      from: this.from(),
+      to: this.to(),
+    });
   });
 
   protected readonly shown = computed(() => {

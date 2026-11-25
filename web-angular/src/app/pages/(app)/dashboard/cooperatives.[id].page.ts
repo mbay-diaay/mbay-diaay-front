@@ -4,10 +4,11 @@ import { ActivatedRoute, RouterLink } from "@angular/router";
 import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
+import { technicianApiError } from "@/lib/api/technician-errors";
 import { listOrganisations, orgFromApi } from "@/lib/api/organisations";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { loadScoopStatsFromApi } from "@/lib/api/session";
-import { inviteUser, listUsers } from "@/lib/api/users";
+import { inviteUser, listUsers, updateUser } from "@/lib/api/users";
 import { organisationDraft } from "@/lib/coop-request-templates";
 import { memberDues } from "@/lib/contributions";
 import { fmtDate, fmtDateTime, nf, nf1 } from "@/lib/format";
@@ -1905,6 +1906,11 @@ export default class CooperativeDetailPage {
     const email = this.newManagerEmail().trim().toLowerCase();
     const phone = this.newManagerPhone().trim();
     if (!currentScoop || !name || !email || this.replaceManagerInProgress()) return;
+    // Mode API : le serveur n'a pas de route pour remplacer un gestionnaire ; rien ne se fait dans le navigateur.
+    if (isApiMode()) {
+      this.snackbar.error(this.locale.tNow("errors.api.unavailable"));
+      return;
+    }
     this.replaceManagerInProgress.set(true);
     try {
       const previousManager = this.manager().user;
@@ -2398,9 +2404,28 @@ export default class CooperativeDetailPage {
   protected removeTech(userId: string, name: string): void {
     const u = this.store.state().users.find((x) => x.id === userId);
     const next = (u?.scoopIds ?? (u?.scoopId ? [u.scoopId] : [])).filter((id) => id !== this.id());
+    if (isApiMode()) {
+      void this.removeTechOnApi(userId, name, next);
+      return;
+    }
     const res = this.store.actions.setTechnicianScoops(userId, next);
     if (!res.ok) {
       this.snackbar.error(this.locale.tNow(res.error as MessageKey));
+      return;
+    }
+    this.snackbar.success(this.t()("tech.removed", { name }));
+  }
+
+  /** Mode API : le serveur retire le technicien de la coopérative, puis sa réponse est fusionnée dans le store. */
+  private async removeTechOnApi(userId: string, name: string, remainingScoopIds: string[]): Promise<void> {
+    if (!remainingScoopIds.length) {
+      this.snackbar.error(this.locale.tNow("errors.technician.scoops"));
+      return;
+    }
+    try {
+      this.store.actions.mergeUsersFromApi([await updateUser(userId, { scoopIds: remainingScoopIds })]);
+    } catch (error) {
+      this.snackbar.error(this.locale.tNow(technicianApiError(error).key));
       return;
     }
     this.snackbar.success(this.t()("tech.removed", { name }));

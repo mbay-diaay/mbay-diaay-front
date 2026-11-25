@@ -2,6 +2,8 @@ import { Component, computed, inject, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 
 import { isApiMode } from "@/lib/api/config";
+import { fetchAuditJournal } from "@/lib/api/audit";
+import type { AuditEntry } from "@/lib/store";
 import {
   createCustomRole,
   deleteCustomRole,
@@ -173,8 +175,20 @@ export default class SuperAdminRolesPage {
   protected readonly reassignTo = signal("");
   protected readonly deleteTried = signal(false);
 
+  /** Mode API : les modifications de droits viennent du journal du serveur (rien n'est gardé dans le navigateur). */
+  private readonly serverAudit = signal<AuditEntry[]>([]);
+
   constructor() {
-    if (isApiMode()) void this.reload();
+    if (isApiMode()) {
+      void this.reload();
+      fetchAuditJournal()
+        .then((entries) => this.serverAudit.set(entries))
+        .catch((error: unknown) => console.error("[ERROR][SuperAdminRolesPage.audit]", error));
+    }
+  }
+
+  private auditEntries(): AuditEntry[] {
+    return isApiMode() ? this.serverAudit() : this.store.state().audit;
   }
 
   /** Mode API : la matrice et les rôles créés viennent du serveur. */
@@ -195,9 +209,8 @@ export default class SuperAdminRolesPage {
   );
 
   protected readonly recentChanges = computed(() =>
-    this.store
-      .state()
-      .audit.filter((entry) => ROLE_AUDIT_ACTIONS.has(entry.action) || entry.action === "Rôle modifié")
+    this.auditEntries()
+      .filter((entry) => ROLE_AUDIT_ACTIONS.has(entry.action) || entry.action === "Rôle modifié")
       .slice(0, 6),
   );
 
@@ -210,7 +223,7 @@ export default class SuperAdminRolesPage {
       const defaults = DEFAULT_ROLE_PERMISSIONS[role];
       return current.length !== defaults.length || current.some((permission) => !defaults.includes(permission));
     }).length;
-    const changes = state.audit.filter((entry) => ROLE_AUDIT_ACTIONS.has(entry.action)).length;
+    const changes = this.auditEntries().filter((entry) => ROLE_AUDIT_ACTIONS.has(entry.action)).length;
     return [
       { label: t("superadmin.roles.stat.roles"), value: nf.format(this.store.allRoles().length), sub: t("superadmin.roles.stat.rolesSub", { custom: nf.format(customIds.size) }), icon: "admin_panel_settings", bg: "", fg: "" },
       { label: t("superadmin.roles.stat.modified"), value: nf.format(modified), sub: t("superadmin.roles.stat.modifiedSub"), icon: "tune", ...TONE.attente },

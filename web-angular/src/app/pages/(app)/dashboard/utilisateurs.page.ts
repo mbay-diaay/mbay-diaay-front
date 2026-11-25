@@ -457,15 +457,7 @@ export default class UtilisateursPage {
           ...(payload.phone ? { phone: payload.phone } : {}),
           password: this.newPassword(),
         });
-        this.store.actions.addUser({
-          id: created.id,
-          name: created.name,
-          email: created.email,
-          phone: created.phone ?? "",
-          role: created.role,
-          scoopId: created.scoopId ?? undefined,
-          ...(roleAllowsManyScoops(role) && { scoopIds }),
-        });
+        this.store.actions.mergeUsersFromApi([created]);
       } else {
         this.store.actions.addUser({
           ...payload,
