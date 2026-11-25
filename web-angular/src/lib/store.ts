@@ -2295,7 +2295,6 @@ export const actions = {
     scoopId: string;
     photoUrl?: string | undefined;
   }): ActionResult<{ userId: string }> {
-    if (isApiMode()) return apiUnavailable();
     const denied = access("role.assign");
     if (denied) return denied;
     const who = actor();
@@ -4056,7 +4055,6 @@ export const actions = {
    * cotisations (le producteur reste individuel ou dans son GIE).
    */
   enrollProducerAsMember(producerId: string): ActionResult<{ memberId: string }> {
-    if (isApiMode()) return apiUnavailable();
     const denied = access("member.manage");
     if (denied) return denied;
     const who = actor();

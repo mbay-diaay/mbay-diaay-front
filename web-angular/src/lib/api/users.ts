@@ -36,8 +36,10 @@ export function createUser(body: {
   scoopIds?: string[];
   phone?: string;
   password?: string;
+  /** Sans mot de passe : le serveur envoie une invitation par e-mail pour qu'elle le choisisse. */
+  invite?: boolean;
 }) {
-  return apiFetch<ApiUser>("/users", { method: "POST", body });
+  return apiFetch<ApiUser & { invitationSent?: boolean }>("/users", { method: "POST", body });
 }
 
 export function toggleUserActive(id: string) {
@@ -109,4 +111,26 @@ export function isTechnicalEmail(email: string): boolean {
 /** Envoie (ou renvoie) le lien d'activation par e-mail à un compte qui n'a pas encore de mot de passe. */
 export function inviteUser(id: string) {
   return apiFetch<{ sent: boolean; expiresAt: string }>(`/users/${id}/invite`, { method: "POST", body: {} });
+}
+
+/** Remplace le gestionnaire d'une coopérative : le serveur crée le nouveau compte, désactive l'ancien et invite. */
+export type ReplaceManagerResult = {
+  newManager: ApiUser;
+  previousManager: ApiUser | null;
+  invitationSent: boolean;
+};
+
+export function replaceScoopManager(scoopId: string, body: { name: string; email: string; phone?: string }) {
+  return apiFetch<ReplaceManagerResult>(`/scoops/${encodeURIComponent(scoopId)}/manager/replace`, {
+    method: "POST",
+    body,
+  });
+}
+
+/** Vrai si l'erreur de l'API dit que l'adresse e-mail est déjà prise (409 `EMAIL_TAKEN`). */
+export function isEmailTakenError(error: unknown): boolean {
+  const candidate = error as { status?: number; code?: string; details?: unknown } | null;
+  if (!candidate || typeof candidate !== "object") return false;
+  const detailCode = (candidate.details as { code?: string } | undefined)?.code;
+  return candidate.code === "EMAIL_TAKEN" || detailCode === "EMAIL_TAKEN";
 }

@@ -164,6 +164,10 @@ export const cooperatives = {
   "cooperatives.fiche.replaceModal.email": "Adresse e-mail",
   "cooperatives.fiche.replaceModal.phone": "Téléphone (facultatif)",
   "cooperatives.fiche.replaceModal.confirm": "Nommer et remplacer",
+  "cooperatives.fiche.replaceModal.successInvited":
+    "Nouveau gestionnaire nommé ({name}), ancien compte désactivé et invitation envoyée par e-mail.",
+  "cooperatives.fiche.replaceModal.successNoMail":
+    "Nouveau gestionnaire nommé ({name}) et ancien compte désactivé, mais l'invitation n'a pas pu être envoyée : renvoyez-la depuis sa fiche.",
   "cooperatives.fiche.replaceModal.success": "Nouveau gestionnaire nommé ({name}) et ancien compte désactivé.",
   "cooperatives.fiche.lastManagerWarn":
     "Attention : c'est le dernier gestionnaire actif. Le retirer laissera les demandes du CRADESC et les rappels sans destinataire.",
@@ -364,6 +368,8 @@ export const cooperatives = {
   "personnel.add.rolePlaceholder": "Choisir un rôle",
   "personnel.add.roleRequired": "Choisissez un rôle.",
   "personnel.add.submit": "Créer et inviter",
+  "personnel.add.doneNoMail":
+    "{name} a été ajouté(e), mais l'invitation n'a pas pu être envoyée. Renvoyez-la depuis sa fiche.",
   "personnel.add.done": "{name} a été ajouté(e) : invitation envoyée.",
   "personnel.view.aria": "Voir la fiche de {name}",
   "personnel.edit": "Modifier",
