@@ -119,7 +119,11 @@ export function reportError(
   }
 }
 
-const CHUNK_RELOAD_KEY = "mbd.chunk-reload";
+/**
+ * Drapeau anti-boucle : un paramètre d'URL éphémère (retiré après le démarrage), jamais un stockage du navigateur.
+ * Le rechargement l'ajoute ; s'il est déjà là, on ne recharge pas une seconde fois.
+ */
+const CHUNK_RELOAD_PARAM = "_rechargement";
 
 /** Détecte un chunk lazy obsolète (nouveau déploiement pendant une session ouverte). */
 export function isChunkLoadError(error: unknown): boolean {
@@ -141,13 +145,10 @@ export function installChunkLoadRecovery(): () => void {
 
   const tryReload = (error: unknown) => {
     if (!isChunkLoadError(error)) return;
-    try {
-      if (sessionStorage.getItem(CHUNK_RELOAD_KEY) === "1") return;
-      sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
-    } catch {
-      /* stockage indisponible : recharger quand même */
-    }
-    window.location.reload();
+    const url = new URL(window.location.href);
+    if (url.searchParams.has(CHUNK_RELOAD_PARAM)) return;
+    url.searchParams.set(CHUNK_RELOAD_PARAM, "1");
+    window.location.replace(url.toString());
   };
 
   const onRejection = (event: PromiseRejectionEvent) => tryReload(event.reason);
@@ -155,13 +156,12 @@ export function installChunkLoadRecovery(): () => void {
   window.addEventListener("unhandledrejection", onRejection);
   window.addEventListener("error", onError);
 
-  // Après un boot réussi, autoriser un futur reload (prochain déploiement).
+  // Après un démarrage réussi, on retire le paramètre : un futur rechargement reste possible (prochain déploiement).
   window.setTimeout(() => {
-    try {
-      sessionStorage.removeItem(CHUNK_RELOAD_KEY);
-    } catch {
-      /* ignore */
-    }
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(CHUNK_RELOAD_PARAM)) return;
+    url.searchParams.delete(CHUNK_RELOAD_PARAM);
+    window.history.replaceState(window.history.state, "", url.toString());
   }, 12_000);
 
   return () => {

@@ -1,45 +1,18 @@
-const ACCESS_KEY = "mbd.accessToken";
-const REFRESH_KEY = "mbd.refreshToken";
-
-function browserSessionStorage(): Storage | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
+/**
+ * Jeton d'accès : uniquement en mémoire (variable de module). Rien n'est écrit dans le navigateur
+ * (aucun stockage du navigateur, aucun cookie lisible par le JavaScript). Le jeton de renouvellement
+ * est un cookie HttpOnly posé par l'API : le JavaScript ne le voit jamais.
+ */
+let accessToken: string | null = null;
 
 export function getAccessToken(): string | null {
-  try {
-    return browserSessionStorage()?.getItem(ACCESS_KEY) ?? null;
-  } catch {
-    return null;
-  }
+  return accessToken;
 }
 
-export function getRefreshToken(): string | null {
-  try {
-    return browserSessionStorage()?.getItem(REFRESH_KEY) ?? null;
-  } catch {
-    return null;
-  }
+export function setAccessToken(token: string): void {
+  accessToken = token;
 }
 
-export function setTokens(accessToken: string, refreshToken: string) {
-  try {
-    browserSessionStorage()?.setItem(ACCESS_KEY, accessToken);
-    browserSessionStorage()?.setItem(REFRESH_KEY, refreshToken);
-  } catch {
-    /* mode privé / SSR : ignorer */
-  }
-}
-
-export function clearTokens() {
-  try {
-    browserSessionStorage()?.removeItem(ACCESS_KEY);
-    browserSessionStorage()?.removeItem(REFRESH_KEY);
-  } catch {
-    /* mode privé / SSR : ignorer */
-  }
+export function clearTokens(): void {
+  accessToken = null;
 }

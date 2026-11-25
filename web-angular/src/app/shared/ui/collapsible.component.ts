@@ -1,5 +1,6 @@
-import { Component, afterNextRender, input, signal } from "@angular/core";
+import { Component, effect, inject, input, signal } from "@angular/core";
 
+import { PreferencesService } from "../preferences.service";
 import { IconComponent, type IconName } from "./icon.component";
 
 let nextId = 0;
@@ -128,21 +129,20 @@ export class CollapsibleComponent {
   readonly subtitle = input("");
   readonly icon = input<IconName | null>(null);
   readonly defaultOpen = input(true);
-  /** Clé de mémorisation dans le navigateur (facultative). */
+  /** Clé de mémorisation dans les préférences du compte (facultative). */
   readonly storageKey = input("");
 
   protected readonly panelId = `collapsible-${nextId++}`;
   protected readonly open = signal(true);
 
+  private readonly preferences = inject(PreferencesService);
+
   constructor() {
-    afterNextRender(() => {
-      let stored: string | null = null;
-      try {
-        stored = this.storageKey() ? window.localStorage.getItem(this.storageKey()) : null;
-      } catch {
-        /* stockage indisponible */
-      }
-      this.open.set(stored === null ? this.defaultOpen() : stored === "1");
+    // Ouverture : valeur enregistrée dans les préférences du compte, sinon valeur par défaut.
+    effect(() => {
+      const key = this.storageKey();
+      const saved = key ? this.preferences.preferences().sidebarGroups?.[`section:${key}`] : undefined;
+      this.open.set(saved ?? this.defaultOpen());
     });
   }
 
@@ -150,10 +150,7 @@ export class CollapsibleComponent {
     const next = !this.open();
     this.open.set(next);
     if (!this.storageKey()) return;
-    try {
-      window.localStorage.setItem(this.storageKey(), next ? "1" : "0");
-    } catch {
-      /* stockage indisponible : l'état n'est pas mémorisé */
-    }
+    const groups = this.preferences.preferences().sidebarGroups ?? {};
+    this.preferences.update({ sidebarGroups: { ...groups, [`section:${this.storageKey()}`]: next } });
   }
 }

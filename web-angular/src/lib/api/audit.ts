@@ -15,6 +15,7 @@ export function auditEntryFromApi(entry: ApiAuditEntry): AuditEntry {
     entity: entry.target || "—",
     detail: entry.detail ?? "",
     scoopId: entry.scoopId ?? undefined,
+    category: entry.category ?? undefined,
   };
 }
 

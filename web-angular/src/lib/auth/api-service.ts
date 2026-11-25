@@ -1,12 +1,11 @@
 import { apiFetch, ApiError } from "../api/client";
-import { clearTokens, setTokens } from "../api/tokens";
+import { clearTokens, setAccessToken } from "../api/tokens";
 import type { RoleId } from "../permissions";
 import { AuthError, type AuthService, type AuthUser, type CodeSent } from "./types";
 
 type SignInResponse = CodeSent & { challengeId: string; demoHint?: string };
 type TokenResponse = {
   accessToken: string;
-  refreshToken: string;
   user: { id: string; email: string; name: string; role: RoleId; scoopId: string | null };
 };
 
@@ -61,7 +60,7 @@ export function createApiAuthService(): AuthService {
           body: { challengeId, code },
           auth: false,
         });
-        setTokens(data.accessToken, data.refreshToken);
+        setAccessToken(data.accessToken);
         const user: AuthUser = {
           email: data.user.email,
           name: data.user.name,
@@ -134,6 +133,7 @@ export function createApiAuthService(): AuthService {
 }
 
 export function apiLogout() {
+  // Le serveur efface le cookie de renouvellement (credentials inclus) ; ici on oublie le jeton en mémoire.
   clearTokens();
   void apiFetch("/auth/logout", { method: "POST", body: {}, auth: false }).catch(() => undefined);
 }

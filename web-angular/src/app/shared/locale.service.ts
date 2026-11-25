@@ -1,6 +1,7 @@
-import { DOCUMENT, Injectable, computed, effect, inject, signal } from "@angular/core";
+import { DOCUMENT, Injectable, computed, effect, inject, signal, untracked } from "@angular/core";
 import { formatDate, formatNumber } from "@/lib/i18n/format";
-import { isLocale, readStoredLocale, writeStoredLocale } from "@/lib/i18n/storage";
+import { initialLocale, isLocale } from "@/lib/i18n/storage";
+import { PreferencesService } from "./preferences.service";
 import {
   ensureWolofLoaded,
   setCurrentLocale,
@@ -20,7 +21,7 @@ import type { MessageKey } from "@/lib/i18n/fr";
  */
 @Injectable({ providedIn: "root" })
 export class LocaleService {
-  private readonly localeSignal = signal<Locale>(readStoredLocale() ?? "fr");
+  private readonly localeSignal = signal<Locale>(initialLocale());
   readonly locale = this.localeSignal.asReadonly();
   /**
    * Incrémenté quand le dictionnaire wolof (chargé à la demande) arrive. Sans lui, un rechargement
@@ -30,11 +31,17 @@ export class LocaleService {
   private readonly dictionaryVersion = signal(0);
 
   private readonly document = inject(DOCUMENT);
+  private readonly preferences = inject(PreferencesService);
 
   constructor() {
     // `<html lang>` suit la langue affichée : lecteurs d'écran et césure (WCAG 3.1.1).
     effect(() => {
       this.document.documentElement.lang = this.localeSignal();
+    });
+    // Après connexion, la langue enregistrée sur le serveur s'applique (sans la réécrire).
+    effect(() => {
+      const saved = this.preferences.preferences().locale;
+      if (saved && saved !== untracked(this.localeSignal)) this.applyLocale(saved);
     });
     const initial = this.localeSignal();
     setCurrentLocale(initial);
@@ -43,20 +50,24 @@ export class LocaleService {
     }
   }
 
+  /** Choix de l'utilisateur : appliqué, puis enregistré sur le serveur (silencieux si non connecté). */
   setLocale(locale: Locale): void {
     if (!isLocale(locale)) return;
+    this.applyLocale(locale);
+    this.preferences.update({ locale });
+  }
+
+  private applyLocale(locale: Locale): void {
     if (locale === "wo") {
       void ensureWolofLoaded().then(() => {
         this.dictionaryVersion.update((v) => v + 1);
         this.localeSignal.set("wo");
         setCurrentLocale("wo");
-        writeStoredLocale("wo");
       });
       return;
     }
     this.localeSignal.set(locale);
     setCurrentLocale(locale);
-    writeStoredLocale(locale);
   }
 
   readonly t = computed(() => {

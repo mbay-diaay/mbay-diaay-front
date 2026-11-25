@@ -85,6 +85,19 @@ const FAMILIES: {
     ...TONE.neutre,
   },
 ];
+
+type Kind = "consultations" | "acces_refuses" | "connexions" | "operations";
+/** Les quatre types d'événement du journal serveur. Sans `category` du serveur, le type se déduit de l'action. */
+const KINDS: { key: Kind; label: MessageKey; hint: MessageKey; test: RegExp }[] = [
+  { key: "acces_refuses", label: "audit.kind.acces_refuses", hint: "audit.kind.acces_refuses.hint", test: /acc[èe]s refus|refus d'acc[èe]s|non autoris|interdit|denied|forbidden/i },
+  { key: "connexions", label: "audit.kind.connexions", hint: "audit.kind.connexions.hint", test: /connexion|d[ée]connexion|session/i },
+  { key: "consultations", label: "audit.kind.consultations", hint: "audit.kind.consultations.hint", test: /consultation|consult[ée]|lecture|affichage|visualisation|r[ée]v[ée]lation/i },
+  { key: "operations", label: "audit.kind.operations", hint: "audit.kind.operations.hint", test: /./ },
+];
+const kindOf = (a: AuditEntry): Kind => {
+  const given = a.category && KINDS.find((k) => k.key === a.category);
+  return given ? given.key : (KINDS.find((k) => k.test.test(a.action))?.key ?? "operations");
+};
 const familyOf = (a: AuditEntry) => FAMILIES.find((f) => f.test.test(a.action)) ?? FAMILIES[2]!;
 const ALL = "__all";
 
@@ -189,6 +202,32 @@ const ALL = "__all";
               </button>
             }
           </div>
+        </div>
+        <div class="seg mt-2" role="radiogroup" [attr.aria-label]="t()('audit.kind.aria')">
+          <button
+            type="button"
+            role="radio"
+            [class.on]="kind() === all"
+            [attr.aria-checked]="kind() === all"
+            (click)="kind.set(all)"
+          >
+            {{ t()("audit.family.all") }}<span class="n">{{ nf.format(base().length) }}</span>
+          </button>
+          @for (kindDef of kinds; track kindDef.key) {
+            <button
+              type="button"
+              role="radio"
+              [class.on]="kind() === kindDef.key"
+              [attr.aria-checked]="kind() === kindDef.key"
+              [title]="t()(kindDef.hint)"
+              (click)="kind.set(kindDef.key)"
+            >
+              {{ t()(kindDef.label)
+              }}<span class="n" [class.zero]="!kindCount(kindDef.key)">{{
+                nf.format(kindCount(kindDef.key))
+              }}</span>
+            </button>
+          }
         </div>
         <div class="filters mt-2">
           <ui-select
@@ -361,11 +400,13 @@ export default class AuditPage {
   protected readonly fmtDateTime = fmtDateTime;
   protected readonly initials = initialsOf;
   protected readonly families = FAMILIES;
+  protected readonly kinds = KINDS;
   protected readonly all = ALL;
   protected readonly perms = ["audit.read", "audit.read.scoop"] as const;
 
   protected readonly q = signal("");
   protected readonly family = signal<Family | typeof ALL>(ALL);
+  protected readonly kind = signal<Kind | typeof ALL>(ALL);
   protected readonly user = signal(ALL);
   protected readonly from = signal("");
   protected readonly to = signal("");
@@ -422,9 +463,11 @@ export default class AuditPage {
 
   protected readonly shown = computed(() => {
     const fam = this.family();
+    const kind = this.kind();
     const dir = this.desc() ? -1 : 1;
     return this.base()
       .filter((a) => fam === ALL || familyOf(a).key === fam)
+      .filter((a) => kind === ALL || kindOf(a) === kind)
       .sort((a, b) => dir * a.at.localeCompare(b.at));
   });
 
@@ -435,6 +478,7 @@ export default class AuditPage {
     () =>
       !!this.q().trim() ||
       this.family() !== ALL ||
+      this.kind() !== ALL ||
       this.user() !== ALL ||
       !!this.from() ||
       !!this.to(),
@@ -489,6 +533,10 @@ export default class AuditPage {
     return this.base().filter((a) => familyOf(a).key === key).length;
   }
 
+  protected kindCount(key: Kind): number {
+    return this.base().filter((a) => kindOf(a) === key).length;
+  }
+
   protected fam(a: AuditEntry) {
     return familyOf(a);
   }
@@ -500,6 +548,7 @@ export default class AuditPage {
   protected reset(): void {
     this.q.set("");
     this.family.set(ALL);
+    this.kind.set(ALL);
     this.user.set(ALL);
     this.from.set("");
     this.to.set("");

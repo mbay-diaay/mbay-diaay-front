@@ -20,4 +20,4 @@ export {
   type TranslateParams,
 } from "./translate";
 export { formatNumber, formatDate } from "./format";
-export { LOCALE_STORAGE_KEY, isLocale, readStoredLocale, writeStoredLocale } from "./storage";
+export { initialLocale, isLocale } from "./storage";

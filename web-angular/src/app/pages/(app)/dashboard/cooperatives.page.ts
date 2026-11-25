@@ -25,6 +25,7 @@ import { scoopFigures, sumKnown } from "@/lib/scoop-figures";
 import { blockingDossiers, generateScoopCode, scoopIssues, type ScoopInput } from "@/lib/scoops";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
+import { PreferencesService } from "@shared/preferences.service";
 import { StoreService } from "@shared/store.service";
 import {
   AvatarComponent,
@@ -44,7 +45,6 @@ type View = "grid" | "list";
 type FieldKey =
   "name" | "commune" | "code" | "managerFirstName" | "managerLastName" | "managerEmail";
 
-const VIEW_KEY = "mbd.cooperatives.view";
 /** Un chiffre inconnu (l'API ne l'a pas fourni) s'affiche « — », jamais 0. */
 const show = (value: number | null) => (value === null ? "—" : nf.format(value));
 const showHa = (value: number | null) => (value === null ? "—" : nf1.format(value));
@@ -1329,7 +1329,11 @@ export default class CooperativesPage {
 
   protected readonly q = signal("");
   protected readonly filter = signal<Filter>("tous");
-  protected readonly view = signal<View>(readView());
+  private readonly preferences = inject(PreferencesService);
+  /** Vue choisie : préférence du compte (serveur), cartes par défaut. */
+  protected readonly view = computed<View>(() =>
+    this.preferences.preferences().cooperativesView === "list" ? "list" : "grid",
+  );
   protected readonly menuFor = signal<string | null>(null);
   protected readonly createOpen = signal(false);
   /** Vrai pendant un envoi à l'API : évite le double clic sur « Enregistrer ». */
@@ -1615,12 +1619,7 @@ export default class CooperativesPage {
   }
 
   protected setView(v: View): void {
-    this.view.set(v);
-    try {
-      window.localStorage.setItem(VIEW_KEY, v);
-    } catch {
-      /* stockage indisponible : l'affichage n'est pas mémorisé */
-    }
+    this.preferences.update({ cooperativesView: v === "list" ? "list" : "cards" });
   }
 
   protected toggleMenu(id: string, e: Event): void {
@@ -2000,12 +1999,3 @@ export default class CooperativesPage {
   protected readonly pager = createPager(() => this.shown());
 }
 
-function readView(): View {
-  try {
-    return typeof window !== "undefined" && window.localStorage.getItem(VIEW_KEY) === "list"
-      ? "list"
-      : "grid";
-  } catch {
-    return "grid";
-  }
-}

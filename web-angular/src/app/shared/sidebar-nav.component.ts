@@ -6,9 +6,9 @@ import { NAV, navAllowed, type ModuleId, type NavItem } from "@/lib/nav";
 import { scoopIdsOf } from "@/lib/scope";
 import type { Session } from "@/lib/store";
 import { IconComponent, type IconName } from "./ui/icon.component";
+import { PreferencesService } from "./preferences.service";
 import { LocaleService } from "./locale.service";
 
-const STORAGE_KEY = "mbd.nav";
 
 type ModuleGroup = {
   /** Identifiant stable (mémoire d'ouverture, id HTML). */
@@ -93,35 +93,13 @@ const MODULE_GROUPS: ModuleGroup[] = [
   { id: "admin", section: "tools", labelKey: "nav.group.administration", icon: "tune", items: itemsOfSection("Administration"), soon: false, defaultOpen: false },
 ];
 
-function readOpen(): Record<string, boolean> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : {};
-    if (!parsed || typeof parsed !== "object") return {};
-    return Object.fromEntries(
-      Object.entries(parsed as Record<string, unknown>).filter(([, v]) => typeof v === "boolean"),
-    ) as Record<string, boolean>;
-  } catch {
-    return {};
-  }
-}
-function writeOpen(value: Record<string, boolean>): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-  } catch {
-    /* stockage indisponible : le menu fonctionne, sans mémoire */
-  }
-}
-
 /**
  * Menu latéral (charte V2, fond forêt). `NAV`/`navAllowed` viennent de `src/lib/nav.ts`.
  *
  * - Entrées de premier niveau (Tableau de bord, Rapports) : icône + pastille citron si active.
  * - Groupes : en-tête avec icône et chevron ; ouverture/fermeture animée (hauteur + opacité).
  *   Sous-entrées en arborescence : trait vertical + tiret ; tiret citron sur l'entrée active.
- *   Le groupe de la page courante s'ouvre d'office ; l'état est mémorisé dans le navigateur.
+ *   Le groupe de la page courante s'ouvre d'office ; l'état est mémorisé dans les préférences du compte (serveur).
  * - `collapsed` : rail d'icônes (libellés en infobulle), avec un court fondu au changement de mode.
  * - Toutes les pages connectées vivent sous `/dashboard/…` ; « Tableau de bord » mène à `/dashboard/<rôle>`.
  */
@@ -454,7 +432,9 @@ export class SidebarNavComponent {
 
   protected readonly t = inject(LocaleService).t;
 
-  private readonly stored = signal<Record<string, boolean>>(readOpen());
+  private readonly preferences = inject(PreferencesService);
+  /** Groupes ouverts/fermés : préférence du compte (serveur). */
+  private readonly stored = computed<Record<string, boolean>>(() => this.preferences.preferences().sidebarGroups ?? {});
 
   /** Groupes ayant au moins une entrée visible pour cette session. */
   protected readonly visibleGroups = computed(() => MODULE_GROUPS.filter((g) => this.allowedItems(g).length > 0));
@@ -467,8 +447,7 @@ export class SidebarNavComponent {
       const reopen = MODULE_GROUPS.filter((g) => !g.flat && stored[g.id] === false && untracked(() => this.hasActive(g)));
       if (reopen.length === 0) return;
       const next = { ...stored, ...Object.fromEntries(reopen.map((g) => [g.id, true])) };
-      this.stored.set(next);
-      writeOpen(next);
+      this.preferences.update({ sidebarGroups: next });
     });
   }
 
@@ -532,7 +511,6 @@ export class SidebarNavComponent {
 
   protected toggle(g: ModuleGroup): void {
     const next = { ...this.stored(), [g.id]: !this.isOpen(g) };
-    this.stored.set(next);
-    writeOpen(next);
+    this.preferences.update({ sidebarGroups: next });
   }
 }
