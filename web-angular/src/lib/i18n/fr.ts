@@ -15,10 +15,12 @@ import { admin } from "./messages/admin";
 import { auth } from "./messages/auth";
 import { shell as shellMessages } from "./messages/shell";
 import { organisations } from "./messages/organisations";
-import { sauvegarde } from "./messages/sauvegarde";
+import { donnees } from "./messages/donnees";
 import { imports } from "./messages/imports";
 import { calendrier } from "./messages/calendrier";
 import { guard } from "./messages/guard";
+import { transfert } from "./messages/transfert";
+import { cni } from "./messages/cni";
 
 /**
  * Dictionnaire français = référence (Module 1 Angular uniquement).
@@ -90,10 +92,12 @@ export const fr = {
   ...auth,
   ...shellMessages,
   ...organisations,
-  ...sauvegarde,
+  ...donnees,
   ...imports,
   ...calendrier,
   ...guard,
+  ...transfert,
+  ...cni,
 } as const;
 
 export type MessageKey = keyof typeof fr;

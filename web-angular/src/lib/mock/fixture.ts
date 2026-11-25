@@ -101,9 +101,9 @@ export const CAMPAIGN = "CHN 2025-2026";
 const ORG_TYPE: Record<string, OrgType | null> = {
   gie: "GIE",
   section: "Section",
-  association: "Association",
-  individuel: "Individuel",
-  membre_direct: "Membre direct",
+  association: "À préciser",
+  individuel: "À préciser",
+  membre_direct: "À préciser",
   a_qualifier: null,
 };
 const PLOT_STATUS: Record<string, PlotStatus> = {

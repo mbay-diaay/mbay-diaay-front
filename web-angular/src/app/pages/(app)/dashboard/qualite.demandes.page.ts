@@ -55,6 +55,10 @@ const KIND_TONE: Record<CoopRequestKind, { bg: string; fg: string }> = {
   organisation: TONE.culture,
   fiche: TONE.erreur,
   autre: TONE.neutre,
+  correction_avant_fusion: TONE.info,
+  cni_proches: TONE.erreur,
+  scoop_manquante: TONE.attente,
+  nom_manquant: TONE.attente,
 };
 
 /**

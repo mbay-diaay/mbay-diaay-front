@@ -18,6 +18,7 @@ export type Permission =
   | "coop_request.send"
   | "coop_request.read"
   | "coop_request.resolve"
+  | "scoop.transfer"
   | "alert.manage"
   | "map.read"
   | "plot.validate"
@@ -172,6 +173,7 @@ export const NON_DELEGABLE_PERMISSIONS: readonly Permission[] = [
   "subrole.manage",
   "user.manage",
   "scoop.manage",
+  "scoop.transfer",
   "data.backup",
   "import.manage",
   "config.manage",
@@ -480,6 +482,7 @@ export const PERMISSION_GROUPS: readonly { key: string; permissions: readonly Pe
       "org.read",
       "org.manage",
       "scoop.manage",
+      "scoop.transfer",
     ],
   },
   {

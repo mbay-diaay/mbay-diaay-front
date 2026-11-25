@@ -15,6 +15,7 @@ import type {
   RefusalReason,
 } from "../mock/cooperative";
 import { apiFetch, ApiError } from "./client";
+import { originFromApi, type ApiOrigin } from "./origin";
 import { mediaSrc } from "./media";
 import { fetchAllPages, type Page, type PageQuery, withPage } from "./pagination";
 
@@ -26,7 +27,7 @@ import { fetchAllPages, type Page, type PageQuery, withPage } from "./pagination
 
 // ---------------------------------------------------------------- Producteurs
 
-export type ApiProducer = {
+export type ApiProducer = ApiOrigin & {
   id: string;
   code: string;
   firstName: string;
@@ -82,6 +83,7 @@ export function producerFromApi(row: ApiProducer): Producer {
     ...(photoUrl && { photoUrl }),
     ...(row.koboUuid && { koboUuid: row.koboUuid }),
     ...(row.survey && { survey: surveyFromApi(row.survey) }),
+    ...originFromApi(row),
   };
 }
 
@@ -265,15 +267,57 @@ export const unmergeProducers = (keepId: string, mergeId: string) =>
     body: { mergeId },
   }).then(producerFromApi);
 
+/** Un champ qui diffère entre deux fiches (nom technique et libellé français ; jamais de valeur). */
+export type DifferingField = { key: string; label: string };
+
+/** Résultat de la comparaison stricte de deux fiches (`GET /producers/:keepId/compare`). */
+export type StrictComparison = { identical: boolean; fields: DifferingField[] };
+
+/**
+ * Compare deux fiches avec la règle stricte de fusion : toutes les informations (identité, contact, CNI, coopérative,
+ * parcelles et données spatiales…) doivent être identiques. Le serveur ne renvoie que les champs qui diffèrent.
+ */
+export const compareProducers = (keepId: string, mergeId: string) =>
+  apiFetch<StrictComparison>(`/producers/${encodeURIComponent(keepId)}/compare?mergeId=${encodeURIComponent(mergeId)}`);
+
+/** Champs d'une fiche corrigeables par `PATCH /producers/:id` (droit `producer.edit`) ; la CNI n'en fait pas partie. */
+export type ProducerCorrection = {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  age?: number | null;
+  status?: "recensé" | "membre";
+  village?: string;
+  orgId?: string;
+  sex?: "F" | "H";
+  handicap?: boolean;
+};
+
+/** Corrige une fiche après vérification : chaque champ changé laisse une ligne d'historique et d'audit côté serveur. */
+export const correctProducerOnApi = (id: string, body: ProducerCorrection) =>
+  apiFetch<ApiProducer>(`/producers/${encodeURIComponent(id)}`, { method: "PATCH", body }).then(producerFromApi);
+
+/** Champs qui diffèrent dans une erreur `FICHES_DIFFERENTES` (libellés français du serveur), vide pour une autre erreur. */
+export function differingFieldLabels(error: unknown): string[] {
+  if (!(error instanceof ApiError)) return [];
+  const details = error.details as { code?: string; labels?: unknown } | undefined;
+  if ((details?.code ?? error.code) !== "FICHES_DIFFERENTES") return [];
+  return Array.isArray(details?.labels) ? details.labels.filter((label): label is string => typeof label === "string") : [];
+}
+
 /** Clé de message française pour une erreur de fusion ou d'annulation de fusion. */
 export function mergeErrorKey(error: unknown): MessageKey {
   if (error instanceof ApiError) {
     const cause = (error.details as { code?: string } | undefined)?.code ?? error.code;
     switch (cause) {
+      case "FICHES_DIFFERENTES":
+        return "qualite.merge.err.differentes";
       case "ALREADY_MERGED":
         return "qualite.merge.err.alreadyMerged";
       case "DIFFERENT_SCOOP":
         return "qualite.merge.err.differentScoop";
+      case "ACCOUNT_LINK_CONFLICT":
+        return "qualite.merge.err.accountLink";
       case "NOT_MERGED":
         return "qualite.merge.err.notMerged";
     }

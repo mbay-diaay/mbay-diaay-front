@@ -28,6 +28,7 @@ import "./ui/charte-v2-fonts";
 import { hydrateSessionFromApi } from "@/lib/api/session";
 import { logoutAuthSideEffects } from "@/lib/auth";
 import { qualityCounts } from "@/lib/quality-nav";
+import { CniAlertsService } from "./cni-alerts.service";
 import { scoopNamesOf, scopedDossiers } from "@/lib/scope";
 import { fmtDateTime } from "@/lib/format";
 import type { Permission } from "@/lib/permissions";
@@ -676,6 +677,7 @@ export class AppLayoutComponent {
   protected readonly mobileOpen = signal(false);
   /** Menu latéral replié en rail d'icônes (grand écran), mémorisé dans le navigateur. */
   private readonly preferences = inject(PreferencesService);
+  private readonly cniAlerts = inject(CniAlertsService);
   /** Menu replié : préférence du compte (serveur), dépliée par défaut. */
   protected readonly collapsed = computed(() => this.preferences.preferences().sidebarCollapsed ?? false);
   protected readonly accountMenuOpen = signal(false);
@@ -744,17 +746,6 @@ export class AppLayoutComponent {
         });
       }
     }
-    if (can(session, "data.backup")) {
-      list.push({
-        id: "sauvegarde-nuit",
-        icon: "task_alt",
-        bg: "var(--v2-succes-bg)",
-        fg: "var(--v2-succes-fg)",
-        title: t("shell.notif.backup"),
-        body: t("shell.notif.backupBody"),
-        to: "/dashboard/donnees",
-      });
-    }
     return list;
   });
 
@@ -801,15 +792,19 @@ export class AppLayoutComponent {
     const session = this.session();
     if (!session) return 0;
     if (to !== "/dashboard/qualite") return 0;
-    const q = qualityCounts(this.store.state());
+    const seesAlerts = can(session, "alert.manage") || can(session, "quality.review");
+    const q = qualityCounts(this.store.state(), seesAlerts ? this.cniAlerts.openCount() : 0);
     return (
       (can(session, "quality.review") ? q.doublons : 0) +
-      (can(session, "alert.manage") ? q.alertes : 0) +
+      (seesAlerts ? q.alertes : 0) +
       (can(session, "correction.manage") ? q.corrections : 0)
     );
   };
 
   constructor() {
+    effect(() => {
+      if (this.cniAlerts.canView()) untracked(() => void this.cniAlerts.refresh());
+    });
     afterNextRender(() => {
       if (typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent)) {
         this.modKey.set("⌘");

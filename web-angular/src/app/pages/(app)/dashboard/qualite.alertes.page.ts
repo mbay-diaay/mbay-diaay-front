@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from "@angular/core";
+import { Component, computed, effect, inject, signal, untracked } from "@angular/core";
 import { RouterLink } from "@angular/router";
 
 import { AccessDeniedError, inScope } from "@/lib/store";
@@ -6,7 +6,18 @@ import { isApiMode } from "@/lib/api/config";
 import { alertDraft, sheetDraft } from "@/lib/coop-request-templates";
 import type { CoopRequestKind } from "@/lib/api/coop-requests";
 import { describeSource, sourceOfProducer, type DataSource } from "@/lib/data-source";
-import { nf } from "@/lib/format";
+import { fmtDate, nf } from "@/lib/format";
+import { fetchAllPages } from "@/lib/api/pagination";
+import {
+  ALERT_REASON_KEY,
+  alertErrorKey,
+  detectCloseCni,
+  listQualityAlerts,
+  QUALITY_ALERT_KINDS,
+  type QualityAlertDto,
+  type QualityAlertKind,
+  type QualityAlertStatus,
+} from "@/lib/api/quality-alerts";
 import {
   collectQualityPoints,
   explainAlert,
@@ -15,7 +26,10 @@ import {
 } from "@/lib/quality-real";
 import type { AlertStatus, DataAlert } from "@/lib/mock/data";
 import type { MessageKey } from "@/lib/i18n";
+import type { Permission } from "@/lib/permissions";
 import { AppShellComponent } from "@shared/app-shell.component";
+import { CniAlertsService } from "@shared/cni-alerts.service";
+import { CniResolveModalComponent } from "@shared/cni-resolve-modal.component";
 import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
 import { StoreService } from "@shared/store.service";
@@ -73,6 +87,7 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
   selector: "app-qualite-alertes-page",
   imports: [
     AppShellComponent,
+    CniResolveModalComponent,
     ContactScoopModalComponent,
     IconComponent,
     ModalComponent,
@@ -115,6 +130,43 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
         accent-color: var(--v2-foret);
         cursor: pointer;
       }
+      .cni-head {
+        border-bottom: 1px solid var(--v2-separateur);
+      }
+      .cni-dot {
+        display: inline-grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        background: var(--v2-erreur-bg);
+        color: var(--v2-erreur-fg);
+      }
+      .cni-explain {
+        max-width: 66ch;
+        border-radius: 16px;
+        background: var(--v2-info-bg);
+        color: var(--v2-info-fg);
+        padding: 12px 14px;
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 1.5;
+      }
+      .cni-pill.format {
+        background: var(--v2-attente-bg);
+        color: var(--v2-attente-fg);
+      }
+      .cni-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 800;
+        background: var(--v2-erreur-bg);
+        color: var(--v2-erreur-fg);
+      }
       .act-ok:hover {
         border-color: var(--v2-vert-pousse);
         background: var(--v2-sauge);
@@ -123,7 +175,7 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
     `,
   ],
   template: `
-    <app-shell perm="alert.manage" [area]="t()('qualite.alertes.area')">
+    <app-shell [perm]="pagePerms" [area]="t()('qualite.alertes.area')">
       <header class="rise">
         <p class="mono" style="color: var(--v2-gris-texte)">{{ t()("qualite.header.title") }}</p>
         <h1
@@ -306,7 +358,151 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
       </section>
 
       } @else {
-        <!-- Mode API : points signalés par le CRADESC à l'import Kobo (données réelles) -->
+        <!-- Mode API : alertes rouges « CNI proches : à vérifier », enregistrées sur le serveur -->
+        @if (cniAlerts.canView()) {
+          <section class="card mt-6 overflow-hidden" aria-labelledby="cni-alerts-title">
+            <div class="cni-head p-5">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 id="cni-alerts-title" class="flex items-center gap-2 text-[20px] font-extrabold">
+                  <span class="cni-dot" aria-hidden="true"><ui-icon name="warning" [size]="18" /></span>{{ t()("cni.page.title") }}
+                </h2>
+                <div class="flex flex-wrap items-center gap-2">
+                  <ui-select
+                    class="min-w-[180px]"
+                    variant="compact"
+                    leadingIcon="warning"
+                    [label]="t()('cni.filter.kind')"
+                    [options]="cniKindOptions()"
+                    [value]="cniKind()"
+                    (valueChange)="cniKind.set($any($event))"
+                  />
+                  <ui-select
+                    class="min-w-[180px]"
+                    variant="compact"
+                    leadingIcon="fact_check"
+                    [label]="t()('cni.filter.status')"
+                    [options]="cniStatusOptions()"
+                    [value]="cniStatus()"
+                    (valueChange)="cniStatus.set($any($event))"
+                  />
+                  @if (canDetect()) {
+                    <button type="button" class="btn btn-ghost" [disabled]="cniBusy()" (click)="runDetection()">
+                      <ui-icon name="refresh" [size]="18" />{{ t()("cni.action.detect") }}
+                    </button>
+                  }
+                </div>
+              </div>
+              @if (cniKind() !== "cni_format_inhabituel") {
+                <p class="cni-explain mt-3">{{ t()("cni.explain.body") }}</p>
+              }
+              @if (cniKind() !== "cni_proches") {
+                <p class="cni-explain mt-3">{{ t()("cni.format.message") }}</p>
+              }
+              <p class="sub mt-3" aria-live="polite">
+                {{ t()("cni.page.stat", { open: nf.format(cniOpen()), high: nf.format(cniOpenHigh()) }) }}
+              </p>
+            </div>
+            @if (cniFailed()) {
+              <div class="flex flex-col items-center gap-3 p-10 text-center">
+                <p class="max-w-md text-[16px] font-extrabold">{{ t()("cni.page.loadError") }}</p>
+                <button type="button" class="btn btn-ghost" (click)="loadCniAlerts()">{{ t()("cni.page.retry") }}</button>
+              </div>
+            } @else if (cniRows().length) {
+              <div class="overflow-x-auto">
+                <table class="tbl min-w-[900px]">
+                  <thead>
+                    <tr>
+                      <th>{{ t()("cni.col.fiches") }}</th>
+                      <th>{{ t()("cni.col.scoop") }}</th>
+                      <th>{{ t()("cni.col.reason") }}</th>
+                      <th>{{ t()("cni.col.status") }}</th>
+                      <th>{{ t()("cni.col.detected") }}</th>
+                      <th class="text-right">{{ t()("organisations.col.actions") }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (alert of cniPager.items(); track alert.id) {
+                      <tr>
+                        <td>
+                          <span class="flex flex-wrap items-center gap-2">
+                            <a class="code font-bold underline" [routerLink]="['/dashboard/producteurs', alert.producerId]">{{
+                              alert.producerCode ?? alert.producerId
+                            }}</a>
+                            @if (alert.kind === "cni_proches") {
+                              <ui-icon name="arrow_forward" [size]="14" />
+                              @if (alert.otherProducerId) {
+                                <a class="code font-bold underline" [routerLink]="['/dashboard/producteurs', alert.otherProducerId]">{{
+                                  alert.otherProducerCode ?? alert.otherProducerId
+                                }}</a>
+                              } @else {
+                                <span class="sub">{{ t()("cni.otherHidden") }}</span>
+                              }
+                            }
+                          </span>
+                          @if (alert.kind === "cni_proches") {
+                            <span class="cni-pill mt-1"><ui-icon name="warning" [size]="12" />{{ t()("cni.badge") }}</span>
+                          } @else {
+                            <span class="cni-pill format mt-1"><ui-icon name="info" [size]="12" />{{ t()("cni.format.badge") }}</span>
+                          }
+                        </td>
+                        <td class="font-medium">{{ scoopName(alert.scoopId) }}</td>
+                        <td class="font-medium">{{ t()(reasonKey(alert)) }}</td>
+                        <td>
+                          <span
+                            class="badge"
+                            [style.background]="cniStatusTone[alert.status].bg"
+                            [style.color]="cniStatusTone[alert.status].fg"
+                            >{{ t()(cniStatusLabel[alert.status]) }}</span
+                          >
+                        </td>
+                        <td class="font-medium tabular-nums">{{ date(alert.detectedAt) }}</td>
+                        <td>
+                          <span class="flex justify-end gap-2">
+                            @if (alert.status === "ouverte") {
+                              @if (canContact()) {
+                                <button
+                                  type="button"
+                                  class="act"
+                                  [title]="t()('cni.action.ask')"
+                                  [attr.aria-label]="t()('cni.action.ask')"
+                                  (click)="askAboutCni(alert)"
+                                >
+                                  <ui-icon name="mail" [size]="18" />
+                                </button>
+                              }
+                              <button
+                                type="button"
+                                class="act act-ok"
+                                [title]="t()('cni.action.resolve')"
+                                [attr.aria-label]="t()('cni.action.resolve')"
+                                (click)="cniResolving.set(alert)"
+                              >
+                                <ui-icon name="check" [size]="18" />
+                              </button>
+                            }
+                          </span>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <ui-pagination class="px-5 pb-5" [pager]="cniPager" />
+            } @else {
+              <div class="flex flex-col items-center gap-3 p-10 text-center">
+                <span
+                  class="grid size-14 place-items-center rounded-[16px]"
+                  style="background: var(--v2-sauge); color: var(--v2-foret)"
+                  ><ui-icon name="task_alt" [size]="26"
+                /></span>
+                <p class="max-w-md text-[16px] font-extrabold">{{ t()("cni.page.empty") }}</p>
+              </div>
+            }
+          </section>
+          <app-cni-resolve-modal [alert]="cniResolving()" (closed)="cniResolving.set(null)" (resolved)="afterCniResolved()" />
+        }
+
+        <!-- Points signalés par le CRADESC à l'import Kobo (données réelles) -->
         <div class="toolbar card mt-6">
           <label class="search">
             <ui-icon name="search" [size]="20" />
@@ -580,6 +776,125 @@ export default class QualiteAlertesPage {
   /** Mode API : liste réelle des points signalés à l'import (jamais de donnée de démonstration). */
   protected readonly apiMode = isApiMode();
   protected readonly scoopFilter = signal("");
+
+  // ── Alertes rouges « CNI proches : à vérifier » : lues sur le serveur, jamais calculées ici ──
+  protected readonly pagePerms: readonly Permission[] = ["alert.manage", "quality.review"];
+  protected readonly cniAlerts = inject(CniAlertsService);
+  protected readonly cniItems = signal<QualityAlertDto[]>([]);
+  protected readonly cniOpen = signal(0);
+  protected readonly cniOpenHigh = signal(0);
+  protected readonly cniFailed = signal(false);
+  protected readonly cniBusy = signal(false);
+  protected readonly cniStatus = signal<QualityAlertStatus | "">("ouverte");
+  protected readonly cniKind = signal<QualityAlertKind | "">("");
+  protected readonly cniKindOptions = computed<SelectOption[]>(() => [
+    { value: "", label: this.t()("cni.kind.all") },
+    ...QUALITY_ALERT_KINDS.map((kind) => ({ value: kind, label: this.t()(`cni.kind.${kind}` as MessageKey) })),
+  ]);
+  protected readonly cniResolving = signal<QualityAlertDto | null>(null);
+  protected readonly cniStatusLabel: Record<QualityAlertStatus, MessageKey> = {
+    ouverte: "cni.status.ouverte",
+    résolue: "cni.status.résolue",
+    obsolète: "cni.status.obsolète",
+  };
+  protected readonly cniStatusTone: Record<QualityAlertStatus, { bg: string; fg: string }> = {
+    ouverte: TONE.erreur,
+    résolue: TONE.succes,
+    obsolète: TONE.neutre,
+  };
+  protected readonly cniStatusOptions = computed<SelectOption[]>(() => [
+    { value: "", label: this.t()("cni.status.all") },
+    ...(["ouverte", "résolue", "obsolète"] as const).map((status) => ({
+      value: status,
+      label: this.t()(this.cniStatusLabel[status]),
+    })),
+  ]);
+  protected readonly cniRows = computed(() => {
+    const status = this.cniStatus();
+    const kind = this.cniKind();
+    return this.cniItems().filter((alert) => (!status || alert.status === status) && (!kind || alert.kind === kind));
+  });
+  protected readonly cniPager = createPager(() => this.cniRows());
+  /** La détection compare toutes les coopératives : droit `quality.review` (le serveur exige en plus le périmètre complet). */
+  protected readonly canDetect = computed(() => this.store.can("quality.review"));
+  protected readonly date = fmtDate;
+
+  private readonly _loadCni = effect(() => {
+    if (this.apiMode && this.cniAlerts.canView()) untracked(() => void this.loadCniAlerts());
+  });
+
+  protected reasonKey(alert: QualityAlertDto): MessageKey {
+    return ALERT_REASON_KEY[alert.reason];
+  }
+
+  protected async loadCniAlerts(): Promise<void> {
+    try {
+      const page = await listQualityAlerts({ limit: 1 });
+      this.cniOpen.set(page.open);
+      this.cniOpenHigh.set(page.openHigh);
+      this.cniItems.set(await fetchAllPages<QualityAlertDto>((query) => listQualityAlerts(query)));
+      this.cniFailed.set(false);
+    } catch {
+      this.cniItems.set([]);
+      this.cniFailed.set(true);
+    }
+  }
+
+  protected afterCniResolved(): void {
+    void this.loadCniAlerts();
+    void this.cniAlerts.refresh();
+  }
+
+  protected async runDetection(): Promise<void> {
+    if (this.cniBusy()) return;
+    this.cniBusy.set(true);
+    try {
+      const result = await detectCloseCni();
+      this.snackbar.success(
+        result.format
+          ? this.t()("cni.detect.doneFormat", { created: result.created, formatCreated: result.format.created })
+          : this.t()("cni.detect.done", { created: result.created, reopened: result.reopened, obsolete: result.obsolete }),
+      );
+      await this.loadCniAlerts();
+      await this.cniAlerts.refresh();
+    } catch (error) {
+      this.snackbar.error(this.t()(alertErrorKey(error)));
+    } finally {
+      this.cniBusy.set(false);
+    }
+  }
+
+  /** Demande type « CNI proches à vérifier » à la coopérative (permission `coop_request.send`). Codes de fiche seulement. */
+  protected askAboutCni(alert: QualityAlertDto): void {
+    const code = alert.producerCode ?? alert.producerId;
+    if (alert.kind === "cni_format_inhabituel") {
+      this.contactKind.set("fiche");
+      this.contactTargets.set([
+        {
+          scoopId: alert.scoopId,
+          items: [{ type: "producer", id: alert.producerId, label: code }],
+          subject: this.t()("cni.format.ask.subject", { code }),
+          message: this.t()("cni.format.ask.message", { code }),
+        },
+      ]);
+      return;
+    }
+    const other = alert.otherProducerCode;
+    const items: CoopRequestTarget["items"] = [{ type: "producer", id: alert.producerId, label: code }];
+    if (alert.otherProducerId && alert.otherScoopId === alert.scoopId)
+      items.push({ type: "producer", id: alert.otherProducerId, label: other ?? alert.otherProducerId });
+    this.contactKind.set("cni_proches");
+    this.contactTargets.set([
+      {
+        scoopId: alert.scoopId,
+        items,
+        subject: this.t()("cni.ask.subject", { code }),
+        message: other
+          ? this.t()("cni.ask.message", { code, other })
+          : this.t()("cni.ask.messageOne", { code }),
+      },
+    ]);
+  }
   protected readonly kindFilter = signal("");
   protected readonly qualityFilter = signal("");
   protected readonly kindLabel: Record<QualityPointKind, MessageKey> = {

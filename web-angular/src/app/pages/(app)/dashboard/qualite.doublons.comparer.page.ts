@@ -1,32 +1,26 @@
-import { Component, computed, inject, signal } from "@angular/core";
+import { Component, computed, effect, inject, signal, untracked } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, RouterLink } from "@angular/router";
 import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
-import { describeSource, sourceOfGroup, sourceOfProducer, type DataSource } from "@/lib/data-source";
+import { describeSource, describeSourcePlace, sourceOfGroup, sourceOfProducer, type DataSource } from "@/lib/data-source";
+import { compareProducers, correctProducerOnApi, producerApiMessage, type ProducerCorrection, type StrictComparison } from "@/lib/api/producers";
 import { duplicateDraft, groupByScoop, producerItem } from "@/lib/coop-request-templates";
 import { fmtAge, fmtDate, maskCni, nf, nf1 } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
 import type { Plot, Producer } from "@/lib/mock/data";
-import {
-  buildCompareRow,
-  closePlotPairs,
-  similarityReasons,
-  summarizeRows,
-  verdictOf,
-  type CompareRow,
-  type SimilarityReason,
-} from "@/lib/producer-compare";
+import { buildCompareRow, closePlotPairs, similarityReasons, type SimilarityReason } from "@/lib/producer-compare";
 import { producerAlertTexts, type DuplicateGroup } from "@/lib/quality-real";
 import { inScope } from "@/lib/scope";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
 import { MergeProducersModalComponent } from "@shared/merge-producers-modal.component";
+import { PlacementBadgeComponent } from "@shared/placement-badge.component";
 import { PlotMapComponent } from "@shared/plot-map.component";
 import { StoreService } from "@shared/store.service";
-import { IconComponent, initialsOf, TONE, V2_PAGE_STYLES } from "@shared/ui";
+import { IconComponent, initialsOf, SelectComponent, SnackbarService, TONE, V2_PAGE_STYLES, type SelectOption } from "@shared/ui";
 
 /** Nombre maximal de fiches comparées côte à côte. */
 const MAX_COMPARED = 4;
@@ -35,7 +29,6 @@ const LETTERS = ["A", "B", "C", "D"];
 const SHEET_COLORS = ["--v2-foret", "--v2-info-fg", "--v2-attente-fg", "--v2-erreur-fg"];
 
 const REASON_LABEL: Record<SimilarityReason, MessageKey> = {
-  cni: "qualite.compare.reason.cni",
   name: "qualite.compare.reason.name",
   phone: "qualite.compare.reason.phone",
 };
@@ -68,6 +61,36 @@ interface Sheet {
   plotAlerts: { place: string; text: string }[];
 }
 
+/** Résultat de la comparaison stricte d'une paire de fiches (`GET /producers/:keepId/compare`). */
+type PairResult = { firstId: string; secondId: string; result: StrictComparison };
+
+/** `loading` : en cours ; `error` : le serveur n'a pas répondu (la fusion reste bloquée) ; `done` : toutes les paires sont connues. */
+type CompareState = "idle" | "loading" | "error" | "done";
+
+/** `different` : le serveur dit que le champ diffère ; `same` : il ne diffère pas ; `info` : information non comparée. */
+type RowState = "same" | "different" | "info";
+
+interface StrictRow {
+  label: string;
+  values: string[];
+  state: RowState;
+}
+
+/** Champs d'une fiche que `PATCH /producers/:id` sait corriger (la CNI, la coopérative et les parcelles n'en font pas partie). */
+type FixField = "firstName" | "lastName" | "sex" | "age" | "phone" | "village" | "status" | "handicap" | "orgId";
+const FIX_FIELDS: readonly FixField[] = ["firstName", "lastName", "sex", "age", "phone", "village", "status", "handicap", "orgId"];
+const FIX_LABEL: Record<FixField, MessageKey> = {
+  firstName: "qualite.strict.field.firstName",
+  lastName: "qualite.strict.field.lastName",
+  sex: "qualite.strict.field.sex",
+  age: "qualite.strict.field.age",
+  phone: "qualite.strict.field.phone",
+  village: "qualite.strict.field.village",
+  status: "qualite.strict.field.status",
+  handicap: "qualite.strict.field.handicap",
+  orgId: "qualite.strict.field.orgId",
+};
+
 /**
  * Comparer les fiches (mode API) : fiches d'un groupe de doublons côte à côte, tableau champ par champ
  * (identique / différent), parcelles sur la carte, points signalés, puis décision (fusion ou non).
@@ -80,8 +103,10 @@ interface Sheet {
     ContactScoopModalComponent,
     IconComponent,
     MergeProducersModalComponent,
+    PlacementBadgeComponent,
     PlotMapComponent,
     RouterLink,
+    SelectComponent,
   ],
   styles: [
     V2_PAGE_STYLES,
@@ -225,8 +250,30 @@ interface Sheet {
         background: color-mix(in oklab, var(--v2-attente-bg) 70%, transparent);
         font-weight: 800;
       }
-      .cmp tr.missing td.v {
+      .cmp tr.info td.v {
         color: var(--v2-gris-texte);
+      }
+      .fix-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        padding: 0 20px 8px;
+      }
+      .fix-input {
+        height: 52px;
+        width: 100%;
+        border-radius: 16px;
+        border: 1.5px solid var(--v2-gris-trait);
+        background: var(--v2-blanc);
+        padding: 0 16px;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--v2-encre);
+      }
+      .fix-input:focus-visible {
+        outline: none;
+        border: 2px solid var(--v2-foret);
+        box-shadow: var(--v2-halo);
       }
       .cell {
         display: inline-flex;
@@ -374,13 +421,18 @@ interface Sheet {
       } @else {
         <div class="stack mt-6">
           <!-- Verdict -->
-          <div class="verdict rise" [class]="'v-' + verdict().kind" role="note">
+          <div class="verdict rise" [class]="verdictClass()" role="note" aria-live="polite">
             <span class="verdict-ico" aria-hidden="true"
-              ><ui-icon [name]="verdict().kind === 'same' ? 'task_alt' : verdict().kind === 'partial' ? 'warning' : 'info'" [size]="26"
+              ><ui-icon [name]="verdictIcon()" [size]="26"
             /></span>
             <div class="min-w-0">
               <p class="verdict-titre">{{ verdictTitle() }}</p>
               <p class="verdict-texte">{{ verdictBody() }}</p>
+              @if (compareState() === "error") {
+                <button type="button" class="btn btn-ghost mt-3" (click)="rerun()">
+                  <ui-icon name="refresh" [size]="18" />{{ t()("qualite.strict.retry") }}
+                </button>
+              }
             </div>
           </div>
 
@@ -416,9 +468,10 @@ interface Sheet {
                     class="badge"
                     [style.background]="source.bg"
                     [style.color]="source.fg"
-                    [title]="sourceDetail(source)"
+                    [title]="sourceDetail(source) + sourcePlace(sheet.producer)"
                     ><ui-icon [name]="source.icon" [size]="14" />{{ t()(source.labelKey) }}</span
                   >
+                  <app-placement-badge [record]="sheet.producer" />
                 </div>
                 <ul class="sheet-facts">
                   <li><ui-icon name="home_work" [size]="16" /><span>{{ scoopName(sheet.producer.scoopId) }}</span></li>
@@ -441,13 +494,15 @@ interface Sheet {
               </h2>
             </div>
             <div class="summary">
-              <span class="badge" style="background: var(--v2-sauge); color: var(--v2-vert-pousse)">
-                <ui-icon name="check" [size]="14" />{{ summaryText() }}
-              </span>
+              @if (compareState() === "done") {
+                <span class="badge" style="background: var(--v2-sauge); color: var(--v2-vert-pousse)">
+                  <ui-icon name="check" [size]="14" />{{ summaryText() }}
+                </span>
+              }
               <div class="legend" aria-hidden="true">
-                <span><i style="background: var(--v2-sauge)"></i>{{ t()("qualite.compare.table.legendSame") }}</span>
-                <span><i style="background: var(--v2-attente-bg)"></i>{{ t()("qualite.compare.table.legendDifferent") }}</span>
-                <span><i style="background: var(--v2-blanc)"></i>{{ t()("qualite.compare.table.legendMissing") }}</span>
+                <span><i style="background: var(--v2-sauge)"></i>{{ t()("qualite.strict.legend.same") }}</span>
+                <span><i style="background: var(--v2-attente-bg)"></i>{{ t()("qualite.strict.legend.differ") }}</span>
+                <span><i style="background: var(--v2-blanc)"></i>{{ t()("qualite.strict.legend.info") }}</span>
               </div>
             </div>
             <div class="overflow-x-auto">
@@ -481,14 +536,21 @@ interface Sheet {
                     }
                   </tr>
                   @for (row of rows(); track row.label) {
-                    <tr [class]="row.status">
-                      <td class="field">{{ row.label }}</td>
+                    <tr [class]="row.state">
+                      <td class="field">
+                        {{ row.label }}
+                        @if (row.state === "different") {
+                          <span class="badge ml-2" style="background: var(--v2-attente-bg); color: var(--v2-attente-fg)">{{
+                            t()("qualite.strict.row.differ")
+                          }}</span>
+                        }
+                      </td>
                       @for (value of row.values; track $index) {
                         <td class="v">
                           <span class="cell">
-                            @if (row.status === "same") {
+                            @if (row.state === "same") {
                               <ui-icon name="check_circle" [size]="16" style="color: var(--v2-vert-pousse)" />
-                            } @else if (row.status === "different") {
+                            } @else if (row.state === "different") {
                               <ui-icon name="warning" [size]="16" style="color: var(--v2-attente-fg)" />
                             }
                             <span>{{ value || "—" }}</span>
@@ -506,7 +568,7 @@ interface Sheet {
               </p>
             }
             <p class="sub px-5 py-3" style="border-top: 1px solid var(--v2-separateur)">
-              {{ t()("qualite.compare.masked") }}
+              {{ t()("qualite.compare.masked") }} {{ t()("qualite.strict.table.hint") }}
             </p>
           </section>
 
@@ -610,6 +672,75 @@ interface Sheet {
             </div>
           </section>
 
+          <!-- Corriger avant de fusionner -->
+          @if (compareState() === "done" && !allIdentical()) {
+            <section class="sec-card">
+              <div class="sec-head">
+                <h2>
+                  <span class="sec-ico"><ui-icon name="edit" [size]="18" /></span
+                  >{{ t()("qualite.strict.fix.title") }}
+                </h2>
+              </div>
+              <p class="sub max-w-3xl px-5 pb-4">{{ t()("qualite.strict.fix.intro") }}</p>
+              @if (canFix()) {
+                <div class="fix-grid">
+                  <div>
+                    <p class="lbl">{{ t()("qualite.strict.fix.sheet") }}</p>
+                    <ui-select
+                      class="mt-2 block"
+                      [label]="t()('qualite.strict.fix.sheet')"
+                      [options]="fixSheetOptions()"
+                      [value]="fixSheetId()"
+                      (valueChange)="fixSheetId.set($event)"
+                    />
+                  </div>
+                  <div>
+                    <p class="lbl">{{ t()("qualite.strict.fix.field") }}</p>
+                    <ui-select
+                      class="mt-2 block"
+                      [label]="t()('qualite.strict.fix.field')"
+                      [options]="fixFieldOptions()"
+                      [value]="fixField()"
+                      (valueChange)="chooseFixField($event)"
+                    />
+                  </div>
+                  <div>
+                    <label class="lbl" for="fix-value">{{ t()("qualite.strict.fix.value") }}</label>
+                    @if (fixChoices(); as choices) {
+                      <ui-select
+                        class="mt-2 block"
+                        [label]="t()('qualite.strict.fix.value')"
+                        [options]="choices"
+                        [value]="fixValue()"
+                        (valueChange)="fixValue.set($event)"
+                      />
+                    } @else {
+                      <input
+                        id="fix-value"
+                        class="fix-input mt-2"
+                        [type]="fixField() === 'age' ? 'number' : 'text'"
+                        [attr.inputmode]="fixField() === 'age' ? 'numeric' : null"
+                        [placeholder]="t()('qualite.strict.fix.valuePlaceholder')"
+                        [value]="fixValue()"
+                        (input)="fixValue.set($any($event.target).value)"
+                      />
+                    }
+                  </div>
+                </div>
+                <p class="sub px-5 pb-3 pt-2">{{ t()("qualite.strict.fix.elsewhere") }}</p>
+                <div class="decision-actions">
+                  <span class="sub" role="alert">{{ fixError() }}</span>
+                  <button type="button" class="btn btn-primary" [disabled]="fixBusy()" (click)="saveFix()">
+                    {{ fixBusy() ? t()("qualite.strict.fix.saving") : t()("qualite.strict.fix.save")
+                    }}<span class="btn-chip"><ui-icon name="check" [size]="18" /></span>
+                  </button>
+                </div>
+              } @else {
+                <p class="sub px-5 pb-5">{{ t()("qualite.strict.fix.noPerm") }}</p>
+              }
+            </section>
+          }
+
           <!-- Décision -->
           <section class="sec-card decision">
             <div class="sec-head">
@@ -628,8 +759,8 @@ interface Sheet {
             </div>
             <div class="decision-actions">
               <div class="min-w-0">
-                @if (verdict().kind === "different") {
-                  <p class="sub max-w-md">{{ t()("qualite.compare.decision.notDuplicatesHint") }}</p>
+                @if (compareState() === "done" && !allIdentical()) {
+                  <p class="sub max-w-md">{{ t()("qualite.strict.differHint") }}</p>
                 }
               </div>
               <div class="flex flex-wrap justify-end gap-2">
@@ -641,11 +772,11 @@ interface Sheet {
                 <a class="btn btn-ghost" routerLink="/dashboard/qualite/doublons">{{
                   t()("qualite.compare.decision.notDuplicates")
                 }}</a>
-                @for (subset of mergeableSubsets(); track subset[0]!.id) {
-                  <button type="button" class="btn btn-primary" (click)="openMerge(subset)">
+                @for (action of mergeActions(); track action.subset[0]!.id) {
+                  <button type="button" class="btn btn-primary" [disabled]="!action.enabled" (click)="openMerge(action.subset)">
                     <ui-icon name="hub" [size]="18" />{{ t()("qualite.compare.decision.merge") }}
-                    @if (mergeableSubsets().length > 1) {
-                      <span>· {{ codes(subset) }}</span>
+                    @if (mergeActions().length > 1) {
+                      <span>· {{ codes(action.subset) }}</span>
                     }
                     <span class="btn-chip"><ui-icon name="arrow_forward" [size]="18" /></span>
                   </button>
@@ -737,7 +868,6 @@ export default class QualiteDoublonsComparerPage {
     });
   });
 
-  protected readonly verdict = computed(() => verdictOf(this.members()));
   protected readonly reasons = computed(() => similarityReasons(this.members()));
 
   protected readonly subtitle = computed(() => {
@@ -749,52 +879,165 @@ export default class QualiteDoublonsComparerPage {
     return t("qualite.compare.subtitle", { n: this.members().length, reasons: text });
   });
 
-  protected readonly verdictTitle = computed(() => this.t()(`qualite.compare.verdict.${this.verdict().kind}`));
+  // ───────────────────────── Comparaison stricte (serveur) ─────────────────────────
+  // Règle Q-02 : deux fiches ne se fusionnent que si TOUTES leurs informations sont strictement identiques. Seul le
+  // serveur le dit (`GET /producers/:keepId/compare`) : le site n'en déduit rien de ce qu'il affiche (valeurs masquées).
+
+  protected readonly compareState = signal<CompareState>("idle");
+  private readonly pairResults = signal<PairResult[]>([]);
+  private readonly rerunTick = signal(0);
+  private runToken = 0;
+
+  /** Relance la comparaison (après une correction, ou après un échec réseau). */
+  protected rerun(): void {
+    this.rerunTick.update((tick) => tick + 1);
+  }
+
+  private readonly compareTrigger = effect(() => {
+    const ids = this.members().map((member) => member.id);
+    this.rerunTick();
+    untracked(() => void this.runComparison(ids));
+  });
+
+  private async runComparison(ids: string[]): Promise<void> {
+    const token = ++this.runToken;
+    if (!this.apiMode || ids.length < 2) {
+      this.pairResults.set([]);
+      this.compareState.set("idle");
+      return;
+    }
+    this.compareState.set("loading");
+    const pairs: [string, string][] = [];
+    for (let first = 0; first < ids.length; first += 1) {
+      for (let second = first + 1; second < ids.length; second += 1) pairs.push([ids[first]!, ids[second]!]);
+    }
+    try {
+      const results = await Promise.all(
+        pairs.map(async ([firstId, secondId]) => ({ firstId, secondId, result: await compareProducers(firstId, secondId) })),
+      );
+      if (token !== this.runToken) return;
+      this.pairResults.set(results);
+      this.compareState.set("done");
+    } catch {
+      if (token !== this.runToken) return;
+      this.pairResults.set([]);
+      this.compareState.set("error");
+    }
+  }
+
+  /** Clés des champs que le serveur dit différents, sur au moins une paire. */
+  private readonly differingKeys = computed(
+    () => new Set(this.pairResults().flatMap((pair) => pair.result.fields.map((field) => field.key))),
+  );
+
+  /** Libellés (français, donnés par le serveur) des champs qui diffèrent, sans doublon. */
+  private readonly differingLabels = computed(() => {
+    const seen = new Map<string, string>();
+    for (const pair of this.pairResults()) for (const field of pair.result.fields) seen.set(field.key, field.label);
+    return [...seen.values()];
+  });
+
+  /** Ensembles de fiches strictement identiques entre elles (l'identité stricte est transitive), deux fiches au moins. */
+  private readonly identicalClasses = computed<Producer[][]>(() => {
+    const members = this.members();
+    const parent = new Map(members.map((member) => [member.id, member.id]));
+    const find = (id: string): string => {
+      let root = id;
+      while (parent.get(root) !== root) root = parent.get(root)!;
+      return root;
+    };
+    for (const pair of this.pairResults()) {
+      if (pair.result.identical) parent.set(find(pair.firstId), find(pair.secondId));
+    }
+    const groups = new Map<string, Producer[]>();
+    for (const member of members) {
+      const root = find(member.id);
+      groups.set(root, [...(groups.get(root) ?? []), member]);
+    }
+    return [...groups.values()].filter((group) => group.length > 1);
+  });
+
+  /** Toutes les paires sont identiques : seule situation où tout peut se fusionner d'un coup. */
+  protected readonly allIdentical = computed(
+    () => this.compareState() === "done" && this.pairResults().length > 0 && this.pairResults().every((pair) => pair.result.identical),
+  );
+
+  private readonly verdictKind = computed<"checking" | "error" | "identical" | "partial" | "differ">(() => {
+    const state = this.compareState();
+    if (state === "loading" || state === "idle") return "checking";
+    if (state === "error") return "error";
+    if (this.allIdentical()) return "identical";
+    return this.identicalClasses().length ? "partial" : "differ";
+  });
+
+  protected readonly verdictClass = computed(() => {
+    const kind = this.verdictKind();
+    return kind === "identical" ? "v-same" : kind === "partial" ? "v-partial" : "v-different";
+  });
+
+  protected readonly verdictIcon = computed<"task_alt" | "warning" | "info">(() => {
+    const kind = this.verdictKind();
+    return kind === "identical" ? "task_alt" : kind === "checking" ? "info" : "warning";
+  });
+
+  protected readonly verdictTitle = computed(() => this.t()(`qualite.strict.verdict.${this.verdictKind()}`));
 
   protected readonly verdictBody = computed(() => {
     const t = this.t();
-    const { kind, subsets } = this.verdict();
-    if (kind === "partial") {
-      return t("qualite.compare.verdict.partialBody", { codes: subsets.map((subset) => this.codes(subset)).join(" / ") });
+    const kind = this.verdictKind();
+    if (kind === "differ") {
+      return t("qualite.strict.verdict.differBody", { hint: t("qualite.strict.differHint"), fields: this.differingLabels().join(", ") });
     }
-    return t(`qualite.compare.verdict.${kind}Body`);
+    if (kind === "partial") {
+      return t("qualite.strict.verdict.partialBody", { codes: this.identicalClasses().map((group) => this.codes(group)).join(" / ") });
+    }
+    return t(`qualite.strict.verdict.${kind}Body`);
   });
 
-  protected readonly rows = computed<CompareRow[]>(() => {
+  protected readonly rows = computed<StrictRow[]>(() => {
     const t = this.t();
     const state = this.store.state();
     const sheets = this.sheets();
-    const row = (label: string, value: (sheet: Sheet) => string | null | undefined) =>
-      buildCompareRow(label, sheets.map(value));
+    const compared = this.compareState() === "done";
+    const differing = this.differingKeys();
+    // `keys` : champs du serveur couverts par la ligne ; vide = information non comparée (pas de couleur).
+    const row = (label: string, keys: string[], value: (sheet: Sheet) => string | null | undefined): StrictRow => {
+      const built = buildCompareRow(label, sheets.map(value));
+      const rowState: RowState = !keys.length || !compared ? "info" : keys.some((key) => differing.has(key)) ? "different" : "same";
+      return { label: built.label, values: built.values, state: rowState };
+    };
     return [
-      row(t("qualite.doublons.row.name"), (sheet) => `${sheet.producer.firstName} ${sheet.producer.lastName}`),
-      row(t("qualite.doublons.row.code"), (sheet) => sheet.producer.code),
-      row(t("qualite.doublons.row.scoop"), (sheet) => this.scoopName(sheet.producer.scoopId)),
-      row(
-        t("qualite.compare.row.org"),
-        (sheet) => state.orgs.find((org) => org.id === sheet.producer.orgId)?.name ?? "",
+      row(t("qualite.strict.field.firstName"), ["firstName"], (sheet) => sheet.producer.firstName),
+      row(t("qualite.strict.field.lastName"), ["lastName"], (sheet) => sheet.producer.lastName),
+      row(t("qualite.doublons.row.code"), [], (sheet) => sheet.producer.code),
+      row(t("qualite.doublons.row.scoop"), ["scoopId"], (sheet) => this.scoopName(sheet.producer.scoopId)),
+      row(t("qualite.compare.row.org"), ["orgId"], (sheet) => state.orgs.find((org) => org.id === sheet.producer.orgId)?.name ?? ""),
+      row(t("qualite.doublons.row.village"), ["village"], (sheet) => sheet.producer.village),
+      row(t("qualite.doublons.row.sex"), ["sex"], (sheet) => sheet.producer.sex),
+      row(t("qualite.doublons.row.age"), ["age"], (sheet) => (sheet.producer.age === null ? "" : fmtAge(sheet.producer.age))),
+      row(t("qualite.strict.field.handicap"), ["handicap"], (sheet) =>
+        t(sheet.producer.handicap ? "qualite.strict.fix.yes" : "qualite.strict.fix.no"),
       ),
-      row(t("qualite.doublons.row.village"), (sheet) => sheet.producer.village),
-      row(t("qualite.doublons.row.sex"), (sheet) => sheet.producer.sex),
-      row(t("qualite.doublons.row.age"), (sheet) => (sheet.producer.age === null ? "" : fmtAge(sheet.producer.age))),
-      row(t("qualite.compare.row.status"), (sheet) => t(STATUS_LABEL[sheet.producer.status])),
-      row(t("qualite.compare.row.quality"), (sheet) => t(QUALITY_LABEL[sheet.producer.quality])),
-      row(t("qualite.doublons.row.phone"), (sheet) => this.store.phone(sheet.producer.phone)),
-      row(t("qualite.doublons.row.cni"), (sheet) => this.maskedCni(sheet.producer.cni)),
-      row(t("qualite.doublons.row.enumerator"), (sheet) => sheet.producer.enumerator),
-      row(t("qualite.compare.row.createdAt"), (sheet) => (sheet.producer.createdAt ? fmtDate(sheet.producer.createdAt) : "")),
-      row(t("qualite.doublons.row.plots"), (sheet) => String(sheet.plots.length)),
-      row(t("qualite.compare.row.area"), (sheet) => `${nf1.format(this.totalArea(sheet))} ha`),
-      row(t("qualite.doublons.row.crops"), (sheet) => this.cropsOf(sheet).join(", ")),
+      row(t("qualite.strict.field.status"), ["status"], (sheet) => t(STATUS_LABEL[sheet.producer.status])),
+      row(t("qualite.compare.row.quality"), [], (sheet) => t(QUALITY_LABEL[sheet.producer.quality])),
+      row(t("qualite.doublons.row.phone"), ["phone"], (sheet) => this.store.phone(sheet.producer.phone)),
+      row(t("qualite.doublons.row.cni"), ["cni"], (sheet) => this.maskedCni(sheet.producer.cni)),
+      row(t("qualite.doublons.row.enumerator"), ["enumerator"], (sheet) => sheet.producer.enumerator),
+      row(t("qualite.compare.row.createdAt"), [], (sheet) => (sheet.producer.createdAt ? fmtDate(sheet.producer.createdAt) : "")),
+      row(t("qualite.strict.field.survey"), ["survey"], (sheet) =>
+        t(sheet.producer.survey ? "qualite.strict.row.surveyYes" : "qualite.strict.row.surveyNo"),
+      ),
+      row(t("qualite.strict.field.crops"), ["crops"], (sheet) => sheet.producer.crops.map((crop) => crop.crop).sort().join(", ")),
+      row(t("qualite.doublons.row.plots"), ["plots"], (sheet) => String(sheet.plots.length)),
+      row(t("qualite.compare.row.area"), ["plots"], (sheet) => `${nf1.format(this.totalArea(sheet))} ha`),
+      row(t("qualite.strict.field.plotCrops"), ["plotCrops"], (sheet) => this.cropsOf(sheet).join(", ")),
     ];
   });
 
   protected readonly summaryText = computed(() => {
-    const summary = summarizeRows(this.rows());
-    const t = this.t();
-    return summary.missing
-      ? t("qualite.compare.table.summaryMissing", { ...summary })
-      : t("qualite.compare.table.summary", { ...summary });
+    const rows = this.rows().filter((row) => row.state !== "info");
+    const different = rows.filter((row) => row.state === "different").length;
+    return this.t()("qualite.compare.table.summary", { same: rows.length - different, different });
   });
 
   /** Parcelles avec contour, seules affichables sur la carte. */
@@ -810,22 +1053,143 @@ export default class QualiteDoublonsComparerPage {
 
   protected readonly closePairs = computed(() => closePlotPairs(this.mapPlots()));
 
-  /** Sous-ensembles de fiches identiques que l'on peut fusionner : même coopérative et droit `quality.merge`. */
-  protected readonly mergeableSubsets = computed<Producer[][]>(() => {
-    if (!this.store.can("quality.merge")) return [];
-    return this.verdict().subsets.filter(
-      (subset) => new Set(subset.map((member) => member.scoopId)).size === 1,
-    );
+  /**
+   * Boutons « Fusionner » : un par ensemble de fiches que le serveur dit strictement identiques (même coopérative, droit
+   * `quality.merge`). Tant qu'aucun ensemble n'existe, un seul bouton reste visible mais **inactif**.
+   */
+  protected readonly mergeActions = computed<{ subset: Producer[]; enabled: boolean }[]>(() => {
+    if (!this.store.can("quality.merge") || this.members().length < 2) return [];
+    const classes = this.identicalClasses().filter((group) => new Set(group.map((member) => member.scoopId)).size === 1);
+    if (this.compareState() === "done" && classes.length) return classes.map((subset) => ({ subset, enabled: true }));
+    return [{ subset: this.members(), enabled: false }];
   });
 
   protected readonly decisionText = computed(() => {
     const t = this.t();
-    const { kind, subsets } = this.verdict();
-    if (kind === "different") return t("qualite.compare.decision.notMergeable.different");
     if (!this.store.can("quality.merge")) return t("qualite.compare.decision.notMergeable.perm");
-    if (!this.mergeableSubsets().length && subsets.length) return t("qualite.compare.decision.notMergeable.scoop");
-    return t("qualite.compare.decision.mergeable");
+    switch (this.verdictKind()) {
+      case "identical":
+        return t("qualite.strict.decision.identical");
+      case "partial":
+        return t("qualite.strict.verdict.partialBody", { codes: this.identicalClasses().map((group) => this.codes(group)).join(" / ") });
+      case "differ":
+        return t("qualite.strict.decision.differ");
+      case "error":
+        return t("qualite.strict.decision.error");
+      default:
+        return t("qualite.strict.decision.checking");
+    }
   });
+
+  // ───────────────────────── Corriger avant de fusionner ─────────────────────────
+
+  private readonly snackbar = inject(SnackbarService);
+  /** Correction d'une fiche : droit `producer.edit`, route `PATCH /producers/:id` (historique et audit côté serveur). */
+  protected readonly canFix = computed(() => this.apiMode && this.store.can("producer.edit"));
+  protected readonly fixSheetId = signal("");
+  protected readonly fixField = signal<FixField>("village");
+  protected readonly fixValue = signal("");
+  protected readonly fixBusy = signal(false);
+  protected readonly fixError = signal("");
+
+  private readonly fixSheetDefault = effect(() => {
+    const first = this.members()[0]?.id ?? "";
+    untracked(() => {
+      if (!this.members().some((member) => member.id === this.fixSheetId())) this.fixSheetId.set(first);
+    });
+  });
+
+  protected readonly fixSheetOptions = computed<SelectOption[]>(() =>
+    this.sheets().map((sheet) => ({
+      value: sheet.producer.id,
+      label: this.t()("qualite.compare.cards.sheet", { letter: sheet.letter }) + " · " + sheet.producer.code,
+    })),
+  );
+
+  protected readonly fixFieldOptions = computed<SelectOption[]>(() =>
+    FIX_FIELDS.map((field) => ({ value: field, label: this.t()(FIX_LABEL[field]) })),
+  );
+
+  /** Choix fermés pour les champs à valeurs connues (sexe, statut, handicap, organisation) ; `null` : saisie libre. */
+  protected readonly fixChoices = computed<SelectOption[] | null>(() => {
+    const t = this.t();
+    switch (this.fixField()) {
+      case "sex":
+        return [
+          { value: "F", label: t("producteurs.sex.F") },
+          { value: "H", label: t("producteurs.sex.H") },
+        ];
+      case "status":
+        return [
+          { value: "recensé", label: t(STATUS_LABEL["recensé"]) },
+          { value: "membre", label: t(STATUS_LABEL["membre"]) },
+        ];
+      case "handicap":
+        return [
+          { value: "oui", label: t("qualite.strict.fix.yes") },
+          { value: "non", label: t("qualite.strict.fix.no") },
+        ];
+      case "orgId": {
+        const sheet = this.members().find((member) => member.id === this.fixSheetId());
+        return this.store
+          .state()
+          .orgs.filter((org) => org.scoopId === sheet?.scoopId)
+          .map((org) => ({ value: org.id, label: org.name }));
+      }
+      default:
+        return null;
+    }
+  });
+
+  protected chooseFixField(field: string): void {
+    this.fixField.set(field as FixField);
+    this.fixValue.set("");
+    this.fixError.set("");
+  }
+
+  /** Corps du `PATCH` pour la valeur saisie, ou le message d'erreur à afficher. */
+  private fixBody(): { body: ProducerCorrection } | { error: string } {
+    const t = this.t();
+    const value = this.fixValue().trim();
+    if (!value) return { error: t("qualite.strict.fix.empty") };
+    switch (this.fixField()) {
+      case "age": {
+        const age = Number(value);
+        return Number.isInteger(age) && age >= 15 && age <= 100 ? { body: { age } } : { error: t("qualite.strict.fix.ageRange") };
+      }
+      case "sex":
+        return { body: { sex: value === "F" ? "F" : "H" } };
+      case "status":
+        return { body: { status: value === "membre" ? "membre" : "recensé" } };
+      case "handicap":
+        return { body: { handicap: value === "oui" } };
+      default:
+        return { body: { [this.fixField()]: value } as ProducerCorrection };
+    }
+  }
+
+  /** Enregistre la correction (la fiche est relue sur le serveur) puis relance la comparaison. */
+  protected async saveFix(): Promise<void> {
+    const sheet = this.members().find((member) => member.id === this.fixSheetId());
+    if (!sheet || this.fixBusy()) return;
+    const built = this.fixBody();
+    if ("error" in built) {
+      this.fixError.set(built.error);
+      return;
+    }
+    this.fixError.set("");
+    this.fixBusy.set(true);
+    try {
+      this.store.actions.upsertProducerFromApi(await correctProducerOnApi(sheet.id, built.body));
+      this.fixValue.set("");
+      this.snackbar.success(this.t()("qualite.strict.fix.done", { code: sheet.code }));
+      this.rerun();
+    } catch (error) {
+      this.fixError.set(producerApiMessage(error, this.t()("qualite.strict.fix.failed")));
+    } finally {
+      this.fixBusy.set(false);
+    }
+  }
 
   /** Base d'origine d'une fiche (Kobo apurée ou saisie dans l'application). */
   protected sourceOf(producer: Producer): DataSource {
@@ -834,6 +1198,12 @@ export default class QualiteDoublonsComparerPage {
 
   protected sourceDetail(source: DataSource): string {
     return describeSource(source, this.t());
+  }
+
+  /** Feuille et ligne du fichier d'origine, précédées d'un séparateur (vide si rien n'est enregistré). */
+  protected sourcePlace(producer: Producer): string {
+    const place = describeSourcePlace(producer, this.t());
+    return place ? ` · ${place}` : "";
   }
 
   /** Les fiches comparées viennent de bases différentes : c'est précisément le cas où la colonne sert. */
@@ -892,7 +1262,7 @@ export default class QualiteDoublonsComparerPage {
   }
 
   protected openMerge(subset: Producer[]) {
-    this.mergeGroup.set({ id: `compare-${this.codes(subset)}`, reason: "cni", members: subset });
+    this.mergeGroup.set({ id: `compare-${this.codes(subset)}`, reason: "phone", members: subset });
   }
 }
 

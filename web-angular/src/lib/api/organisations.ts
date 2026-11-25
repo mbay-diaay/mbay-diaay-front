@@ -1,10 +1,11 @@
 import type { MessageKey } from "../i18n";
 import type { Org, OrgType } from "../mock/data";
 import { ApiError, apiFetch } from "./client";
+import { originFromApi, type ApiOrigin } from "./origin";
 import { type Page, type PageQuery, withPage } from "./pagination";
 
 /** Organisation telle que l'API la renvoie (`GET /organisations`). */
-export type ApiOrganisation = {
+export type ApiOrganisation = ApiOrigin & {
   id: string;
   scoopId: string;
   name: string;
@@ -41,6 +42,7 @@ export const orgFromApi = (item: ApiOrganisation): Org => ({
   type: item.type,
   scoopId: item.scoopId,
   village: item.village,
+  ...originFromApi(item),
 });
 
 /** Message d'une erreur de l'API pour une organisation ; `field` dit sous quel champ l'afficher. */

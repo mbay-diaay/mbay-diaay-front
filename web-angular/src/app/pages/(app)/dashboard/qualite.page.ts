@@ -18,10 +18,11 @@ import {
 import { fmtDate, nf } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
 import type { Permission } from "@/lib/permissions";
-import { pendingCorrections, qualityCounts, QUALITY_SECTIONS } from "@/lib/quality-nav";
+import { pendingCorrections, qualityCounts, QUALITY_SECTIONS, sectionPerms } from "@/lib/quality-nav";
 import { collectQualityPoints, duplicateGroups, explainAlert } from "@/lib/quality-real";
 import { inScope } from "@/lib/scope";
 import { AppShellComponent } from "@shared/app-shell.component";
+import { CniAlertsService } from "@shared/cni-alerts.service";
 import { CoopRequestsService } from "@shared/coop-requests.service";
 import { LocaleService } from "@shared/locale.service";
 import { createPager } from "@shared/pager";
@@ -446,6 +447,7 @@ interface QueueRow {
 export default class QualitePage {
   private readonly store = inject(StoreService);
   private readonly coopRequests = inject(CoopRequestsService);
+  private readonly cniAlerts = inject(CniAlertsService);
   private readonly router = inject(Router);
   protected readonly locale = inject(LocaleService);
   protected readonly t = this.locale.t;
@@ -462,6 +464,9 @@ export default class QualitePage {
   protected readonly sourceFilter = signal("");
 
   constructor() {
+    effect(() => {
+      if (this.cniAlerts.canView()) untracked(() => void this.cniAlerts.refresh());
+    });
     // Mode API : les demandes du CRADESC encore ouvertes viennent du serveur.
     effect(() => {
       if (this.store.can("coop_request.read")) untracked(() => void this.loadRequests());
@@ -483,13 +488,13 @@ export default class QualitePage {
 
   /** Au moins un des droits « qualité » suffit pour afficher l'accueil. */
   protected readonly hubPerm = computed((): readonly Permission[] => [
-    ...new Set(QUALITY_SECTIONS.map((section) => section.perm)),
+    ...new Set(QUALITY_SECTIONS.flatMap((section) => sectionPerms(section))),
   ]);
 
   /** Files visibles avec la session, avec leur volume à traiter (mêmes fonctions que le tableau). */
   protected readonly sections = computed(() => {
     const perms = this.store.state().session?.permissions ?? [];
-    const counts = qualityCounts(this.store.state());
+    const counts = qualityCounts(this.store.state(), this.cniAlerts.canView() ? this.cniAlerts.openCount() : 0);
     const count: Record<string, number> = {
       "/dashboard/qualite/doublons": counts.doublons,
       "/dashboard/qualite/alertes": counts.alertes,
@@ -498,7 +503,7 @@ export default class QualitePage {
     };
     return QUALITY_SECTIONS.filter(
       (section) =>
-        perms.includes(section.perm) &&
+        sectionPerms(section).some((perm) => perms.includes(perm)) &&
         (section.to !== "/dashboard/qualite/demandes" || this.apiMode),
     ).map((section) => ({
       to: section.to,
@@ -560,7 +565,7 @@ export default class QualitePage {
           scoopLabel: scoopIds.map((id) => scoops.get(id) ?? "—").join(", "),
           source,
           sourceIds: source.parts.map((part) => part.id),
-          problem: t(group.reason === "cni" ? "qualite.real.dbl.reason.cni" : "qualite.real.dbl.reason.phone"),
+          problem: t("qualite.real.dbl.reason.phone"),
           explanationKey: null,
           place: "",
           dateIso: null,

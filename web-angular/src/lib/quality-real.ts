@@ -127,7 +127,8 @@ export function collectQualityPoints(state: State): QualityPoint[] {
   return points;
 }
 
-export type DuplicateReason = "cni" | "phone";
+/** Une CNI répétée n'est pas un motif de doublon (Q-12) : seul le téléphone partagé relie des fiches à examiner. */
+export type DuplicateReason = "phone";
 
 export interface DuplicateGroup {
   id: string;
@@ -136,8 +137,9 @@ export interface DuplicateGroup {
 }
 
 /**
- * Groupes de doublons possibles : producteurs reliés entre eux par une alerte « CNI identique à : CODE1, CODE2 »
- * ou « Téléphone partagé avec : CODE1 ». Les liens sont regroupés (A→B et B→A donnent un seul groupe).
+ * Groupes à examiner : producteurs reliés entre eux par une alerte « Téléphone partagé avec : CODE1 ». Les liens sont
+ * regroupés (A→B et B→A donnent un seul groupe). Une même CNI sur plusieurs enregistrements est NORMALE (une personne
+ * peut avoir plusieurs parcelles) : elle ne forme ni groupe, ni doublon, ni proposition de fusion (Q-12).
  */
 export function duplicateGroups(state: State): DuplicateGroup[] {
   const producers = inScope(
@@ -146,7 +148,7 @@ export function duplicateGroups(state: State): DuplicateGroup[] {
   );
   const byCode = new Map(producers.map((producer) => [producer.code.trim().toUpperCase(), producer]));
   const groups: DuplicateGroup[] = [];
-  for (const reason of ["cni", "phone"] as const) {
+  for (const reason of ["phone"] as const) {
     const parent = new Map<string, string>();
     const find = (id: string): string => {
       let root = id;
@@ -252,9 +254,9 @@ export function normalizedPersonName(producer: Pick<Producer, "firstName" | "las
 }
 
 /**
- * Sous-ensembles de fiches « identiques » (la même personne) d'un groupe : reliées par une alerte « CNI identique à »,
- * ou de même nom normalisé. Composantes connexes ; seuls les sous-ensembles d'au moins 2 fiches sont rendus.
- * Un téléphone partagé seul ne suffit pas : c'est souvent un téléphone de famille.
+ * Sous-ensembles de fiches de même nom normalisé dans un groupe. Composantes connexes ; seuls les sous-ensembles d'au
+ * moins 2 fiches sont rendus. Un téléphone partagé seul ne suffit pas (téléphone de famille), et une même CNI non plus
+ * (Q-12). C'est une proposition à examiner : la fusion exige des fiches strictement identiques (Q-02).
  */
 export function identicalSubsets(members: Producer[]): Producer[][] {
   const parent = new Map(members.map((member) => [member.id, member.id]));
@@ -264,17 +266,8 @@ export function identicalSubsets(members: Producer[]): Producer[][] {
     return root;
   };
   const union = (first: string, second: string) => parent.set(find(first), find(second));
-  const byCode = new Map(members.map((member) => [member.code.trim().toUpperCase(), member]));
   const byName = new Map<string, Producer>();
   for (const member of members) {
-    for (const text of producerAlertTexts(member)) {
-      const match = LINK_PATTERNS.cni.exec(text);
-      if (!match) continue;
-      for (const code of (match[1] ?? "").split(/[,;]/)) {
-        const linked = byCode.get(code.trim().toUpperCase());
-        if (linked && linked.id !== member.id) union(member.id, linked.id);
-      }
-    }
     const name = normalizedPersonName(member);
     if (!name) continue;
     const same = byName.get(name);
@@ -310,7 +303,7 @@ function normField(val: string | null | undefined): string {
 /**
  * Analyse le niveau de concordance réel entre les fiches d'un groupe de doublons :
  * - "identical" : toutes les informations d'identité (nom, CNI, village, sexe, âge, coopérative) concordent à 100%.
- * - "differences" : même motif (ex: CNI identique) mais des données divergent (nom, village, âge...).
+ * - "differences" : même motif (téléphone partagé) mais des données divergent (nom, village, âge...).
  * - "distinct" : personnes différentes (ex: téléphone partagé en famille).
  */
 export function analyzeGroupConcordance(group: DuplicateGroup): GroupConcordance {
@@ -318,7 +311,7 @@ export function analyzeGroupConcordance(group: DuplicateGroup): GroupConcordance
   if (members.length < 2) {
     return {
       kind: "identical",
-      titleKey: "qualite.real.dbl.reason.cni",
+      titleKey: "qualite.concordance.allIdenticalPhone",
       badgeKey: "qualite.concordance.badgeIdentical",
       hintKey: "qualite.concordance.hintIdentical",
       icon: "verified",
@@ -375,10 +368,7 @@ export function analyzeGroupConcordance(group: DuplicateGroup): GroupConcordance
   if (sameName && sameVillage && sameSex && sameAge && sameScoop) {
     return {
       kind: "identical",
-      titleKey:
-        group.reason === "cni"
-          ? "qualite.concordance.allIdenticalCni"
-          : "qualite.concordance.allIdenticalPhone",
+      titleKey: "qualite.concordance.allIdenticalPhone",
       badgeKey: "qualite.concordance.badgeIdentical",
       hintKey: "qualite.concordance.hintIdentical",
       icon: "verified",
@@ -387,20 +377,7 @@ export function analyzeGroupConcordance(group: DuplicateGroup): GroupConcordance
     };
   }
 
-  // Cas 3 : CNI identique mais écarts détectés
-  if (group.reason === "cni") {
-    return {
-      kind: "differences",
-      titleKey: "qualite.concordance.cniWithDiff",
-      badgeKey: "qualite.concordance.badgeDiff",
-      hintKey: "qualite.concordance.hintCniDiff",
-      icon: "warning",
-      toneKey: "attente",
-      diffFields,
-    };
-  }
-
-  // Cas 4 : Téléphone partagé avec même nom mais écarts (village, coopérative, etc.)
+  // Cas 3 : Téléphone partagé avec même nom mais écarts (village, coopérative, etc.)
   return {
     kind: "differences",
     titleKey: "qualite.concordance.phoneWithDiff",

@@ -20,6 +20,7 @@ import type {
 } from "@/lib/mock/data";
 import { inScope } from "@/lib/store";
 import { AppShellComponent } from "@shared/app-shell.component";
+import { CniAlertPanelComponent } from "@shared/cni-alert-panel.component";
 import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
 import { PlotMapComponent } from "@shared/plot-map.component";
@@ -88,6 +89,7 @@ const SEASON_KEYS = [
   selector: "app-producteur-detail-page",
   imports: [
     AppShellComponent,
+    CniAlertPanelComponent,
     ContactScoopModalComponent,
     DetailHeroComponent,
     IconComponent,
@@ -810,6 +812,8 @@ const SEASON_KEYS = [
 
           <ui-stat-cards class="rise mt-6" [stats]="stats()" />
 
+          <app-cni-alert-panel [producerId]="current.id" />
+
           @if (checkItems().length) {
             <div class="alerte rise mt-4" role="note">
               <span class="alerte-ico" aria-hidden="true"><ui-icon name="info" [size]="20" /></span>
@@ -1196,6 +1200,11 @@ const SEASON_KEYS = [
                                 </p>
                               }
 
+                              @if (plot.areaUnknown) {
+                                <p class="pd-status warn" role="note">
+                                  <ui-icon name="help" [size]="16" />{{ t()("plot.areaUnknown") }}
+                                </p>
+                              } @else {
                               <div class="pd-areas">
                                 <div class="pd-area">
                                   <p class="pd-area-label">{{ t()("producteurs.plots.declared") }}</p>
@@ -1223,6 +1232,7 @@ const SEASON_KEYS = [
                                   </p>
                                 </div>
                               </div>
+                              }
 
                               <div class="pd-cols">
                                 <div class="pd-card">

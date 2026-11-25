@@ -5,14 +5,19 @@ import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
 import { organisationDraft } from "@/lib/coop-request-templates";
+import { describeSourceFact, SOURCE_FILTER_IDS, sourceOfRecord, type DataSourceId } from "@/lib/data-source";
 import { listOrganisations, orgFromApi } from "@/lib/api/organisations";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { inScope } from "@/lib/scope";
 import { nf } from "@/lib/format";
+import type { MessageKey } from "@/lib/i18n";
 import type { Org } from "@/lib/mock/data";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
+import { PlacementBadgeComponent } from "@shared/placement-badge.component";
+import { SourceBadgeComponent } from "@shared/source-badge.component";
+import { TransferScoopModalComponent, type TransferRequest } from "@shared/transfer-scoop-modal.component";
 import { StoreService } from "@shared/store.service";
 import { createPager } from "@shared/pager";
 import {
@@ -22,10 +27,12 @@ import {
   IconComponent,
   initialsOf,
   PaginationComponent,
+  SelectComponent,
   StatCardsComponent,
   TONE,
   V2_PAGE_STYLES,
   type DetailView,
+  type SelectOption,
   type StatCard,
 } from "@shared/ui";
 import { GlobalFiltersComponent } from "@shared/global-filters.component";
@@ -33,6 +40,14 @@ import { OrganisationDialogComponent } from "@shared/organisation-dialog.compone
 
 const UNQUALIFIED = "__aucun";
 const ALL = "__tous";
+/** Filtre « Source » : toutes les bases. */
+const ALL_SOURCES = "";
+const SOURCE_LABEL: Record<DataSourceId, MessageKey> = {
+  kobo: "qualite.source.kobo",
+  consolidee: "qualite.source.consolidee",
+  application: "qualite.source.application",
+  cradesc: "qualite.source.cradesc",
+};
 const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 /** GIE en bleu (le cas le plus fréquent), les autres types en violet, « à qualifier » en ambre. */
@@ -55,8 +70,47 @@ const typeTone = (type: string | null) =>
     PaginationComponent,
     StatCardsComponent,
     OrganisationDialogComponent,
+    PlacementBadgeComponent,
+    SelectComponent,
+    SourceBadgeComponent,
+    TransferScoopModalComponent,
   ],
-  styles: [V2_PAGE_STYLES],
+  styles: [
+    V2_PAGE_STYLES,
+    `
+      .bulk {
+        position: sticky;
+        bottom: 16px;
+        z-index: 20;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        border-radius: 20px;
+        background: var(--v2-foret);
+        padding: 10px 10px 10px 18px;
+        color: var(--v2-blanc);
+        box-shadow: var(--v2-ombre-flottant);
+      }
+      .bulk .b {
+        display: inline-flex;
+        height: 40px;
+        align-items: center;
+        gap: 6px;
+        border-radius: 12px;
+        padding: 0 14px;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .tbl input[type="checkbox"] {
+        height: 18px;
+        width: 18px;
+        accent-color: var(--v2-foret);
+        cursor: pointer;
+      }
+    `,
+  ],
   template: `
     <app-shell perm="org.read" [area]="t()('organisations.area')">
       <!-- ───── En-tête ───── -->
@@ -108,6 +162,15 @@ const typeTone = (type: string | null) =>
             </button>
           }
         </div>
+        <ui-select
+          class="min-w-[200px]"
+          variant="compact"
+          leadingIcon="database"
+          [label]="t()('qualite.source.filter.label')"
+          [options]="sourceOptions()"
+          [value]="source()"
+          (valueChange)="source.set($event)"
+        />
         <app-global-filters />
       </div>
 
@@ -123,12 +186,23 @@ const typeTone = (type: string | null) =>
       <section class="card mt-3 overflow-hidden">
         @if (shown().length) {
           <div class="overflow-x-auto">
-            <table class="tbl min-w-[820px]">
+            <table class="tbl min-w-[980px]">
               <thead>
                 <tr>
+                  @if (canTransfer()) {
+                    <th class="w-10">
+                      <input
+                        type="checkbox"
+                        [checked]="allPageSelected()"
+                        [attr.aria-label]="t()('transfert.selectPage')"
+                        (change)="togglePage($any($event.target).checked)"
+                      />
+                    </th>
+                  }
                   <th>{{ t()("organisations.col.org") }}</th>
                   <th>{{ t()("organisations.col.type") }}</th>
                   <th>{{ t()("organisations.col.scoop") }}</th>
+                  <th>{{ t()("qualite.source.col") }}</th>
                   <th class="text-right">{{ t()("organisations.col.producers") }}</th>
                   <th class="text-right">{{ t()("organisations.col.plots") }}</th>
                   <th class="text-right">{{ t()("producteurs.quality.à vérifier") }}</th>
@@ -138,6 +212,16 @@ const typeTone = (type: string | null) =>
               <tbody>
                 @for (org of pager.items(); track org.id) {
                   <tr class="row-link" (click)="detailId.set(org.id)">
+                    @if (canTransfer()) {
+                      <td (click)="$event.stopPropagation()">
+                        <input
+                          type="checkbox"
+                          [checked]="selected().includes(org.id)"
+                          [attr.aria-label]="t()('transfert.selectOne', { name: org.name })"
+                          (change)="toggle(org.id)"
+                        />
+                      </td>
+                    }
                     <td class="max-w-[280px]">
                       <span class="flex items-center gap-3">
                         <span
@@ -151,6 +235,7 @@ const typeTone = (type: string | null) =>
                           <span class="sub block truncate" [class.zero]="!org.village">{{
                             org.village || "—"
                           }}</span>
+                          <app-placement-badge [record]="org.record" />
                         </span>
                       </span>
                     </td>
@@ -165,6 +250,7 @@ const typeTone = (type: string | null) =>
                     <td class="max-w-44 truncate font-medium" [title]="org.scoop">
                       {{ org.scoop }}
                     </td>
+                    <td><app-source-badge [record]="org.record" [showPlace]="true" /></td>
                     <td
                       class="text-right font-extrabold tabular-nums"
                       [class.zero]="!org.producers"
@@ -218,6 +304,11 @@ const typeTone = (type: string | null) =>
       </section>
 
       <ui-detail-modal [view]="detail()" (closed)="detailId.set(null)">
+        @if (canTransfer() && detailId(); as openedId) {
+          <button detail-actions type="button" class="btn btn-ghost" (click)="detailId.set(null); openTransfer([openedId])">
+            <ui-icon name="apartment" [size]="18" />{{ t()("transfert.single") }}
+          </button>
+        }
         @if (contactOrg(); as org) {
           <button detail-actions type="button" class="btn btn-ghost" (click)="openContact(org)">
             <ui-icon name="mail" [size]="18" />{{ t()("demandes.action") }}
@@ -232,6 +323,29 @@ const typeTone = (type: string | null) =>
         (closed)="contactTargets.set([])"
       />
       <app-organisation-dialog [(open)]="newOpen" [scoopId]="scoopFilter() || null" />
+
+      <!-- Actions groupées : transfert vers une coopérative -->
+      @if (canTransfer() && selected().length) {
+        <div class="bulk mt-4" role="region" [attr.aria-label]="t()('transfert.bar.selected', { count: selected().length })">
+          <span class="flex-1 text-[14px] font-extrabold">{{ t()("transfert.bar.selected", { count: selected().length }) }}</span>
+          @if (selected().length < shown().length) {
+            <button type="button" class="b" style="color: var(--v2-blanc)" (click)="selectAllShown()">
+              {{ t()("transfert.bar.selectAll", { count: shown().length }) }}
+            </button>
+          }
+          <button type="button" class="b" style="color: var(--v2-blanc)" (click)="selected.set([])">
+            {{ t()("transfert.bar.clear") }}
+          </button>
+          <button type="button" class="b" style="background: var(--v2-citron); color: var(--v2-foret)" (click)="openTransfer(selected())">
+            <ui-icon name="apartment" [size]="16" />{{ t()("transfert.bar.action") }}
+          </button>
+        </div>
+      }
+      <app-transfer-scoop-modal
+        [request]="transferRequest()"
+        (closed)="transferRequest.set(null)"
+        (done)="selected.set([])"
+      />
     </app-shell>
   `,
 })
@@ -283,10 +397,12 @@ export default class OrganisationsPage {
       const org = ownerOrg.get(pl.producerId);
       if (org) plots.set(org, (plots.get(org) ?? 0) + 1);
     }
-    const scoopName = new Map(s.scoops.map((c) => [c.id, c.name]));
+    const scoopName = new Map([...s.scoops, ...s.technicalScoops].map((c) => [c.id, c.name]));
     return inScope(s.orgs, s.session)
       .filter((o: Org) => !scoop || o.scoopId === scoop)
       .map((o) => ({
+        record: o,
+        scoopId: o.scoopId,
         id: o.id,
         name: o.name,
         type: o.type,
@@ -318,15 +434,58 @@ export default class OrganisationsPage {
     ];
   });
 
+  /** Filtre « Source » : la base d'origine enregistrée par le serveur (Kobo, consolidée, saisie). */
+  protected readonly source = signal<string>(ALL_SOURCES);
+  protected readonly sourceOptions = computed<SelectOption[]>(() => [
+    { value: ALL_SOURCES, label: this.t()("qualite.source.filter.all") },
+    ...SOURCE_FILTER_IDS.map((id) => ({ value: id as string, label: this.t()(SOURCE_LABEL[id]) })),
+  ]);
+
   protected readonly shown = computed(() => {
     const needle = norm(this.q().trim());
     const type = this.type();
+    const source = this.source();
     return this.all().filter(
       (o) =>
         (type === ALL || (type === UNQUALIFIED ? !o.type : o.type === type)) &&
+        (!source || sourceOfRecord(o.record).id === source) &&
         (!needle || norm(`${o.name} ${o.village} ${o.type ?? ""}`).includes(needle)),
     );
   });
+
+  // ── Transfert vers une coopérative (mode API, droit `scoop.transfer`) ──
+  protected readonly canTransfer = computed(() => isApiMode() && this.store.can("scoop.transfer"));
+  protected readonly selected = signal<string[]>([]);
+  protected readonly transferRequest = signal<TransferRequest | null>(null);
+
+  protected readonly allPageSelected = computed(() => {
+    const ids = this.pager.items().map((org) => org.id);
+    return ids.length > 0 && ids.every((id) => this.selected().includes(id));
+  });
+
+  protected toggle(id: string): void {
+    this.selected.update((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
+  }
+
+  protected togglePage(on: boolean): void {
+    const ids = this.pager.items().map((org) => org.id);
+    this.selected.update((list) => (on ? [...new Set([...list, ...ids])] : list.filter((id) => !ids.includes(id))));
+  }
+
+  protected selectAllShown(): void {
+    this.selected.set(this.shown().map((org) => org.id));
+  }
+
+  protected openTransfer(ids: string[]): void {
+    const rows = this.all().filter((org) => ids.includes(org.id));
+    if (!rows.length) return;
+    this.transferRequest.set({
+      kind: "organisations",
+      ids: rows.map((org) => org.id),
+      labels: rows.map((org) => org.name),
+      fromScoopIds: [...new Set(rows.map((org) => org.scoopId))],
+    });
+  }
 
   /** Pagination : mêmes règles que l'API (`GET /v1/organisations?page=&limit=`). */
   protected readonly pager = createPager(() => this.shown());
@@ -458,6 +617,17 @@ export default class OrganisationsPage {
         ),
         detailFact(t("producteurs.col.village"), o.village, "location_on"),
         detailFact(t("organisations.col.scoop"), o.scoop, "apartment", { wide: true }),
+        detailFact(t("qualite.source.col"), describeSourceFact(o.record, t), "database", { wide: true }),
+        ...(o.record.placementAConfirmer
+          ? [
+              detailFact(
+                t("placement.fact"),
+                `${t("placement.badge")} · ${o.record.placementNote || t("placement.noteDefault")}`,
+                "help",
+                { wide: true, tone: TONE.attente },
+              ),
+            ]
+          : []),
       ],
       sections: [
         {

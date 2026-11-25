@@ -74,7 +74,8 @@ export class GlobalFiltersComponent {
   private readonly scoops = computed(() => {
     const s = this.store.state();
     return inScope(
-      s.scoops.filter((c) => !c.archived).map((c) => ({ ...c, scoopId: c.id })),
+      // La coopérative technique n'est dans la liste que pour qui peut transférer (le serveur ne la renvoie pas aux autres).
+      [...s.scoops, ...s.technicalScoops].filter((c) => !c.archived).map((c) => ({ ...c, scoopId: c.id })),
       s.session,
     ).sort((a, b) => a.name.localeCompare(b.name));
   });

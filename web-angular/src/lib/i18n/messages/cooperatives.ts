@@ -135,7 +135,6 @@ export const cooperatives = {
   "orgs.add.name": "Nom de l'organisation",
   "orgs.add.namePh": "Ex. GIE Mbay Sa Yaay",
   "orgs.add.type": "Type",
-  "orgs.add.typeNone": "À qualifier plus tard",
   "orgs.add.village": "Village",
   "orgs.add.submit": "Créer l'organisation",
   "orgs.add.done": "Organisation créée",

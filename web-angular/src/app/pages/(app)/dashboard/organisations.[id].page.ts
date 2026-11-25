@@ -5,6 +5,7 @@ import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
 import { organisationDraft } from "@/lib/coop-request-templates";
+import { describeSourceFact } from "@/lib/data-source";
 import { listOrganisations, orgFromApi, organisationApiError, qualifyOrganisations } from "@/lib/api/organisations";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { ageAtMost, downloadCsv, fmtAge, fmtDate, nf, nf1 } from "@/lib/format";
@@ -15,8 +16,10 @@ import { AccessDeniedError, actions } from "@/lib/store";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
+import { OrgTypeHelpComponent } from "@shared/org-type-help.component";
 import { createPager } from "@shared/pager";
 import { PlotMapComponent } from "@shared/plot-map.component";
+import { TransferScoopModalComponent, type TransferRequest } from "@shared/transfer-scoop-modal.component";
 import { StoreService } from "@shared/store.service";
 import {
   DetailHeroComponent,
@@ -71,6 +74,8 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
     PlotMapComponent,
     RouterLink,
     StatCardsComponent,
+    OrgTypeHelpComponent,
+    TransferScoopModalComponent,
   ],
   styles: [
     V2_PAGE_STYLES,
@@ -236,6 +241,11 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
             [meta]="heroMeta()"
             [backLabel]="t()('organisations.title')"
           >
+            @if (canTransfer()) {
+              <button hero-actions type="button" class="btn btn-citron" (click)="openTransfer()">
+                <ui-icon name="apartment" [size]="18" />{{ t()("transfert.single") }}
+              </button>
+            }
             @if (store.can("org.manage")) {
               <button hero-actions type="button" class="btn btn-citron" (click)="openType()">
                 <ui-icon name="edit" [size]="18" />{{
@@ -248,6 +258,20 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
           </ui-detail-hero>
 
           <ui-stat-cards class="rise mt-6" [stats]="stats()" />
+
+          @if (organisation.placementAConfirmer) {
+            <div class="alerte rise mt-4" role="note">
+              <span class="alerte-ico" aria-hidden="true"><ui-icon name="help" [size]="20" /></span>
+              <div class="min-w-0">
+                <p class="alerte-titre">{{ t()("placement.badge") }}</p>
+                <p class="alerte-texte">{{ organisation.placementNote || t()("placement.noteDefault") }}</p>
+              </div>
+            </div>
+          }
+
+          <div class="rise mt-4 max-w-3xl">
+            <app-org-type-help [type]="organisation.type" />
+          </div>
 
           @if (!organisation.type) {
             <div class="alerte rise mt-4" role="note">
@@ -625,6 +649,7 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
                 </button>
               }
             </div>
+            <div class="pb-5"><app-org-type-help [showAll]="true" /></div>
             <button modal-footer type="button" class="btn btn-ghost" (click)="typeOpen.set(false)">
               {{ t()("common.cancel") }}
             </button>
@@ -641,6 +666,7 @@ const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
           </ui-modal>
         }
       }
+      <app-transfer-scoop-modal [request]="transferRequest()" (closed)="transferRequest.set(null)" />
       <!-- Contacter la coopérative (mode API, administrateur CRADESC) -->
       <ui-contact-scoop-modal
         [open]="contactTargets().length > 0"
@@ -694,6 +720,16 @@ export default class OrganisationDetailPage {
         ...organisationDraft({ name: org.name }),
       },
     ]);
+  }
+
+  /** Mode API, droit `scoop.transfer` : l'organisation (avec ses producteurs et adhérents) change de coopérative. */
+  protected readonly canTransfer = computed(() => isApiMode() && this.store.can("scoop.transfer"));
+  protected readonly transferRequest = signal<TransferRequest | null>(null);
+
+  protected openTransfer(): void {
+    const org = this.org();
+    if (!org) return;
+    this.transferRequest.set({ kind: "organisations", ids: [org.id], labels: [org.name], fromScoopIds: [org.scoopId] });
   }
 
   protected readonly inScopeOrg = computed(() => {
@@ -856,6 +892,9 @@ export default class OrganisationDetailPage {
       o.type
         ? { label: this.locale.tEnum("organisations.type", o.type), tone: "citron", icon: "hub" }
         : { label: this.t()("organisations.toQualify"), tone: "warn", icon: "warning" },
+      // Origine lue sur le serveur : base, feuille et ligne du fichier d'origine.
+      { label: describeSourceFact(o, this.t()), tone: "glass", icon: "database" },
+      ...(o.placementAConfirmer ? [{ label: this.t()("placement.badge"), tone: "warn" as const, icon: "help" as const }] : []),
     ];
   });
 
@@ -873,7 +912,7 @@ export default class OrganisationDetailPage {
   });
 
   protected scoopName(scoopId: string): string {
-    return this.store.state().scoops.find((c) => c.id === scoopId)?.name ?? "";
+    return [...this.store.state().scoops, ...this.store.state().technicalScoops].find((c) => c.id === scoopId)?.name ?? "";
   }
 
   protected plotTone(status: string) {

@@ -10,6 +10,7 @@ import { fetchAllPages } from "@/lib/api/pagination";
 import { loadScoopStatsFromApi } from "@/lib/api/session";
 import { inviteUser, isEmailTakenError, listUsers, replaceScoopManager, updateUser } from "@/lib/api/users";
 import { organisationDraft } from "@/lib/coop-request-templates";
+import { describeSourceFact } from "@/lib/data-source";
 import { memberDues } from "@/lib/contributions";
 import { fmtDate, fmtDateTime, nf, nf1 } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
@@ -18,6 +19,10 @@ import { scoopFigures } from "@/lib/scoop-figures";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
+import { MoveToOrganisationModalComponent, type MoveRequest } from "@shared/move-to-organisation-modal.component";
+import { PlacementBadgeComponent } from "@shared/placement-badge.component";
+import { SourceBadgeComponent } from "@shared/source-badge.component";
+import { TransferScoopModalComponent, type TransferRequest } from "@shared/transfer-scoop-modal.component";
 import { StoreService } from "@shared/store.service";
 import { createPager } from "@shared/pager";
 import {
@@ -142,10 +147,45 @@ const initials = (name: string) =>
     TechnicianDialogComponent,
     OrganisationDialogComponent,
     MemberDialogComponent,
+    PlacementBadgeComponent,
+    SourceBadgeComponent,
+    MoveToOrganisationModalComponent,
+    TransferScoopModalComponent,
   ],
   styles: [
     V2_PAGE_STYLES,
     `
+    .bulk {
+      position: sticky;
+      bottom: 16px;
+      z-index: 20;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      border-radius: 20px;
+      background: var(--v2-foret);
+      padding: 10px 10px 10px 18px;
+      color: var(--v2-blanc);
+      box-shadow: var(--v2-ombre-flottant);
+    }
+    .bulk .b {
+      display: inline-flex;
+      height: 40px;
+      align-items: center;
+      gap: 6px;
+      border-radius: 12px;
+      padding: 0 14px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .pick {
+      height: 18px;
+      width: 18px;
+      accent-color: var(--v2-foret);
+      cursor: pointer;
+    }
     .mono {
       font-family: var(--v2-font-mono);
       font-size: 11px;
@@ -1047,11 +1087,23 @@ const initials = (name: string) =>
                 </div>
                 @if (orgs().length) {
                   <div class="overflow-x-auto">
-                    <table class="w-full min-w-[640px] text-left text-[14px]">
+                    <table class="w-full min-w-[800px] text-left text-[14px]">
                       <thead>
                         <tr class="mono" style="color: var(--v2-gris-texte)">
+                          @if (canTransfer()) {
+                            <th class="w-10 pl-5 py-3">
+                              <input
+                                type="checkbox"
+                                class="pick"
+                                [checked]="allOrgPageSelected()"
+                                [attr.aria-label]="t()('transfert.selectPage')"
+                                (change)="toggleOrgPage($any($event.target).checked)"
+                              />
+                            </th>
+                          }
                           <th class="px-5 py-3">{{ t()("cooperatives.fiche.gie.col.name") }}</th>
                           <th class="px-3 py-3">{{ t()("cooperatives.fiche.gie.col.type") }}</th>
+                          <th class="px-3 py-3">{{ t()("qualite.source.col") }}</th>
                           <th class="px-3 py-3">{{ t()("cooperatives.fiche.gie.col.village") }}</th>
                           <th class="px-3 py-3 text-right">
                             {{ t()("cooperatives.fiche.gie.col.producers") }}
@@ -1067,6 +1119,17 @@ const initials = (name: string) =>
                       <tbody>
                         @for (org of orgPager.items(); track org.id) {
                           <tr class="row row-link" (click)="openDetail('org', org.id)">
+                            @if (canTransfer()) {
+                              <td class="pl-5" (click)="$event.stopPropagation()">
+                                <input
+                                  type="checkbox"
+                                  class="pick"
+                                  [checked]="orgSelected().includes(org.id)"
+                                  [attr.aria-label]="t()('transfert.selectOne', { name: org.name })"
+                                  (change)="toggleOrg(org.id)"
+                                />
+                              </td>
+                            }
                             <td class="px-5 py-3.5">
                               <span class="flex items-center gap-3">
                                 <span
@@ -1074,7 +1137,10 @@ const initials = (name: string) =>
                                   style="background: var(--v2-info-bg); color: var(--v2-info-fg)"
                                   ><ui-icon name="hub" [size]="18"
                                 /></span>
-                                <span class="font-bold">{{ org.name }}</span>
+                                <span class="min-w-0">
+                                  <span class="block font-bold">{{ org.name }}</span>
+                                  <app-placement-badge [record]="org.record" />
+                                </span>
                               </span>
                             </td>
                             <td class="px-3 py-3.5">
@@ -1097,6 +1163,7 @@ const initials = (name: string) =>
                                 >
                               }
                             </td>
+                            <td class="px-3 py-3.5"><app-source-badge [record]="org.record" [showPlace]="true" /></td>
                             <td class="px-3 py-3.5 font-medium">{{ org.village || "—" }}</td>
                             <td
                               class="px-3 py-3.5 text-right font-extrabold tabular-nums"
@@ -1192,6 +1259,17 @@ const initials = (name: string) =>
                     <table class="w-full min-w-[720px] text-left text-[14px]">
                       <thead>
                         <tr class="mono" style="color: var(--v2-gris-texte)">
+                          @if (canSelectMembers()) {
+                            <th class="w-10 pl-5 py-3">
+                              <input
+                                type="checkbox"
+                                class="pick"
+                                [checked]="allMemberPageSelected()"
+                                [attr.aria-label]="t()('transfert.selectPage')"
+                                (change)="toggleMemberPage($any($event.target).checked)"
+                              />
+                            </th>
+                          }
                           <th class="px-5 py-3">
                             {{ t()("cooperatives.fiche.membres.col.name") }}
                           </th>
@@ -1199,6 +1277,7 @@ const initials = (name: string) =>
                           <th class="px-3 py-3">
                             {{ t()("cooperatives.fiche.membres.col.status") }}
                           </th>
+                          <th class="px-3 py-3">{{ t()("qualite.source.col") }}</th>
                           <th class="px-3 py-3">{{ t()("cooperatives.fiche.membres.joined") }}</th>
                           <th class="px-3 py-3">
                             {{ t()("cooperatives.fiche.membres.col.dues") }}
@@ -1211,6 +1290,17 @@ const initials = (name: string) =>
                       <tbody>
                         @for (member of memberPager.items(); track member.id) {
                           <tr class="row row-link" (click)="openDetail('member', member.id)">
+                            @if (canSelectMembers()) {
+                              <td class="pl-5" (click)="$event.stopPropagation()">
+                                <input
+                                  type="checkbox"
+                                  class="pick"
+                                  [checked]="memberSelected().includes(member.id)"
+                                  [attr.aria-label]="t()('transfert.selectOne', { name: member.name })"
+                                  (change)="toggleMember(member.id)"
+                                />
+                              </td>
+                            }
                             <td class="px-5 py-3">
                               <span class="flex items-center gap-3">
                                 <span
@@ -1237,6 +1327,7 @@ const initials = (name: string) =>
                                 >{{ t()(member.status.label) }}</span
                               >
                             </td>
+                            <td class="px-3 py-3"><app-source-badge [record]="member.record" [showPlace]="true" /></td>
                             <td class="px-3 py-3 font-medium tabular-nums">{{ member.joined }}</td>
                             <td class="px-3 py-3">
                               @if (member.due) {
@@ -1622,6 +1713,56 @@ const initials = (name: string) =>
         [link]="contactLink()"
         (closed)="contactTargets.set([])"
       />
+      <!-- Actions groupées : transfert vers une coopérative (mode API, droit de transfert) -->
+      @if (canTransfer() && orgSelected().length && tab() === "gie") {
+        <div class="bulk mt-4" role="region" [attr.aria-label]="t()('transfert.bar.selected', { count: orgSelected().length })">
+          <span class="flex-1 text-[14px] font-extrabold">{{ t()("transfert.bar.selected", { count: orgSelected().length }) }}</span>
+          @if (orgSelected().length < orgs().length) {
+            <button type="button" class="b" style="color: var(--v2-blanc)" (click)="selectAllOrgs()">
+              {{ t()("transfert.bar.selectAll", { count: orgs().length }) }}
+            </button>
+          }
+          <button type="button" class="b" style="color: var(--v2-blanc)" (click)="orgSelected.set([])">
+            {{ t()("transfert.bar.clear") }}
+          </button>
+          <button type="button" class="b" style="background: var(--v2-citron); color: var(--v2-foret)" (click)="openOrgTransfer(orgSelected())">
+            <ui-icon name="apartment" [size]="16" />{{ t()("transfert.bar.action") }}
+          </button>
+        </div>
+      }
+      @if (canSelectMembers() && memberSelected().length && tab() === "membres") {
+        <div class="bulk mt-4" role="region" [attr.aria-label]="t()('transfert.bar.selected', { count: memberSelected().length })">
+          <span class="flex-1 text-[14px] font-extrabold">{{ t()("transfert.bar.selected", { count: memberSelected().length }) }}</span>
+          @if (memberSelected().length < members().length) {
+            <button type="button" class="b" style="color: var(--v2-blanc)" (click)="selectAllMembers()">
+              {{ t()("transfert.bar.selectAll", { count: members().length }) }}
+            </button>
+          }
+          <button type="button" class="b" style="color: var(--v2-blanc)" (click)="memberSelected.set([])">
+            {{ t()("transfert.bar.clear") }}
+          </button>
+          @if (canMove()) {
+            <button type="button" class="b" style="background: var(--v2-blanc); color: var(--v2-foret)" (click)="openMemberMove(memberSelected())">
+              <ui-icon name="arrow_forward" [size]="16" />{{ t()("deplacer.action") }}
+            </button>
+          }
+          @if (canTransfer()) {
+            <button type="button" class="b" style="background: var(--v2-citron); color: var(--v2-foret)" (click)="openMemberTransfer(memberSelected())">
+              <ui-icon name="apartment" [size]="16" />{{ t()("transfert.bar.action") }}
+            </button>
+          }
+        </div>
+      }
+      <app-transfer-scoop-modal
+        [request]="transferRequest()"
+        (closed)="transferRequest.set(null)"
+        (done)="orgSelected.set([]); memberSelected.set([])"
+      />
+      <app-move-to-organisation-modal
+        [request]="moveRequest()"
+        (closed)="moveRequest.set(null)"
+        (done)="memberSelected.set([])"
+      />
       <app-technician-dialog [(open)]="techOpen" [scoopId]="coopId()" />
       <app-organisation-dialog [(open)]="orgOpen" [scoopId]="coopId()" />
       <app-member-dialog [(open)]="memberOpen" [scoopId]="coopId()" />
@@ -1822,7 +1963,7 @@ export default class CooperativeDetailPage {
   });
 
   protected readonly scoop = computed(() =>
-    this.store.state().scoops.find((s) => s.id === this.id()),
+    [...this.store.state().scoops, ...this.store.state().technicalScoops].find((s) => s.id === this.id()),
   );
 
   protected readonly mono = computed(() => {
@@ -2341,6 +2482,7 @@ export default class CooperativeDetailPage {
     const members = this.store.state().members;
     return b.orgs
       .map((o) => ({
+        record: o,
         id: o.id,
         name: o.name,
         type: o.type,
@@ -2386,8 +2528,9 @@ export default class CooperativeDetailPage {
       const due = d && d.state !== "non exigible" ? (DUE[d.state] ?? null) : null;
       return {
         id: m.id,
-        name: `${m.firstName} ${m.lastName}`,
+        name: `${m.firstName} ${m.lastName}`.trim() || this.t()("membre.sansNom"),
         initials: initials(`${m.firstName} ${m.lastName}`),
+        record: m,
         phone: this.store.phone(m.phone),
         village: m.village,
         status: MEMBER_STATUS[m.status] ?? MEMBER_STATUS["membre"]!,
@@ -2418,6 +2561,80 @@ export default class CooperativeDetailPage {
   // ── Techniciens : ajout (invitation ou affectation) et retrait de cette coopérative ──
   protected readonly techOpen = signal(false);
   protected readonly orgOpen = signal(false);
+
+  // ── Transfert vers une autre coopérative (mode API, droit `scoop.transfer`) ──
+  protected readonly canTransfer = computed(() => isApiMode() && this.store.can("scoop.transfer"));
+  // Déplacement des adhérents vers une organisation existante (droit `org.manage` ou `scoop.transfer`).
+  protected readonly canMove = computed(() => isApiMode() && (this.store.can("org.manage") || this.store.can("scoop.transfer")));
+  protected readonly canSelectMembers = computed(() => this.canTransfer() || this.canMove());
+  protected readonly moveRequest = signal<MoveRequest | null>(null);
+  protected readonly orgSelected = signal<string[]>([]);
+  protected readonly memberSelected = signal<string[]>([]);
+  protected readonly transferRequest = signal<TransferRequest | null>(null);
+
+  protected readonly allOrgPageSelected = computed(() => {
+    const ids = this.orgPager.items().map((org) => org.id);
+    return ids.length > 0 && ids.every((id) => this.orgSelected().includes(id));
+  });
+  protected readonly allMemberPageSelected = computed(() => {
+    const ids = this.memberPager.items().map((member) => member.id);
+    return ids.length > 0 && ids.every((id) => this.memberSelected().includes(id));
+  });
+
+  protected toggleOrg(id: string): void {
+    this.orgSelected.update((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
+  }
+  protected toggleMember(id: string): void {
+    this.memberSelected.update((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
+  }
+  protected toggleOrgPage(on: boolean): void {
+    const ids = this.orgPager.items().map((org) => org.id);
+    this.orgSelected.update((list) => (on ? [...new Set([...list, ...ids])] : list.filter((id) => !ids.includes(id))));
+  }
+  protected toggleMemberPage(on: boolean): void {
+    const ids = this.memberPager.items().map((member) => member.id);
+    this.memberSelected.update((list) => (on ? [...new Set([...list, ...ids])] : list.filter((id) => !ids.includes(id))));
+  }
+  protected selectAllOrgs(): void {
+    this.orgSelected.set(this.orgs().map((org) => org.id));
+  }
+  protected selectAllMembers(): void {
+    this.memberSelected.set(this.members().map((member) => member.id));
+  }
+
+  protected openOrgTransfer(ids: string[]): void {
+    const rows = this.orgs().filter((org) => ids.includes(org.id));
+    if (!rows.length) return;
+    this.transferRequest.set({
+      kind: "organisations",
+      ids: rows.map((org) => org.id),
+      labels: rows.map((org) => org.name),
+      fromScoopIds: [this.id()],
+    });
+  }
+
+  protected openMemberMove(ids: string[]): void {
+    const rows = this.store.state().members.filter((member) => ids.includes(member.id));
+    if (!rows.length) return;
+    this.moveRequest.set({
+      kind: "members",
+      ids: rows.map((member) => member.id),
+      labels: rows.map((member) => `${member.firstName} ${member.lastName}`.trim() || member.id),
+      scoopIds: rows.map((member) => member.scoopId),
+      orgIds: rows.map((member) => member.orgId ?? ""),
+    });
+  }
+
+  protected openMemberTransfer(ids: string[]): void {
+    const rows = this.members().filter((member) => ids.includes(member.id));
+    if (!rows.length) return;
+    this.transferRequest.set({
+      kind: "members",
+      ids: rows.map((member) => member.id),
+      labels: rows.map((member) => member.name),
+      fromScoopIds: [this.id()],
+    });
+  }
   protected readonly memberOpen = signal(false);
   /** Une coopérative archivée ne reçoit plus d'organisation ni d'adhérent. */
   private readonly canEditCoop = computed(() => !this.scoop()?.archived);
@@ -2609,6 +2826,10 @@ export default class CooperativeDetailPage {
             "hub",
           ),
           fact(t("cooperatives.fiche.detail.village"), o.village, "location_on"),
+          fact(t("qualite.source.col"), describeSourceFact(o, t), "database"),
+          ...(o.placementAConfirmer
+            ? [fact(t("placement.fact"), `${t("placement.badge")} · ${o.placementNote || t("placement.noteDefault")}`, "help")]
+            : []),
         ],
         alerts: o.type
           ? undefined

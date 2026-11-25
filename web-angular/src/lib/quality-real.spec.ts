@@ -17,15 +17,13 @@ describe("identicalSubsets", () => {
     expect(identicalSubsets(members)).toEqual([]);
   });
 
-  it("propose la fusion quand la CNI est identique, même avec des noms différents", () => {
+  it("ne propose rien pour une même CNI : une CNI répétée est normale (Q-12)", () => {
     const members = [
       producer("b1", "Moussa", "Diop", ["CNI identique à : B2"]),
       producer("b2", "Mamadou", "Diop"),
       producer("b3", "Awa", "Fall"),
     ];
-    const subsets = identicalSubsets(members);
-    expect(subsets).toHaveLength(1);
-    expect(subsets[0]!.map((member) => member.id)).toEqual(["b1", "b2"]);
+    expect(identicalSubsets(members)).toEqual([]);
   });
 
   it("reconnaît le même nom malgré l'ordre inversé, les accents et la casse", () => {
@@ -38,10 +36,10 @@ describe("identicalSubsets", () => {
 });
 
 describe("analyzeGroupConcordance", () => {
-  it("détecte des fiches 100% concordantes pour un même producteur avec même CNI", () => {
+  it("détecte des fiches 100% concordantes pour un même producteur (téléphone partagé)", () => {
     const group = {
-      id: "cni-1",
-      reason: "cni" as const,
+      id: "phone-0",
+      reason: "phone" as const,
       members: [
         producer("p1", "Moussa", "Diop", [], { cni: "12345", village: "Kayar", age: 45 }),
         producer("p2", "moussa", "diop", [], { cni: "12345", village: "Kayar", age: 45 }),
@@ -53,19 +51,18 @@ describe("analyzeGroupConcordance", () => {
     expect(res.diffFields).toEqual([]);
   });
 
-  it("détecte des écarts quand la CNI est identique mais que les noms ou villages diffèrent", () => {
+  it("détecte des écarts quand le téléphone est partagé, le nom identique et le village différent", () => {
     const group = {
-      id: "cni-2",
-      reason: "cni" as const,
+      id: "phone-2",
+      reason: "phone" as const,
       members: [
         producer("p1", "Moussa", "Diop", [], { cni: "12345", village: "Kayar" }),
-        producer("p2", "Fatou", "Sow", [], { cni: "12345", village: "Mboro" }),
+        producer("p2", "Moussa", "Diop", [], { cni: "12345", village: "Mboro" }),
       ],
     };
     const res = analyzeGroupConcordance(group);
     expect(res.kind).toBe("differences");
     expect(res.toneKey).toBe("attente");
-    expect(res.diffFields).toContain("nom");
     expect(res.diffFields).toContain("village");
   });
 

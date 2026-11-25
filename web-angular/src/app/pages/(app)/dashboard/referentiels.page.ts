@@ -75,11 +75,11 @@ const FAMILY_LABEL: Record<CropFamily, MessageKey> = {
 
 const ORG_TYPE_LABEL: Record<OrgType, MessageKey> = {
   GIE: "referentiels.orgType.gie",
-  Section: "referentiels.orgType.section",
-  Association: "referentiels.orgType.association",
+  Union: "referentiels.orgType.union",
   Groupement: "referentiels.orgType.groupement",
-  Individuel: "referentiels.orgType.individuel",
-  "Membre direct": "referentiels.orgType.membreDirect",
+  Section: "referentiels.orgType.section",
+  OP: "referentiels.orgType.op",
+  "À préciser": "referentiels.orgType.aPreciser",
 };
 
 type SeuilKey = keyof Seuils;

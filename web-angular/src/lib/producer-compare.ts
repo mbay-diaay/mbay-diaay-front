@@ -51,13 +51,12 @@ export function summarizeRows(rows: CompareRow[]): CompareSummary {
   return summary;
 }
 
-export type SimilarityReason = "cni" | "name" | "phone";
+export type SimilarityReason = "name" | "phone";
 
-/** Motifs du rapprochement : CNI identique, même nom normalisé, téléphone partagé (alertes de l'import). */
+/** Motifs du rapprochement : même nom normalisé, téléphone partagé (alertes de l'import). Une même CNI n'en est pas un (Q-12). */
 export function similarityReasons(members: Producer[]): SimilarityReason[] {
   const reasons: SimilarityReason[] = [];
   const texts = members.flatMap((member) => producerAlertTexts(member));
-  if (texts.some((text) => /cni identique/i.test(text))) reasons.push("cni");
   const names = members.map((member) => normalizedPersonName(member)).filter(Boolean);
   if (new Set(names).size < names.length) reasons.push("name");
   if (texts.some((text) => /t[ée]l[ée]phone partag[ée]/i.test(text))) reasons.push("phone");
