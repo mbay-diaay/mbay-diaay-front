@@ -1,7 +1,22 @@
 import { Component, computed, inject, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 
+import {
+  backupApiError,
+  backupFileName,
+  createBackup,
+  downloadBackupBlob,
+  formatBackupSize,
+  isRestoreConfirmed,
+  listBackups,
+  restoreBackup,
+  simulateRestore,
+  RESTORE_CONFIRM_WORD,
+  type ApiBackup,
+  type RestoreResult,
+} from "@/lib/api/backups";
 import { isApiMode } from "@/lib/api/config";
+import { saveBlobAsFile } from "@/lib/api/reports";
 import { actions, can, getState, isSnapshot } from "@/lib/store";
 import { downloadCsv, fmtDateTime, nf } from "@/lib/format";
 import { ENTITY_ORDER, SCHEMA, type EntityKey } from "@/lib/io/schema";
@@ -14,6 +29,7 @@ import {
   ModalComponent,
   SnackbarService,
   StatCardsComponent,
+  TextFieldComponent,
   TONE,
   V2_PAGE_STYLES,
   type StatCard,
@@ -31,7 +47,7 @@ type Snapshot = Parameters<typeof actions.restoreSnapshot>[0];
  */
 @Component({
   selector: "app-donnees-page",
-  imports: [AppShellComponent, IconComponent, ModalComponent, RouterLink, StatCardsComponent],
+  imports: [AppShellComponent, IconComponent, ModalComponent, RouterLink, StatCardsComponent, TextFieldComponent],
   styles: [
     V2_PAGE_STYLES,
     `
@@ -133,6 +149,65 @@ type Snapshot = Parameters<typeof actions.restoreSnapshot>[0];
         </section>
 
         <div class="grid gap-4">
+          @if (apiMode) {
+            <!-- Sauvegardes du serveur (super administrateur) -->
+            <section class="sec-card">
+              <div class="sec-head">
+                <h2>
+                  <span class="sec-ico"><ui-icon name="archive" [size]="18" /></span
+                  >{{ t()("sauvegarde.server.title") }}
+                </h2>
+                @if (canServerBackup()) {
+                  <button type="button" class="btn btn-primary" [disabled]="creating()" (click)="createServerBackup()">
+                    {{ t()("sauvegarde.server.create")
+                    }}<span class="btn-chip"><ui-icon name="add" [size]="18" /></span>
+                  </button>
+                }
+              </div>
+              <div class="border-t p-5" style="border-color: var(--v2-separateur)">
+                <p class="sub">{{ t()("sauvegarde.server.description") }}</p>
+                @if (!canServerBackup()) {
+                  <p class="notice mt-4" style="background: var(--v2-info-bg); color: var(--v2-info-fg)">
+                    <ui-icon name="info" [size]="18" />{{ t()("sauvegarde.server.reserved") }}
+                  </p>
+                } @else {
+                  <p class="notice mt-4" style="background: var(--v2-info-bg); color: var(--v2-info-fg)">
+                    <ui-icon name="info" [size]="18" />{{ t()("sauvegarde.server.contains") }}
+                  </p>
+                  @if (loadingBackups()) {
+                    <p class="sub mt-4">{{ t()("sauvegarde.server.loading") }}</p>
+                  } @else if (!serverBackups().length) {
+                    <p class="sub mt-4">{{ t()("sauvegarde.server.empty") }}</p>
+                  } @else {
+                    <ul class="mt-4">
+                      @for (backup of serverBackups(); track backup.id) {
+                        <li class="ent" style="padding-left: 0; padding-right: 0">
+                          <span class="min-w-0 flex-1">
+                            <span class="flex flex-wrap items-center gap-2 font-bold">
+                              {{ backup.label }}
+                              @if (backup.kind === "securite") {
+                                <span class="badge" style="background: var(--v2-attente-bg); color: var(--v2-attente-fg)" [title]="t()('sauvegarde.server.kind.securiteHint')">{{ t()("sauvegarde.server.kind.securite") }}</span>
+                              }
+                            </span>
+                            <span class="sub block">{{ t()("sauvegarde.server.meta", { date: fmtDateTime(backup.createdAt), user: backup.createdByName, size: formatSize(backup.sizeBytes) }) }}</span>
+                            @if (backup.restoredAt) {
+                              <span class="sub block">{{ t()("sauvegarde.server.restoredAt", { date: fmtDateTime(backup.restoredAt), user: backup.restoredByName ?? "—" }) }}</span>
+                            }
+                          </span>
+                          <button type="button" class="btn btn-ghost" style="height: 38px; padding: 0 12px" [disabled]="downloadingId() === backup.id" [attr.aria-label]="t()('sauvegarde.server.downloadAria', { label: backup.label })" (click)="downloadServerBackup(backup)">
+                            <ui-icon name="download" [size]="16" />{{ t()("sauvegarde.server.download") }}
+                          </button>
+                          <button type="button" class="btn btn-ghost" style="height: 38px; padding: 0 12px" [attr.aria-label]="t()('sauvegarde.server.restoreAria', { label: backup.label })" (click)="openRestore(backup)">
+                            <ui-icon name="upload_file" [size]="16" />{{ t()("sauvegarde.server.restore") }}
+                          </button>
+                        </li>
+                      }
+                    </ul>
+                  }
+                }
+              </div>
+            </section>
+          } @else {
           <!-- Sauvegarde -->
           <section class="sec-card">
             <div class="sec-head">
@@ -195,6 +270,7 @@ type Snapshot = Parameters<typeof actions.restoreSnapshot>[0];
               </p>
             </div>
           </section>
+          }
         </div>
       </div>
 
@@ -248,6 +324,86 @@ type Snapshot = Parameters<typeof actions.restoreSnapshot>[0];
           </button>
         </ui-modal>
       }
+
+      <!-- Restauration d'une sauvegarde du serveur : simulation, puis confirmation par saisie -->
+      @if (restoring(); as target) {
+        <ui-modal
+          tone="danger"
+          [open]="true"
+          [title]="t()('sauvegarde.server.restoreTitle', { label: target.label })"
+          [description]="restored() ? t()('sauvegarde.server.done.title') : t()('sauvegarde.server.restoreDescription')"
+          icon="upload_file"
+          [width]="680"
+          [closeLabel]="t()('common.close')"
+          (closed)="closeRestore()"
+        >
+          <div class="space-y-5 pb-6">
+            @if (shownResult(); as result) {
+              <div class="overflow-x-auto rounded-[16px] border" style="border-color: var(--v2-bord-carte)">
+                <table class="cmp w-full">
+                  <thead>
+                    <tr>
+                      <th>{{ t()("sauvegarde.server.sim.table") }}</th>
+                      <th class="text-right">{{ t()("sauvegarde.server.sim.snapshot") }}</th>
+                      <th class="text-right">{{ t()("sauvegarde.server.sim.current") }}</th>
+                      <th class="text-right">{{ t()("sauvegarde.server.sim.replaced") }}</th>
+                      <th class="text-right">{{ t()("sauvegarde.server.sim.recreated") }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (line of result.tables; track line.table) {
+                      <tr>
+                        <td class="font-semibold">{{ line.label }}</td>
+                        <td class="text-right tabular-nums">{{ nf.format(line.snapshotRows) }}</td>
+                        <td class="text-right tabular-nums">{{ nf.format(line.currentRows) }}</td>
+                        <td class="text-right font-extrabold tabular-nums">{{ nf.format(line.replaced) }}</td>
+                        <td class="text-right font-extrabold tabular-nums" [style.color]="line.recreated ? 'var(--v2-attente-fg)' : null">{{ nf.format(line.recreated) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              @if (!restored()) {
+                <p class="sub">{{ t()("sauvegarde.server.sim.rule") }}</p>
+              } @else {
+                <p class="notice" style="background: var(--v2-culture-bg); color: var(--v2-culture-fg)">
+                  <ui-icon name="check_circle" [size]="18" />{{ t()("sauvegarde.server.done.text", { safety: result.safetyBackupId ?? "—" }) }}
+                </p>
+              }
+              @if (result.notRestored.length) {
+                <div>
+                  <p class="lbl">{{ t()("sauvegarde.server.sim.notRestored") }}</p>
+                  <ul class="mt-2 space-y-1">
+                    @for (info of result.notRestored; track info.table) {
+                      <li class="sub"><span class="font-bold">{{ info.label }}</span> : {{ info.notRestoredReason }}</li>
+                    }
+                  </ul>
+                </div>
+              }
+              @if (!restored()) {
+                <ui-text-field [label]="t()('sauvegarde.server.confirm.wordLabel')" [hint]="t()('sauvegarde.server.confirm.word')" [value]="typedWord()" (valueChange)="typedWord.set($event)" />
+                <ui-text-field [label]="t()('sauvegarde.server.confirm.idLabel')" [hint]="t()('sauvegarde.server.confirm.idHint', { id: target.id })" [value]="typedId()" (valueChange)="typedId.set($event)" />
+              }
+            } @else {
+              <p class="sub">{{ t()("sauvegarde.server.sim.rule") }}</p>
+            }
+          </div>
+          @if (restored()) {
+            <button modal-footer type="button" class="btn btn-primary" (click)="closeRestore()">{{ t()("sauvegarde.server.done.close") }}</button>
+          } @else {
+            <button modal-footer type="button" class="btn btn-ghost" (click)="closeRestore()">{{ t()("sauvegarde.server.confirm.cancel") }}</button>
+            @if (!simulation()) {
+              <button modal-footer type="button" class="btn btn-primary" [disabled]="simulating()" (click)="runSimulation(target)">
+                {{ t()(simulating() ? "sauvegarde.server.step.simulating" : "sauvegarde.server.step.simulate") }}
+              </button>
+            } @else {
+              <button modal-footer type="button" class="btn btn-danger" [disabled]="!restoreConfirmed(target) || restoreBusy()" (click)="runRestore(target)">
+                {{ t()("sauvegarde.server.confirm.action") }}
+              </button>
+            }
+          }
+        </ui-modal>
+      }
     </app-shell>
   `,
 })
@@ -264,6 +420,109 @@ export default class DonneesPage {
     snap: Snapshot;
     rows: { label: string; now: number; after: number }[];
   } | null>(null);
+
+  // ============ Sauvegardes du serveur (mode API, super administrateur) ============
+  protected readonly apiMode = isApiMode();
+  protected readonly formatSize = formatBackupSize;
+  protected readonly canServerBackup = computed(() => can(this.store.state().session, "role.configure"));
+  protected readonly serverBackups = signal<ApiBackup[]>([]);
+  protected readonly loadingBackups = signal(false);
+  protected readonly creating = signal(false);
+  protected readonly downloadingId = signal<string | null>(null);
+  protected readonly restoring = signal<ApiBackup | null>(null);
+  protected readonly simulation = signal<RestoreResult | null>(null);
+  protected readonly restored = signal<RestoreResult | null>(null);
+  protected readonly simulating = signal(false);
+  protected readonly restoreBusy = signal(false);
+  protected readonly typedWord = signal("");
+  protected readonly typedId = signal("");
+  /** Résultat affiché dans la fenêtre : celui de la restauration, sinon celui de la simulation. */
+  protected readonly shownResult = computed(() => this.restored() ?? this.simulation());
+
+  constructor() {
+    if (this.apiMode && this.canServerBackup()) void this.loadBackups();
+  }
+
+  private async loadBackups(): Promise<void> {
+    this.loadingBackups.set(true);
+    try {
+      this.serverBackups.set((await listBackups()).items);
+    } catch (error) {
+      this.snackbar.error(this.locale.tNow(backupApiError(error)));
+    } finally {
+      this.loadingBackups.set(false);
+    }
+  }
+
+  protected async createServerBackup(): Promise<void> {
+    if (this.creating()) return;
+    this.creating.set(true);
+    try {
+      await createBackup();
+      this.snackbar.success(this.t()("sauvegarde.server.created"));
+      await this.loadBackups();
+    } catch (error) {
+      this.snackbar.error(this.locale.tNow(backupApiError(error)));
+    } finally {
+      this.creating.set(false);
+    }
+  }
+
+  protected async downloadServerBackup(backup: ApiBackup): Promise<void> {
+    this.downloadingId.set(backup.id);
+    try {
+      saveBlobAsFile(await downloadBackupBlob(backup.id), backupFileName(backup));
+    } catch (error) {
+      this.snackbar.error(this.locale.tNow(backupApiError(error)));
+    } finally {
+      this.downloadingId.set(null);
+    }
+  }
+
+  protected openRestore(backup: ApiBackup): void {
+    this.simulation.set(null);
+    this.restored.set(null);
+    this.typedWord.set("");
+    this.typedId.set("");
+    this.restoring.set(backup);
+  }
+
+  protected closeRestore(): void {
+    const wasRestored = !!this.restored();
+    this.restoring.set(null);
+    this.simulation.set(null);
+    this.restored.set(null);
+    if (wasRestored) void this.loadBackups();
+  }
+
+  protected async runSimulation(backup: ApiBackup): Promise<void> {
+    if (this.simulating()) return;
+    this.simulating.set(true);
+    try {
+      this.simulation.set(await simulateRestore(backup.id));
+    } catch (error) {
+      this.snackbar.error(this.locale.tNow(backupApiError(error)));
+    } finally {
+      this.simulating.set(false);
+    }
+  }
+
+  protected restoreConfirmed(backup: ApiBackup): boolean {
+    return isRestoreConfirmed(backup.id, this.typedWord(), this.typedId());
+  }
+
+  protected async runRestore(backup: ApiBackup): Promise<void> {
+    if (this.restoreBusy() || !this.restoreConfirmed(backup)) return;
+    this.restoreBusy.set(true);
+    try {
+      this.restored.set(await restoreBackup(backup.id, RESTORE_CONFIRM_WORD, backup.id));
+      this.snackbar.success(this.t()("sauvegarde.restore.done"));
+    } catch (error) {
+      this.snackbar.error(this.locale.tNow(backupApiError(error)));
+    } finally {
+      this.restoreBusy.set(false);
+    }
+  }
 
   protected readonly stats = computed<StatCard[]>(() => {
     const t = this.t();

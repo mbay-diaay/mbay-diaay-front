@@ -4,7 +4,7 @@ import { isApiMode } from "@/lib/api/config";
 import { syncImage } from "@/lib/api/media";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { technicianApiError } from "@/lib/api/technician-errors";
-import { deleteUser, isTechnicalEmail, listUsers, regenerateTechnicianCode, updateUser } from "@/lib/api/users";
+import { deleteUser, isTechnicalEmail, listUsers, regenerateTechnicianCode, setTechnicianOrganisations, updateUser } from "@/lib/api/users";
 import { nf } from "@/lib/format";
 import type { PreparedImage } from "@/lib/image";
 import type { MessageKey } from "@/lib/i18n";
@@ -551,20 +551,39 @@ export default class TechniciensPage {
   }
 
   /**
-   * Mode API : nom et téléphone sont enregistrés par le serveur, puis la réponse est fusionnée dans le store.
-   * Sexe, âge et GIE suivis n'ont pas de route : si on les change, rien n'est modifié (jamais gardés seulement
-   * dans le navigateur).
+   * Mode API : coordonnées, sexe et âge (PATCH /users/:id), puis GIE suivis (PUT /users/:id/organisations) sont
+   * enregistrés par le serveur, qui trace chaque changement ; les réponses sont fusionnées dans le store. Rien n'est
+   * gardé seulement dans le navigateur. Une étape sans changement n'est pas envoyée (un gestionnaire peut ainsi
+   * choisir les GIE sans le droit de modifier les comptes).
    */
   private async saveEditOnApi(user: AppUser): Promise<void> {
-    const sameOrgs =
-      [...(user.orgIds ?? [])].sort().join("|") === [...this.editOrgIds()].sort().join("|");
-    if ((user.sex ?? "") !== this.editSex() || (user.age ?? 0) !== Number(this.editAge().trim() || 0) || !sameOrgs) {
-      this.snackbar.error(this.locale.tNow("errors.api.unavailable"));
+    const ageText = this.editAge().trim();
+    const ageValue = ageText ? Number(ageText) : null;
+    if (ageValue !== null && (!Number.isInteger(ageValue) || ageValue < 15 || ageValue > 100)) {
+      this.snackbar.error(this.locale.tNow("errors.technician.age"));
       return;
     }
+    const name = this.editName().trim();
+    const profileChanged =
+      name !== user.name ||
+      this.editPhone().trim() !== (user.phone ?? "").trim() ||
+      (user.sex ?? "") !== this.editSex() ||
+      (user.age ?? null) !== ageValue;
+    const sameOrgs =
+      [...(user.orgIds ?? [])].sort().join("|") === [...this.editOrgIds()].sort().join("|");
     try {
-      const updated = await updateUser(user.id, { name: this.editName().trim(), phone: this.editPhone() });
-      this.store.actions.mergeUsersFromApi([updated]);
+      if (profileChanged) {
+        const updated = await updateUser(user.id, {
+          name,
+          phone: this.editPhone().trim(),
+          sex: this.editSex() as "F" | "H",
+          age: ageValue,
+        });
+        this.store.actions.mergeUsersFromApi([updated]);
+      }
+      if (!sameOrgs) {
+        this.store.actions.mergeUsersFromApi([await setTechnicianOrganisations(user.id, this.editOrgIds())]);
+      }
     } catch (error) {
       this.showApiError(error);
       return;

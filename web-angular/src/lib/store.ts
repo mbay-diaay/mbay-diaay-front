@@ -920,6 +920,8 @@ export interface ApiUserRow {
   sex?: "F" | "H" | null | undefined;
   age?: number | null | undefined;
   photoUrl?: string | null | undefined;
+  /** Technicien : GIE suivis, lus sur le serveur (absent : le serveur ne les a pas renvoyés). */
+  organisationIds?: string[] | undefined;
   /** Technicien qui n'a pas encore utilisé son code temporaire. */
   activationPending?: boolean | undefined;
   /** Gestionnaire invité par e-mail, qui n'a pas encore choisi son mot de passe. */
@@ -939,6 +941,7 @@ function appUserFromApi(apiUser: ApiUserRow): AppUser {
     // Technicien et faîtière : liste des coopératives ; les autres rôles : une seule.
     scoopId: manyScoops ? undefined : (apiUser.scoopId ?? undefined),
     ...(manyScoops && { scoopIds }),
+    ...(apiUser.organisationIds?.length && { orgIds: apiUser.organisationIds }),
     ...(apiUser.sex && { sex: apiUser.sex }),
     ...(apiUser.age && { age: apiUser.age }),
     ...(apiUser.photoUrl && { photoUrl: mediaSrc(apiUser.photoUrl) ?? apiUser.photoUrl }),
@@ -1201,14 +1204,16 @@ export const actions = {
    */
   mergeUsersFromApi(items: ApiUserRow[]) {
     const incoming = new Map(items.map((apiUser) => [apiUser.id, appUserFromApi(apiUser)]));
+    // Le serveur est la source des GIE suivis dès qu'il les renvoie (même une liste vide).
+    const orgsFromApi = new Set(items.filter((apiUser) => apiUser.organisationIds !== undefined).map((apiUser) => apiUser.id));
     set((s) => ({
       users: [
         ...s.users.map((user) => {
           const fresh = incoming.get(user.id);
           if (!fresh) return user;
           incoming.delete(user.id);
-          // Ce que l'API ne garde pas (GIE suivis) reste tel qu'il était dans le navigateur.
-          return { ...fresh, ...(user.orgIds && { orgIds: user.orgIds }) };
+          // Réponse sans GIE (création, nouveau code…) : on garde ceux déjà lus.
+          return { ...fresh, ...(!orgsFromApi.has(user.id) && user.orgIds && { orgIds: user.orgIds }) };
         }),
         ...incoming.values(),
       ],
