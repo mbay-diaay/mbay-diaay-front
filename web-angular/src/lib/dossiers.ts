@@ -5,6 +5,7 @@
  * Circuit : brouillon, soumis, en examen (ou complément demandé, qui revient au technicien), approuvé ou refusé.
  * Un dossier refusé ne se rouvre pas : le technicien en crée un nouveau.
  */
+import { isSenegalPhone } from "./phone-sn";
 import type { Producer } from "./mock/data";
 import type {
   DossierDraft,
@@ -65,7 +66,6 @@ export interface DraftIssue {
   message: string;
 }
 
-const PHONE = /^7[0678]\s?\d{3}\s?\d{2}\s?\d{2}$/;
 const CNI = /^[12]\d{12}$/;
 const norm = (s: string) =>
   s
@@ -114,7 +114,7 @@ export function validateDraft(d: DossierDraft, documentCount: number): DraftIssu
     issues.push({ field: "orgId", message: tNow("errors.dossier.lOrganisationEstObligatoire") });
   if (d.age === null || !Number.isInteger(d.age) || d.age < 15 || d.age > 100)
     issues.push({ field: "age", message: tNow("errors.dossier.lAgeDoitEtreCompris") });
-  if (!d.phone.trim() || !PHONE.test(d.phone.trim()))
+  if (!d.phone.trim() || !isSenegalPhone(d.phone.trim()))
     issues.push({ field: "phone", message: tNow("errors.dossier.leTelephoneDoitRessemblerA") });
   if (!CNI.test(digits(d.cni)))
     issues.push({

@@ -5,7 +5,7 @@ import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
 import { organisationDraft } from "@/lib/coop-request-templates";
-import { describeSourceFact, SOURCE_FILTER_IDS, sourceOfRecord, type DataSourceId } from "@/lib/data-source";
+import { countBySource, describeSourceFact, SOURCE_FILTER_IDS, sourceOfRecord, type DataSourceId } from "@/lib/data-source";
 import { listOrganisations, orgFromApi } from "@/lib/api/organisations";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { inScope } from "@/lib/scope";
@@ -436,10 +436,19 @@ export default class OrganisationsPage {
 
   /** Filtre « Source » : la base d'origine enregistrée par le serveur (Kobo, consolidée, saisie). */
   protected readonly source = signal<string>(ALL_SOURCES);
-  protected readonly sourceOptions = computed<SelectOption[]>(() => [
-    { value: ALL_SOURCES, label: this.t()("qualite.source.filter.all") },
-    ...SOURCE_FILTER_IDS.map((id) => ({ value: id as string, label: this.t()(SOURCE_LABEL[id]) })),
-  ]);
+  protected readonly sourceOptions = computed<SelectOption[]>(() => {
+    // Compteurs par base d'origine, chaque base se consulte séparément (aucun lien entre Kobo et consolidé, Q-13).
+    const counts = countBySource(this.all().map((row) => row.record));
+    const total = this.all().length;
+    return [
+      { value: ALL_SOURCES, label: this.t()("qualite.source.filter.all"), hint: nf.format(total) },
+      ...SOURCE_FILTER_IDS.map((id) => ({
+        value: id as string,
+        label: this.t()(SOURCE_LABEL[id]),
+        hint: nf.format(counts[id]),
+      })),
+    ];
+  });
 
   protected readonly shown = computed(() => {
     const needle = norm(this.q().trim());

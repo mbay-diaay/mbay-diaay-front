@@ -91,3 +91,12 @@ describe("origine lue sur le serveur (colonnes source_*)", () => {
     );
   });
 });
+
+describe("compteurs par base d'origine (Q-13 : aucun lien entre les bases)", () => {
+  it("compte chaque base séparément", async () => {
+    const { countBySource } = await import("./data-source");
+    expect(
+      countBySource([{ sourceBase: "KOBO" }, { sourceBase: "KOBO" }, { sourceBase: "CONSOLIDE" }, { sourceBase: null }]),
+    ).toEqual({ kobo: 2, consolidee: 1, application: 1, cradesc: 0 });
+  });
+});

@@ -48,6 +48,8 @@ export type ApiProducer = ApiOrigin & {
   history: Producer["history"];
   mergedInto: string | null;
   photoUrl: string | null;
+  /** Ligne d'origine exacte du fichier reçu (détail d'une fiche seulement) ; absent sur une API plus ancienne. */
+  sourceValues?: unknown;
   /** Fiche Kobo d'origine (import Kobo) ; absent sur une API plus ancienne. */
   koboUuid?: string | null;
   /** Enquête socio-économique Kobo (import Kobo). */

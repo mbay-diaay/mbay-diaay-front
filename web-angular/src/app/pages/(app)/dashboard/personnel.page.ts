@@ -1,5 +1,6 @@
 import { Component, computed, effect, inject, signal, untracked } from "@angular/core";
 
+import { isPhoneInputAccepted } from "@/lib/phone-sn";
 import { isApiMode } from "@/lib/api/config";
 import { syncImage } from "@/lib/api/media";
 import { technicianApiError } from "@/lib/api/technician-errors";
@@ -537,7 +538,7 @@ export default class PersonnelPage {
     if (!this.firstName().trim()) errors.firstName = t("errors.technician.name");
     if (!this.lastName().trim()) errors.lastName = t("errors.technician.name");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email().trim())) errors.email = t("errors.technician.email");
-    if (this.phone().replace(/\D/g, "").length < 9) errors.phone = t("errors.technician.phone");
+    if (!this.phone().trim() || !isPhoneInputAccepted(this.phone(), "")) errors.phone = t("errors.technician.phone");
     const ageValue = Number(this.age().trim());
     if (!this.apiMode) {
       if (!this.age().trim() || !Number.isInteger(ageValue) || ageValue < 15 || ageValue > 100) errors.age = t("errors.technician.age");
@@ -628,7 +629,7 @@ export default class PersonnelPage {
     const t = this.t();
     const errors: Partial<Record<"name" | "phone" | "age" | "sex", string>> = {};
     if (this.editName().trim().split(/\s+/).length < 2) errors.name = t("errors.technician.name");
-    if (this.editPhone().replace(/\D/g, "").length < 9) errors.phone = t("errors.technician.phone");
+    if (!this.editPhone().trim() || !isPhoneInputAccepted(this.editPhone(), person.phone)) errors.phone = t("errors.technician.phone");
     const ageValue = Number(this.editAge().trim());
     if (!this.editAge().trim() || !Number.isInteger(ageValue) || ageValue < 15 || ageValue > 100) errors.age = t("errors.technician.age");
     if (!this.editSex()) errors.sex = t("errors.technician.sex");

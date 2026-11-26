@@ -15,8 +15,8 @@ import { SnackbarService } from "./ui/snackbar.service";
 import { TextFieldComponent } from "./ui/text-field.component";
 import { V2_PAGE_STYLES } from "./ui/v2-page.styles";
 
-/** Type proposé par défaut : « À préciser » est un vrai type, à compléter quand le CRADESC donnera l'information. */
-const DEFAULT_TYPE: OrgType = "À préciser";
+/** Type proposé par défaut : « Autre » (Q-18). « À préciser » reste valide pour les données existantes. */
+const DEFAULT_TYPE: OrgType = "Autre";
 
 /**
  * Nouveau GIE ou organisation dans une coopérative (charte V2). Droit `org.manage` ; le serveur vérifie aussi le périmètre.

@@ -147,6 +147,16 @@ export function sourceOfGroup(producers: ReadonlyArray<OriginSource>): DataSourc
 /** Identifiants des sources utilisables comme filtre. */
 export const SOURCE_FILTER_IDS: readonly DataSourceId[] = ["kobo", "application", "consolidee"];
 
+/**
+ * Nombre de fiches par base d'origine (Kobo, consolidé, saisie). Aucun lien n'est fait entre les bases (Q-13) : on
+ * compte et on consulte chacune séparément.
+ */
+export function countBySource(records: ReadonlyArray<OriginSource>): Record<DataSourceId, number> {
+  const counts: Record<DataSourceId, number> = { kobo: 0, consolidee: 0, application: 0, cradesc: 0 };
+  for (const record of records) counts[sourceOfRecord(record).id] += 1;
+  return counts;
+}
+
 type Translate = (key: MessageKey, params?: TranslateParams) => string;
 
 /** Texte d'une ligne « Source » de fiche : « Kobo · feuille « Producteurs » · ligne 12 ». */

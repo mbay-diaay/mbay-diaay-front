@@ -6,6 +6,9 @@ import { IconComponent } from "./ui";
 
 /** Une phrase d'aide par type d'organisation (décision Q-09, « DONNEES.md » §7). Pas de phrase inventée pour un type absent de la liste. */
 const HELP_KEY: Partial<Record<string, MessageKey>> = {
+  Individuel: "orgtype.help.Individuel",
+  Association: "orgtype.help.Association",
+  Autre: "orgtype.help.Autre",
   GIE: "orgtype.help.GIE",
   Union: "orgtype.help.Union",
   Groupement: "orgtype.help.Groupement",
@@ -15,6 +18,9 @@ const HELP_KEY: Partial<Record<string, MessageKey>> = {
 };
 
 const NAME_KEY: Partial<Record<string, MessageKey>> = {
+  Individuel: "orgtype.name.Individuel",
+  Association: "orgtype.name.Association",
+  Autre: "orgtype.name.Autre",
   GIE: "organisations.type.GIE",
   Union: "organisations.type.Union",
   Groupement: "organisations.type.Groupement",
@@ -24,12 +30,12 @@ const NAME_KEY: Partial<Record<string, MessageKey>> = {
 };
 
 /** Ordre d'affichage de la liste complète. */
-const ALL_TYPES = ["GIE", "Union", "Groupement", "Section", "OP", "À préciser"] as const;
+const ALL_TYPES = ["Individuel", "GIE", "Union", "Groupement", "Section", "Association", "OP", "Autre", "À préciser"] as const;
 
 /**
  * Aide en français sur les types d'organisation.
  * - `<app-org-type-help [type]="type" />` : la phrase du type donné (type vide : « À préciser »).
- * - `<app-org-type-help [showAll]="true" />` : les six définitions (GIE, Union, Groupement, Section, OP, À préciser).
+ * - `<app-org-type-help [showAll]="true" />` : les neuf définitions (Individuel, GIE, Union, Groupement, Section, Association, OP, Autre, À préciser).
  * Une seule colonne de lecture, texte court.
  */
 @Component({

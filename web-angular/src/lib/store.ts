@@ -1,5 +1,5 @@
 import { checkAccess } from "./guard";
-import { isSenegalPhone } from "./phone-sn";
+import { isPhoneInputAccepted, isSenegalPhone } from "./phone-sn";
 import {
   ACCOUNT_CANDIDATES,
   ACCOUNT_LINKS,
@@ -750,8 +750,12 @@ function access(
   return result.ok ? null : fail(result.key);
 }
 /** Contrôles communs à la création et à la modification d'un technicien : téléphone, sexe et âge obligatoires. */
-function technicianProfileError(input: { phone: string; sex?: string; age?: number }): string | null {
-  if (!isSenegalPhone(input.phone)) return "errors.technician.phone";
+function technicianProfileError(
+  input: { phone: string; sex?: string; age?: number },
+  previousPhone?: string,
+): string | null {
+  // Le téléphone reste obligatoire ; son format n'est exigé que pour une valeur nouvelle ou modifiée (Q-17).
+  if (!input.phone.trim() || !isPhoneInputAccepted(input.phone, previousPhone)) return "errors.technician.phone";
   if (input.sex !== "F" && input.sex !== "H") return "errors.technician.sex";
   if (!Number.isInteger(input.age) || (input.age as number) < 15 || (input.age as number) > 100)
     return "errors.technician.age";
@@ -1548,7 +1552,7 @@ export const actions = {
       return fail("errors.technician.scope");
     const name = input.name.trim().replace(/\s+/g, " ");
     if (name.split(" ").length < 2) return fail("errors.technician.name");
-    const profileError = technicianProfileError(input);
+    const profileError = technicianProfileError(input, user.phone);
     if (profileError) return fail(profileError as never);
     const visible = (id: string) => inScope([{ scoopId: id }], who.session).length > 0;
     const keptOutside = (user.orgIds ?? []).filter((id) => {
@@ -2339,11 +2343,14 @@ export const actions = {
       identity.name = name;
     }
     if (patch.phone !== undefined || patch.sex !== undefined || patch.age !== undefined) {
-      const profileError = technicianProfileError({
-        phone: patch.phone ?? user.phone,
-        sex: patch.sex ?? user.sex,
-        age: patch.age ?? user.age,
-      });
+      const profileError = technicianProfileError(
+        {
+          phone: patch.phone ?? user.phone,
+          sex: patch.sex ?? user.sex,
+          age: patch.age ?? user.age,
+        },
+        user.phone,
+      );
       if (profileError) return fail(profileError as never);
       if (patch.phone !== undefined) identity.phone = patch.phone.trim();
       if (patch.sex !== undefined) identity.sex = patch.sex;
