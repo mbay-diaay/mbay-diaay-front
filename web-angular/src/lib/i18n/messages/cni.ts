@@ -136,13 +136,28 @@ export const cni = {
   "orgtype.help.Union": "Regroupement de plusieurs groupements ou coopératives qui se fédèrent pour agir ensemble.",
   "orgtype.help.Groupement": "Groupe de producteurs, plus informel qu'un GIE, sans statut précisé dans le fichier.",
   "orgtype.help.Section": "Subdivision d'une coopérative (par village ou par zone), sans existence juridique propre.",
+  "orgtype.help.Individuel": "Producteur qui n'est rattaché à aucun groupe : il est son propre « groupe ».",
+  "orgtype.help.Association": "Groupe de personnes réunies autour d'un objectif commun, sans activité économique propre précisée.",
+  "orgtype.help.Autre": "Tout type qui ne rentre dans aucune des autres cases : valeur par défaut pour les orphelins.",
   "orgtype.help.OP": "Organisation de producteurs : terme général quand le fichier ne dit pas de quel type il s'agit.",
   "orgtype.help.aPreciser": "Le nom ne permet pas de savoir : à compléter quand le CRADESC donnera l'information.",
+  "orgtype.name.Individuel": "Individuel",
+  "orgtype.name.Association": "Association",
+  "orgtype.name.Autre": "Autre",
   "orgtype.name.OP": "OP",
   "orgtype.name.aPreciser": "À préciser",
 
   // ── Adhérents sans nom (lignes d'organisation du fichier consolidé)
   "membre.sansNom": "Membre sans nom",
+
+  // ── Données d'origine du fichier (Q-17)
+  "origine.title": "Données d'origine du fichier",
+  "origine.help": "Ces valeurs sont celles du fichier reçu, sans aucune modification. La CNI et le téléphone sont masqués sans le droit de lecture complète.",
+  "origine.loading": "Chargement de la ligne d'origine…",
+  "origine.error": "La ligne d'origine n'a pas pu être chargée. Réessayez dans un instant.",
+  "origine.empty": "Aucune donnée d'origine pour cette fiche (fiche saisie dans l'application, ou serveur sans cette information).",
+  "origine.col.column": "Colonne du fichier",
+  "origine.col.value": "Valeur d'origine",
 
   // ── Parcelles consolidées
   "plot.areaUnknown": "Superficie non renseignée (unité à confirmer par le CRADESC)",

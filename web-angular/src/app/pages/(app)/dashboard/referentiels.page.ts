@@ -74,11 +74,14 @@ const FAMILY_LABEL: Record<CropFamily, MessageKey> = {
 };
 
 const ORG_TYPE_LABEL: Record<OrgType, MessageKey> = {
+  Individuel: "referentiels.orgType.individuel",
   GIE: "referentiels.orgType.gie",
   Union: "referentiels.orgType.union",
   Groupement: "referentiels.orgType.groupement",
   Section: "referentiels.orgType.section",
+  Association: "referentiels.orgType.association",
   OP: "referentiels.orgType.op",
+  Autre: "referentiels.orgType.autre",
   "À préciser": "referentiels.orgType.aPreciser",
 };
 

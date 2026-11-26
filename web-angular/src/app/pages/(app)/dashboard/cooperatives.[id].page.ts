@@ -1,3 +1,4 @@
+import { isPhoneInputAccepted } from "@/lib/phone-sn";
 import { Component, computed, effect, inject, signal, untracked } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, RouterLink } from "@angular/router";
@@ -1849,7 +1850,8 @@ const initials = (name: string) =>
               icon="call"
               optional="facultatif"
               [value]="newManagerPhone()"
-              (valueChange)="newManagerPhone.set($event)"
+              [error]="newManagerPhoneError()"
+              (valueChange)="newManagerPhone.set($event); newManagerPhoneError.set('')"
             />
           </div>
         </div>
@@ -2032,11 +2034,13 @@ export default class CooperativeDetailPage {
   protected readonly newManagerName = signal("");
   protected readonly newManagerEmail = signal("");
   protected readonly newManagerPhone = signal("");
+  protected readonly newManagerPhoneError = signal("");
 
   protected openReplaceManagerDialog(): void {
     this.newManagerName.set("");
     this.newManagerEmail.set("");
     this.newManagerPhone.set("");
+    this.newManagerPhoneError.set("");
     this.replaceManagerDialogOpen.set(true);
   }
 
@@ -2047,6 +2051,11 @@ export default class CooperativeDetailPage {
     const email = this.newManagerEmail().trim().toLowerCase();
     const phone = this.newManagerPhone().trim();
     if (!currentScoop || !name || !email || this.replaceManagerInProgress()) return;
+    // Numéro nouveau : le format sénégalais est exigé (Q-17, sur le web seulement).
+    if (!isPhoneInputAccepted(phone, "")) {
+      this.newManagerPhoneError.set(this.t()("errors.technician.phone"));
+      return;
+    }
     // Mode API : le serveur crée le compte, désactive l'ancien, invite par e-mail et audite ; rien dans le navigateur.
     if (isApiMode()) {
       await this.replaceManagerOnApi(currentScoop.id, name, email, phone);

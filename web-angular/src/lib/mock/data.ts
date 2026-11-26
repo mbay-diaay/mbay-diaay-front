@@ -7,7 +7,7 @@ import { buildFixtureData, CAMPAIGN } from "./fixture";
 export type Sex = "F" | "H";
 export type Quality = "validé" | "à vérifier" | "doublon" | "invalide";
 export type OrgType =
-  "GIE" | "Union" | "Groupement" | "Section" | "OP" | "À préciser";
+  "Individuel" | "GIE" | "Union" | "Groupement" | "Section" | "Association" | "OP" | "Autre" | "À préciser";
 export type PlotStatus = "relevée" | "validée" | "à reprendre" | "chevauchement";
 
 export interface Scoop {
@@ -253,11 +253,14 @@ const FX = buildFixtureData();
 
 export const CAMPAIGNS = [CAMPAIGN] as const;
 export const ORG_TYPES: OrgType[] = [
+  "Individuel",
   "GIE",
   "Union",
   "Groupement",
   "Section",
+  "Association",
   "OP",
+  "Autre",
   "À préciser",
 ];
 

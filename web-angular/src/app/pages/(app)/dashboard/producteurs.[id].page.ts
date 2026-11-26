@@ -4,6 +4,7 @@ import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, RouterLink } from "@angular/router";
 import { map } from "rxjs";
 
+import { isPhoneInputAccepted } from "@/lib/phone-sn";
 import { isApiMode } from "@/lib/api/config";
 import { producerItem, sheetDraft } from "@/lib/coop-request-templates";
 import { fetchProducerPhotos } from "@/lib/api/plots";
@@ -21,6 +22,7 @@ import type {
 import { inScope } from "@/lib/store";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { CniAlertPanelComponent } from "@shared/cni-alert-panel.component";
+import { SourceValuesPanelComponent } from "@shared/source-values-panel.component";
 import { ContactScoopModalComponent, type CoopRequestTarget } from "@shared/contact-scoop-modal.component";
 import { LocaleService } from "@shared/locale.service";
 import { PlotMapComponent } from "@shared/plot-map.component";
@@ -61,7 +63,6 @@ const STATUS_KEY = {
   membre: "producteurs.status.membre",
 } as const satisfies Record<Producer["status"], MessageKey>;
 
-const PHONE_RE = /^7[0678]\s?\d{3}\s?\d{2}\s?\d{2}$/;
 
 /** Superficies et rendements : deux décimales (les parcelles des Niayes font souvent moins d'un hectare). */
 const nf2 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
@@ -90,6 +91,7 @@ const SEASON_KEYS = [
   imports: [
     AppShellComponent,
     CniAlertPanelComponent,
+    SourceValuesPanelComponent,
     ContactScoopModalComponent,
     DetailHeroComponent,
     IconComponent,
@@ -813,6 +815,10 @@ const SEASON_KEYS = [
           <ui-stat-cards class="rise mt-6" [stats]="stats()" />
 
           <app-cni-alert-panel [producerId]="current.id" />
+
+          <div class="mt-4">
+            <app-source-values-panel [producerId]="current.id" />
+          </div>
 
           @if (checkItems().length) {
             <div class="alerte rise mt-4" role="note">
@@ -2200,7 +2206,8 @@ export default class ProducteurDetailPage {
     if (!this.correctionOpen()) return "";
     const phone = this.corrPhone().trim();
     if (!phone) return "";
-    return PHONE_RE.test(phone) ? "" : this.t()("producteurs.detail.correction.phoneError");
+    // Valeur inchangée : jamais d'erreur (Q-17). Format exigé seulement pour un numéro nouveau ou modifié.
+    return isPhoneInputAccepted(phone, this.producer()?.phone) ? "" : this.t()("producteurs.detail.correction.phoneError");
   }
 
   corrAgeErr(): string {

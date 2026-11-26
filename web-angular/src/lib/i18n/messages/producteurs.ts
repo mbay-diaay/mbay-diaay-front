@@ -161,7 +161,7 @@ export const producteurs = {
   "producteurs.correction.beforeAfter": "Avant / après ({n} champ(s))",
   "producteurs.correction.motif": "Motif",
   "producteurs.correction.motifPlaceholder": "Pourquoi cette correction est-elle nécessaire ?",
-  "producteurs.correction.phoneError": "Format attendu : 77 123 45 67",
+  "producteurs.correction.phoneError": "Numéro sénégalais attendu : 9 chiffres commençant par 70, 75, 76, 77 ou 78 (avec ou sans +221).",
   "producteurs.correction.ageError": "Âge entre 15 et 100 ans",
   "producteurs.correction.sent": "Demande envoyée",
   "producteurs.correction.sentDesc":
@@ -210,7 +210,7 @@ export const producteurs = {
   "producteurs.detail.correction.beforeAfter": "Avant / après ({n} champ(s))",
   "producteurs.detail.correction.motif": "Motif",
   "producteurs.detail.correction.motifPlaceholder": "Pourquoi cette correction est-elle nécessaire ?",
-  "producteurs.detail.correction.phoneError": "Format attendu : 77 123 45 67",
+  "producteurs.detail.correction.phoneError": "Numéro sénégalais attendu : 9 chiffres commençant par 70, 75, 76, 77 ou 78 (avec ou sans +221).",
   "producteurs.detail.correction.ageError": "Âge entre 15 et 100 ans",
   "producteurs.detail.correction.sent": "Demande envoyée",
   "producteurs.detail.correction.sentDesc":

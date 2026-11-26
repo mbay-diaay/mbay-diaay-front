@@ -7,7 +7,7 @@ import { isApiMode } from "@/lib/api/config";
 import { actions, can, inScope } from "@/lib/store";
 import { CROPS, VILLAGES, type Quality } from "@/lib/mock/data";
 import { AGE_BANDS, ageAtMost, ageBand, downloadCsv, fmtDate, maskPhone, nf } from "@/lib/format";
-import { describeSourceFact, SOURCE_FILTER_IDS, sourceOfRecord, type DataSourceId } from "@/lib/data-source";
+import { countBySource, describeSourceFact, SOURCE_FILTER_IDS, sourceOfRecord, type DataSourceId } from "@/lib/data-source";
 import type { MessageKey } from "@/lib/i18n";
 import { AppShellComponent } from "@shared/app-shell.component";
 import { LocaleService } from "@shared/locale.service";
@@ -606,6 +606,21 @@ export default class ProducteursPage {
         ...opts.map(([value, l]) => ({ value, label: l })),
       ] as SelectOption[],
     });
+    // Compteurs par base d'origine (Kobo / Consolidé / Saisie) à côté de chaque choix du filtre « Source ».
+    const sourceCounts = countBySource(
+      inScope(
+        this.store.state().producers.filter((p) => !p.mergedInto),
+        this.store.state().session,
+      ),
+    );
+    const total = Object.values(sourceCounts).reduce((sum, n) => sum + n, 0);
+    const withCounts = <T extends { options: SelectOption[] }>(entry: T): T => ({
+      ...entry,
+      options: entry.options.map((option) => ({
+        ...option,
+        hint: nf.format(option.value === ALL ? total : (sourceCounts[option.value as DataSourceId] ?? 0)),
+      })),
+    });
     return [
       def(
         "village",
@@ -630,11 +645,13 @@ export default class ProducteursPage {
         CROPS.map((c) => [c, c]),
       ),
       // Base d'origine enregistrée par le serveur (Kobo, consolidée, saisie dans l'application).
-      def(
-        "source",
-        t("qualite.source.filter.label"),
-        "database",
-        SOURCE_FILTER_IDS.map((id) => [id, t(SOURCE_LABEL[id])]),
+      withCounts(
+        def(
+          "source",
+          t("qualite.source.filter.label"),
+          "database",
+          SOURCE_FILTER_IDS.map((id) => [id, t(SOURCE_LABEL[id])]),
+        ),
       ),
     ];
   });

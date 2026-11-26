@@ -142,7 +142,7 @@ export const cooperatives = {
   "members.add.err.firstName": "Saisissez le prénom.",
   "members.add.err.lastName": "Saisissez le nom.",
   "members.add.err.sex": "Indiquez le sexe.",
-  "members.add.err.phone": "Indiquez un numéro sénégalais à 9 chiffres, ou laissez vide.",
+  "members.add.err.phone": "Numéro sénégalais attendu : 9 chiffres commençant par 70, 75, 76, 77 ou 78 (avec ou sans +221).",
   "members.add.err.email": "Adresse e-mail invalide.",
   "cooperatives.fiche.resendLink": "Renvoyer le lien d'activation",
   "cooperatives.fiche.logoAlt": "Logo de {name}",
