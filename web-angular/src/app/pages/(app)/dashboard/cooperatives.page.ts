@@ -560,17 +560,31 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
 
       <!-- ───── Coopérative technique « Hors coopérative » : visible de qui peut transférer, jamais comptée ───── -->
       @for (technical of technicalScoops(); track technical.id) {
-        <a class="card mt-6 flex items-center gap-4 p-4" [routerLink]="['/dashboard/cooperatives', technical.id]">
+        <a
+          class="mt-6 flex flex-wrap items-center gap-4 rounded-[20px] p-5"
+          style="
+            background: var(--v2-foret);
+            color: var(--v2-blanc);
+            border: 2px solid var(--v2-foret);
+            box-shadow: var(--v2-ombre-flottant);
+          "
+          [routerLink]="['/dashboard/cooperatives', technical.id]"
+        >
           <span
-            class="grid size-11 shrink-0 place-items-center rounded-[14px]"
-            style="background: var(--v2-attente-bg); color: var(--v2-attente-fg)"
-            ><ui-icon name="layers" [size]="22"
+            class="grid size-14 shrink-0 place-items-center rounded-[16px]"
+            style="background: var(--v2-citron); color: var(--v2-foret)"
+            ><ui-icon name="layers" [size]="28"
           /></span>
-          <span class="min-w-0 flex-1">
-            <span class="block truncate text-[16px] font-extrabold">{{ technical.name }}</span>
-            <span class="sub block">{{ t()("placement.technicalLead") }}</span>
+          <span class="min-w-0 flex-1 basis-64">
+            <span class="block text-[18px] font-extrabold leading-snug">{{ technical.name }}</span>
+            <span class="block text-[14px] font-semibold leading-snug">{{ t()("placement.technicalLead") }}</span>
           </span>
-          <ui-icon name="arrow_forward" [size]="20" />
+          <span
+            class="inline-flex items-center gap-2 rounded-full px-5 py-3 text-[14px] font-extrabold"
+            style="background: var(--v2-citron); color: var(--v2-foret)"
+          >
+            {{ t()("cooperatives.technical.consult") }}<ui-icon name="arrow_forward" [size]="18" />
+          </span>
         </a>
       }
 
@@ -645,22 +659,24 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
         </ui-collapsible>
       </section>
 
-      <!-- ───── Chiffres de la base Kobo (réseau) ───── -->
-      <section class="card mt-4 p-5" [attr.aria-label]="t()('cooperatives.figure.title')">
-        <h2 class="mono" style="color: var(--v2-ardoise)">{{ t()("cooperatives.figure.title") }}</h2>
-        <p class="sub mt-1">{{ t()("cooperatives.figure.sub") }}</p>
-        <dl class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
-          @for (figure of koboTotals(); track figure.key) {
-            <div>
-              <dt class="sub">{{ figure.label }}</dt>
-              <dd class="mt-1 text-[24px] font-extrabold leading-none tracking-[-0.02em] tabular-nums">
-                {{ figure.value
-                }}@if (figure.unit) {<span class="ml-1 text-[13px] font-semibold" style="color: var(--v2-gris-texte)">{{ figure.unit }}</span>}
-              </dd>
-            </div>
-          }
-        </dl>
-      </section>
+      <!-- ───── Chiffres du réseau, une base à la fois : Kobo puis consolidée (jamais mélangées) ───── -->
+      @for (block of baseBlocks(); track block.key) {
+        <section class="card mt-4 p-5" [attr.aria-label]="block.title">
+          <h2 class="mono" style="color: var(--v2-ardoise)">{{ block.title }}</h2>
+          <p class="sub mt-1">{{ block.sub }}</p>
+          <dl class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+            @for (figure of block.figures; track figure.key) {
+              <div>
+                <dt class="sub">{{ figure.label }}</dt>
+                <dd class="mt-1 text-[24px] font-extrabold leading-none tracking-[-0.02em] tabular-nums">
+                  {{ figure.value
+                  }}@if (figure.unit) {<span class="ml-1 text-[13px] font-semibold" style="color: var(--v2-gris-texte)">{{ figure.unit }}</span>}
+                </dd>
+              </div>
+            }
+          </dl>
+        </section>
+      }
 
       <!-- ───── Statistiques (aplats, filigrane) ───── -->
       <section
@@ -757,6 +773,26 @@ const ACCOUNT: Record<AccountState, { label: MessageKey; bg: string; fg: string 
           </button>
         </div>
       </div>
+
+      <!-- ───── Base d'origine des chiffres du tableau (jamais mélangées) ───── -->
+      @if (apiMode) {
+        <div class="mt-3 flex flex-wrap items-center gap-3">
+          <span class="sub">{{ t()("cooperatives.base.label") }}</span>
+          <div class="seg" role="radiogroup" [attr.aria-label]="t()('cooperatives.base.label')">
+            @for (choice of baseChoices(); track choice.id) {
+              <button
+                type="button"
+                role="radio"
+                [class.on]="baseChoice() === choice.id"
+                [attr.aria-checked]="baseChoice() === choice.id"
+                (click)="baseChoice.set(choice.id)"
+              >
+                {{ choice.label }}
+              </button>
+            }
+          </div>
+        </div>
+      }
 
       <p class="sub mt-4" aria-live="polite">{{ countLabel() }}</p>
 
@@ -1366,6 +1402,18 @@ export default class CooperativesPage {
   /** Coopérative technique (vide sans le droit de transfert) : hors de la liste et des décomptes, accessible d'ici. */
   protected readonly technicalScoops = computed(() => (this.store.can("scoop.transfer") ? this.store.state().technicalScoops : []));
 
+  protected readonly apiMode = isApiMode();
+  /** Base d'origine des chiffres du tableau : toutes, Kobo ou consolidée (jamais additionnées sans le dire). */
+  protected readonly baseChoice = signal<"ALL" | "KOBO" | "CONSOLIDE">("ALL");
+  protected readonly baseChoices = computed(() => {
+    const t = this.t();
+    return [
+      { id: "ALL" as const, label: t("cooperatives.base.all") },
+      { id: "KOBO" as const, label: t("cooperatives.base.kobo") },
+      { id: "CONSOLIDE" as const, label: t("cooperatives.base.consolidated") },
+    ];
+  });
+
   protected readonly rows = computed(() => {
     const s = this.store.state();
     const session = s.session;
@@ -1375,7 +1423,24 @@ export default class CooperativesPage {
     const t = this.t();
     return scoops.map((scoop) => {
       // Chiffres de la base Kobo : l'API en mode API (« — » tant qu'elle n'a pas répondu), le store en démonstration.
-      const figures = scoopFigures(s, scoop.id);
+      const full = scoopFigures(s, scoop.id);
+      const choice = this.baseChoice();
+      const byBase = isApiMode() && choice !== "ALL" ? s.scoopStats[scoop.id]?.bySource?.[choice] : undefined;
+      // Une base choisie : producteurs, femmes, jeunes, parcelles et superficie de CETTE base. Ce que le serveur ne sait pas
+      // par base (fiches validées ; jeunes et superficie de la consolidée) devient « — », jamais un faux zéro.
+      const figures =
+        isApiMode() && choice !== "ALL"
+          ? {
+              ...full,
+              producers: byBase?.producers ?? null,
+              women: byBase?.women ?? null,
+              youth: choice === "CONSOLIDE" ? null : (byBase?.youth ?? null),
+              validated: null,
+              toCheck: null,
+              plots: byBase?.plots ?? null,
+              plotAreaHa: choice === "CONSOLIDE" && !byBase?.plotAreaHa ? null : (byBase?.plotAreaHa ?? null),
+            }
+          : full;
       const { producers, members, organisations: orgs } = figures;
       // Le serveur ne distingue pas les GIE des autres organisations dans ses chiffres : on compte les organisations.
       const gie = isApiMode() ? orgs : s.orgs.filter((o) => o.scoopId === scoop.id && o.type === "GIE").length;
@@ -1526,6 +1591,46 @@ export default class CooperativesPage {
       plots: sumKnown(rows.map((r) => r.figures.plots)),
       plotAreaHa: sumKnown(rows.map((r) => r.figures.plotAreaHa)),
     });
+  });
+
+  /** Totaux du réseau pour une base d'origine, lus dans les chiffres par base du serveur. */
+  private baseTotals(source: "KOBO" | "CONSOLIDE") {
+    const stats = this.store.state().scoopStats;
+    const rows = this.rows().filter((r) => !r.scoop.archived);
+    const pick = (key: "producers" | "women" | "youth" | "plots" | "plotAreaHa") =>
+      sumKnown(rows.map((r) => stats[r.scoop.id]?.bySource?.[source]?.[key] ?? null));
+    const plots = pick("plots");
+    const area = pick("plotAreaHa");
+    // « Jeunes » vient de l'enquête Kobo, et les parcelles consolidées n'ont pas de superficie : « — », pas un faux zéro.
+    const youth = pick("youth");
+    return this.koboFigures({
+      producers: pick("producers"),
+      women: pick("women"),
+      youth: source === "CONSOLIDE" && !youth ? null : youth,
+      validated: null,
+      toCheck: null,
+      organisations: null,
+      members: null,
+      plots,
+      plotAreaHa: plots && !area ? null : area,
+    });
+  }
+
+  /** Un bloc par base : Kobo puis consolidée (en démonstration, le seul bloc d'origine). */
+  protected readonly baseBlocks = computed(() => {
+    const t = this.t();
+    if (!isApiMode()) {
+      return [{ key: "kobo", title: t("cooperatives.figure.title"), sub: t("cooperatives.figure.sub"), figures: this.koboTotals() }];
+    }
+    return [
+      { key: "kobo", title: t("cooperatives.figure.title"), sub: t("cooperatives.figure.sub"), figures: this.baseTotals("KOBO") },
+      {
+        key: "consolidee",
+        title: t("cooperatives.figure.consolidated.title"),
+        sub: t("cooperatives.figure.consolidated.sub"),
+        figures: this.baseTotals("CONSOLIDE"),
+      },
+    ];
   });
 
   /** Pyramide du réseau : la faîtière fédère les coopératives, qui regroupent des GIE et des producteurs. */

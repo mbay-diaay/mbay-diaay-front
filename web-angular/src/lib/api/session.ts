@@ -71,7 +71,9 @@ export async function loadScoopsFromApi(): Promise<void> {
  */
 export async function loadScoopStatsFromApi(scoopId?: string): Promise<void> {
   try {
-    const items = await fetchScoopStats(scoopId);
+    // Une coopérative précise (fiche) : la coopérative technique « Hors coopérative » a aussi ses chiffres, pour qui peut
+    // transférer. Le serveur vérifie ce droit ; la liste globale (les 11) ne l'inclut jamais.
+    const items = await fetchScoopStats(scoopId, !!scoopId && can(getState().session, "scoop.transfer"));
     if (scoopId) actions.mergeScoopStatsFromApi(items);
     else actions.setScoopStatsFromApi(items);
   } catch {
