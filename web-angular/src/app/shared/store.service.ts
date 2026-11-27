@@ -35,14 +35,20 @@ export class StoreService {
   constructor() {
     const unsubscribe = subscribeToStore(() => this.stateSignal.set(getState()));
     this.destroyRef.onDestroy(unsubscribe);
-    // Mode API : les membres se lisent sur le serveur à chaque ouverture de session, et se vident à la déconnexion.
+    // Mode API : les membres se vident à la déconnexion. Ils ne sont plus lus à l'ouverture de session : seuls les
+    // écrans qui en ont besoin les demandent (`ensureMembers`), jamais la page Producteurs.
     effect(() => {
       const email = this.state().session?.email ?? null;
-      untracked(() => this.loadMembersFor(email));
+      if (!email) untracked(() => this.loadMembersFor(null));
     });
   }
 
   private membersLoadedFor: string | null = null;
+
+  /** Lit les membres du périmètre une seule fois par session (à la demande de l'écran qui en a besoin). */
+  ensureMembers(): void {
+    this.loadMembersFor(this.state().session?.email ?? null);
+  }
 
   private loadMembersFor(email: string | null): void {
     if (!isApiMode() || email === this.membersLoadedFor) return;

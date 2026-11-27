@@ -1,4 +1,4 @@
-import { Injectable, inject } from "@angular/core";
+import { Injectable, inject, signal } from "@angular/core";
 
 import { isApiMode } from "@/lib/api/config";
 import { ApiError } from "@/lib/api/client";
@@ -61,22 +61,63 @@ export class ProducerWorkflow {
    * Mode API : charge les producteurs, dossiers et corrections du périmètre du compte (ce que son rôle permet de lire),
    * puis les parcelles (import Kobo) une fois les producteurs rangés : la campagne d'une parcelle vient de son producteur.
    */
+  /** Incrémenté quand les données serveur changent (fusion, transfert…) : les listes paginées se relisent. */
+  readonly refreshTick = signal(0);
+  private fullListsLoaded = false;
+  private hydratedOnce = false;
+  private fullListsPromise: Promise<void> | null = null;
+
   async hydrate(): Promise<void> {
     if (!isApiMode()) return;
-    const [producers, dossiers, corrections] = await Promise.allSettled([
-      fetchAllProducers(),
+    const [dossiers, corrections] = await Promise.allSettled([
       fetchAllDossiers(),
       this.store.can("correction.manage") ? fetchAllCorrections() : Promise.resolve(null),
     ]);
-    if (producers.status === "fulfilled") this.actions.setProducersFromApi(producers.value);
     if (dossiers.status === "fulfilled") this.actions.setDossiersFromApi(dossiers.value);
     if (corrections.status === "fulfilled" && corrections.value) this.actions.setCorrectionsFromApi(corrections.value);
-    if (producers.status !== "fulfilled" || !this.store.can("producer.read")) return;
+    // Les écrans déjà passés au chargement complet le relisent ; la page Producteurs se relit par page.
+    if (this.fullListsLoaded) await this.loadFullLists();
+    // Premier chargement : rien n'a changé pour les listes paginées. Ensuite (fusion, transfert…), elles se relisent.
+    if (this.hydratedOnce) this.refreshTick.update((n) => n + 1);
+    this.hydratedOnce = true;
+  }
+
+  /**
+   * Chargement COMPLET des producteurs et des parcelles, à la demande et une seule fois par session. Réservé aux écrans
+   * qui lisent encore la liste entière ; la page Producteurs, elle, demande une page à la fois au serveur.
+   */
+  ensureFullLists(): Promise<void> {
+    if (!isApiMode()) return Promise.resolve();
+    this.fullListsPromise ??= this.loadFullListsWithRetry().then((done) => {
+      this.fullListsLoaded = done;
+      // Échec définitif : la prochaine ouverture d'un écran réessaiera.
+      if (!done) this.fullListsPromise = null;
+    });
+    return this.fullListsPromise;
+  }
+
+  /** Réessaie après une erreur passagère (trop de requêtes, serveur qui redémarre) : jusqu'à 4 essais, de plus en plus espacés. */
+  private async loadFullListsWithRetry(): Promise<boolean> {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (await this.loadFullLists()) return true;
+      await new Promise((resolve) => setTimeout(resolve, 4000 * (attempt + 1)));
+    }
+    return false;
+  }
+
+  private async loadFullLists(): Promise<boolean> {
+    if (!this.store.can("producer.read")) return true;
+    try {
+      this.actions.setProducersFromApi(await fetchAllProducers());
+    } catch {
+      return false;
+    }
     try {
       this.actions.setPlotsFromApi(await fetchAllPlots());
     } catch {
-      // Parcelles indisponibles (API plus ancienne, réseau) : l'écran garde la liste locale.
+      return false;
     }
+    return true;
   }
 
   // ---------------------------------------------------------------- Dossiers

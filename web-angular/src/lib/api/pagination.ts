@@ -8,7 +8,8 @@
  */
 
 export const DEFAULT_PAGE_SIZE = 10;
-export const MAX_PAGE_SIZE = 200;
+/** Aligné sur l'API : 100 lignes au plus par page. */
+export const MAX_PAGE_SIZE = 100;
 /** Tailles proposées dans les tableaux. */
 export const PAGE_SIZES = [10, 25, 50, 100] as const;
 

@@ -16,6 +16,7 @@ export const common = {
   "common.pager.size": "Lignes par page",
   "common.pager.sizeOption": "{size} par page",
   /** Action « voir le détail » dans les listes. */
+  "common.throttled": "Le serveur est très sollicité : nouvelle tentative dans {seconds} s.",
   "common.view": "Voir",
   "common.viewDetail": "Voir le détail",
   "common.openFull": "Ouvrir la fiche complète",

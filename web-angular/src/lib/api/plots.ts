@@ -212,8 +212,8 @@ export function plotFromApi(row: ApiPlot): Plot {
 
 // --------------------------------------------------------------------- Routes
 
-/** Taille des paquets de `GET /plots` (le serveur accepte jusqu'à 500). */
-export const PLOTS_PAGE_SIZE = 500;
+/** Taille des paquets de `GET /plots` (le serveur accepte jusqu'à 100). */
+export const PLOTS_PAGE_SIZE = 100;
 
 export const listPlots = (query: PageQuery & Record<string, string | number | undefined> = {}) =>
   apiFetch<Page<ApiPlot>>(withPage("/plots", query));

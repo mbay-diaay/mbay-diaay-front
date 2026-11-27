@@ -1272,6 +1272,16 @@ export const actions = {
   setProducersFromApi(items: Producer[]) {
     set({ producers: items });
   },
+  /** Ajoute ou met à jour les fiches d'une page lue sur le serveur (sans toucher aux autres). */
+  upsertProducersFromApi(items: Producer[]) {
+    if (!items.length) return;
+    set((s) => {
+      const incoming = new Map(items.map((item) => [item.id, item]));
+      const kept = s.producers.map((p) => incoming.get(p.id) ?? p);
+      const known = new Set(s.producers.map((p) => p.id));
+      return { producers: [...kept, ...items.filter((item) => !known.has(item.id))] };
+    });
+  },
   upsertProducerFromApi(item: Producer) {
     set((s) => ({
       producers: s.producers.some((p) => p.id === item.id)
@@ -1284,6 +1294,27 @@ export const actions = {
    * campagne par parcelle : on reprend celle des cultures du producteur, sinon la première campagne connue.
    * Appelée seulement en mode API : le mode démonstration garde les parcelles de la fixture.
    */
+  /** Ajoute ou met à jour les parcelles d'un producteur lues à la demande (sans toucher aux autres). */
+  upsertPlotsFromApi(items: Plot[]) {
+    if (!items.length) return;
+    set((s) => {
+      const campaignOfProducer = new Map(
+        s.producers.map((producer) => [producer.id, producer.crops[0]?.campaign ?? ""]),
+      );
+      const fallbackCampaign = s.campaigns[0]?.name ?? "";
+      const incoming = new Map(
+        items.map((plot) => [
+          plot.id,
+          plot.campaign
+            ? plot
+            : { ...plot, campaign: campaignOfProducer.get(plot.producerId) || fallbackCampaign },
+        ]),
+      );
+      const kept = s.plots.map((plot) => incoming.get(plot.id) ?? plot);
+      const known = new Set(s.plots.map((plot) => plot.id));
+      return { plots: [...kept, ...[...incoming.values()].filter((plot) => !known.has(plot.id))] };
+    });
+  },
   setPlotsFromApi(items: Plot[]) {
     set((s) => {
       const campaignOfProducer = new Map(
