@@ -5,14 +5,16 @@ import type { ChartConfiguration } from "chart.js";
 
 import { isApiMode } from "@/lib/api/config";
 import { fetchRecentAudit } from "@/lib/api/audit";
+import type { ProducerStats } from "@/lib/api/producers";
+import { getStatsOverview, type StatsMembers, type StatsNetwork } from "@/lib/api/stats";
 import type { AuditEntry } from "@/lib/store";
-import { collectQualityPoints } from "@/lib/quality-real";
 import { inScope } from "@/lib/store";
 import { membershipCounts } from "@/lib/membership";
 import { scopedDossiers, scopedMembers, scopedPayments, scopedRules } from "@/lib/scope";
 import { memberDues } from "@/lib/contributions";
 import { ageAtMost, fmtDate, fmtDateTime, nf1 } from "@/lib/format";
 import { AppShellComponent } from "@shared/app-shell.component";
+import { ProducersOverviewComponent } from "./producers-overview.component";
 import { LocaleService } from "@shared/locale.service";
 import { StoreService } from "@shared/store.service";
 import { IconComponent, UiChartComponent, type IconName } from "@shared/ui";
@@ -46,7 +48,7 @@ function sparkPaths(series: number[]): { line: string; area: string } {
  */
 @Component({
   selector: "app-index-page",
-  imports: [RouterLink, NgTemplateOutlet, AppShellComponent, UiChartComponent, IconComponent],
+  imports: [RouterLink, NgTemplateOutlet, AppShellComponent, UiChartComponent, IconComponent, ProducersOverviewComponent],
   styles: `
     .mono {
       font-family: var(--v2-font-mono);
@@ -258,6 +260,8 @@ function sparkPaths(series: number[]): { line: string; area: string } {
 
       <!-- ───── Blocs : disposition selon le rôle (voir layout()) ───── -->
       <div class="board mt-8" [style.--areas]="layout().lg" [style.--areas-sm]="layout().sm">
+        <!-- Producteurs en chiffres : après la campagne et le réseau (effectifs, genre, âge, handicap ; serveur) -->
+        <app-producers-overview style="grid-area: producers" />
         <section
           class="relative overflow-hidden rounded-[28px] p-6 sm:p-8"
           style="grid-area: campaign; background: var(--v2-foret); color: var(--v2-blanc)"
@@ -369,6 +373,11 @@ function sparkPaths(series: number[]): { line: string; area: string } {
                 </div>
               }
             </dl>
+            @if (campaign().allCampaigns) {
+              <p class="relative mt-3 text-[12px] font-semibold" style="color: color-mix(in oklab, var(--v2-blanc) 70%, transparent)">
+                {{ t()("dashboard.campaign.allNote") }}
+              </p>
+            }
           }
         </section>
 
@@ -570,7 +579,7 @@ function sparkPaths(series: number[]): { line: string; area: string } {
                     <span class="sub block truncate">{{ item.sub }}</span>
                   </span>
                   <span class="text-[24px] font-extrabold tracking-[-0.03em] tabular-nums">{{
-                    localeService.formatNumber(item.value)
+                    item.value === null ? "—" : localeService.formatNumber(item.value)
                   }}</span>
                   <ui-icon name="arrow_forward" [size]="20" class="arrow" />
                 </a>
@@ -779,11 +788,60 @@ export default class IndexPage {
   /** Mode API : activité récente lue sur le serveur (jamais dans le navigateur). */
   private readonly serverActivity = signal<AuditEntry[]>([]);
 
+  /**
+   * Mode API : les totaux de l'accueil (effectifs, genre, jeunes, qualité) viennent du serveur (`/producers/stats`) et
+   * les chiffres par coopérative de `/scoops/stats` : l'accueil ne télécharge plus la liste des producteurs.
+   */
+  private readonly serverTotals = signal<ProducerStats | null>(null);
+  /** Alertes de qualité ouvertes, comptées par le serveur (`null` tant qu'il n'a pas répondu). */
+  private readonly serverOpenAlerts = signal<number | null>(null);
+  /** Réseau (organisations, GIE, comptes) lu dans le même résumé serveur. */
+  private readonly serverNetwork = signal<StatsNetwork | null>(null);
+  /** Adhérents (actifs, total) et alertes critiques, comptés par le serveur : plus de liste de membres dans le navigateur. */
+  private readonly serverMembers = signal<StatsMembers | null>(null);
+  private readonly serverOpenHigh = signal<number | null>(null);
+
+  /** Les coopératives du périmètre avec leurs chiffres serveur (mode API). */
+  private coopStats() {
+    const s = this.store.state();
+    return s.scoops
+      .filter((scoop) => !scoop.archived)
+      .map((scoop) => ({ scoop, st: s.scoopStats[scoop.id] }))
+      .filter((row): row is { scoop: (typeof s.scoops)[number]; st: NonNullable<(typeof row)["st"]> } => !!row.st);
+  }
+
+  // Droits sous forme de valeurs simples : un effet qui les lit ne se relance que quand elles changent (et non à chaque
+  // modification du store), ce qui évite de renvoyer plusieurs fois les mêmes demandes au serveur.
+  private readonly canReadOrgs = computed(() => this.store.can("org.read"));
+  private readonly canReadProducers = computed(() => this.store.can("producer.read"));
+  private readonly canReadMembers = computed(() => this.store.can("member.read"));
+  private readonly canReadAudit = computed(() => {
+    const session = this.store.state().session;
+    return !!session && (session.permissions.includes("audit.read") || session.permissions.includes("audit.read.scoop"));
+  });
+  private readonly youthMaxAge = computed(() => this.store.state().youthMaxAge);
+
   constructor() {
     if (!isApiMode()) return;
+    // Un seul appel pour tout l'accueil : producteurs, réseau et alertes (`GET /stats/overview`).
     effect(() => {
-      const session = this.store.state().session;
-      const allowed = !!session && (session.permissions.includes("audit.read") || session.permissions.includes("audit.read.scoop"));
+      const allowed = this.canReadProducers() || this.canReadOrgs() || this.canReadMembers();
+      const youthMaxAge = this.youthMaxAge();
+      untracked(() => {
+        if (!allowed) return;
+        getStatsOverview(youthMaxAge)
+          .then((overview) => {
+            this.serverTotals.set(overview.producers?.ALL ?? null);
+            this.serverNetwork.set(overview.network);
+            this.serverOpenAlerts.set(overview.openAlerts);
+            this.serverOpenHigh.set(overview.openHighAlerts);
+            this.serverMembers.set(overview.members);
+          })
+          .catch((error: unknown) => console.error("[ERROR][IndexPage.overview]", error));
+      });
+    });
+    effect(() => {
+      const allowed = this.canReadAudit();
       untracked(() => {
         if (!allowed) {
           this.serverActivity.set([]);
@@ -880,20 +938,35 @@ export default class IndexPage {
       return state === "en retard" || state === "jamais payé";
     }).length;
 
+    const api = isApiMode();
+    const totals = api ? this.serverTotals() : null;
+    const coop = api ? this.coopStats() : [];
+    const sumCoop = (pick: (st: (typeof coop)[number]["st"]) => number) => coop.reduce((sum, row) => sum + pick(row.st), 0);
+    const plotsCount = api ? sumCoop((st) => st.plots) : plotsInScope.length;
+    const plotsValidated = api ? sumCoop((st) => st.plotsValidated) : plotsInScope.filter((p) => p.status === "validée").length;
     return {
-      producers: producersInScope.length,
-      activeMembers: mc.active,
-      womenPct: producersInScope.length ? (women.length / producersInScope.length) * 100 : 0,
-      youthCount: youth.length,
+      producers: api ? (totals?.total ?? sumCoop((st) => st.producers)) : producersInScope.length,
+      activeMembers: api ? (this.serverMembers()?.active ?? 0) : mc.active,
+      womenPct: api
+        ? totals?.total
+          ? (totals.women / totals.total) * 100
+          : 0
+        : producersInScope.length
+          ? (women.length / producersInScope.length) * 100
+          : 0,
+      youthCount: api ? (totals?.youth ?? 0) : youth.length,
+      plotsCount,
+      plotsValidated,
       pendingDossiers: pendingDossiers.length,
       oldestDays,
       // Mode API : points signalés à l'import Kobo (pas d'alertes de démonstration).
-      openAlerts: isApiMode() ? collectQualityPoints(s).length : openAlerts.length,
-      criticalAlerts,
-      lateDues,
+      openAlerts: isApiMode() ? (this.serverOpenAlerts() ?? 0) : openAlerts.length,
+      criticalAlerts: api ? (this.serverOpenHigh() ?? 0) : criticalAlerts,
+      // Mode API : les cotisations dues ne sont pas encore calculées par le serveur → « — » plutôt qu'un faux 0.
+      lateDues: api ? null : lateDues,
       producersInScope,
       plotsInScope,
-      measuredHa: plotsInScope.reduce((sum, p) => sum + (p.measured || 0), 0),
+      measuredHa: api ? sumCoop((st) => st.plotAreaHa) : plotsInScope.reduce((sum, p) => sum + (p.measured || 0), 0),
       recentAudit: isApiMode() ? this.serverActivity() : s.audit.slice(0, 6),
     };
   });
@@ -909,10 +982,13 @@ export default class IndexPage {
     const consolidated = this.store.state().session?.scope.kind === "consolidé";
     const ranking = this.ranking().length > 1;
     const full = (area: string) => Array(6).fill(area).join(" ");
+    // « Producteurs en chiffres » : après la campagne et le réseau (mode serveur, droit de lecture des producteurs).
+    const producers = isApiMode() && this.store.can("producer.read") ? [full("producers")] : [];
     const rows = consolidated
       ? [
           "campaign campaign campaign campaign meetings meetings",
           ...(this.network().length ? [full("network")] : []),
+          ...producers,
           full("kpis"),
           "quality quality todo todo todo todo",
           ...(ranking ? [full("ranking")] : []),
@@ -922,6 +998,7 @@ export default class IndexPage {
           "todo todo todo todo quality quality",
           full("kpis"),
           "campaign campaign campaign campaign meetings meetings",
+          ...producers,
           ...(ranking ? [full("ranking")] : []),
           full("chart"),
           full("activity"),
@@ -946,11 +1023,15 @@ export default class IndexPage {
     const joined = scoops
       .filter((x) => x.createdAt && new Date(x.createdAt).getTime() >= since)
       .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
-    const gie = s.orgs.filter((o) => o.type === "GIE").length;
-    const technicians = s.users.filter((u) => u.role === "technicien" && u.active);
-    const active = s.users.filter((u) => u.active).length;
-    const invited = s.users.filter((u) => !u.active && u.invited).length;
-    const validated = s.plots.filter((p) => p.status === "validée").length;
+    // Mode API : organisations, GIE et comptes viennent du résumé serveur (`null` = non autorisé : « — », jamais un faux 0).
+    const api = isApiMode();
+    const net = api ? this.serverNetwork() : null;
+    const dash = (value: number | null | undefined) => (value === null || value === undefined ? "—" : n(value));
+    const gie = api ? (net?.gie ?? 0) : s.orgs.filter((o) => o.type === "GIE").length;
+    const technicians = api ? [] : s.users.filter((u) => u.role === "technicien" && u.active);
+    const active = api ? (net?.accountsActive ?? 0) : s.users.filter((u) => u.active).length;
+    const invited = api ? (net?.invitationsPending ?? 0) : s.users.filter((u) => !u.active && u.invited).length;
+    const validated = isApiMode() ? this.data().plotsValidated : s.plots.filter((p) => p.status === "validée").length;
     const canOrgs = this.store.can("org.read");
     const canUsers = this.store.can("user.manage");
     const items: {
@@ -973,28 +1054,28 @@ export default class IndexPage {
       },
       {
         icon: "hub",
-        value: n(s.orgs.length),
+        value: api ? dash(net?.organisations) : n(s.orgs.length),
         label: t("dashboard.network.orgs"),
         sub: t("dashboard.network.orgsSub", { count: n(gie) }),
         to: canOrgs ? "/dashboard/organisations" : null,
       },
       {
         icon: "person",
-        value: n(technicians.length),
+        value: api ? dash(net?.techniciansActive) : n(technicians.length),
         label: t("dashboard.network.technicians"),
         sub: t("dashboard.network.techniciansSub"),
         to: canUsers ? "/dashboard/utilisateurs" : null,
       },
       {
         icon: "account_circle",
-        value: n(active),
+        value: api ? dash(net?.accountsActive) : n(active),
         label: t("dashboard.network.accounts"),
         sub: t("dashboard.network.accountsSub", { count: invited }),
         to: canUsers ? "/dashboard/utilisateurs" : null,
       },
       {
         icon: "pin_drop",
-        value: n(s.plots.length),
+        value: n(isApiMode() ? this.data().plotsCount : s.plots.length),
         label: t("dashboard.network.plots"),
         sub: t("dashboard.network.plotsSub", { count: n(validated) }),
         to: null,
@@ -1015,6 +1096,7 @@ export default class IndexPage {
       pct: 0,
       remaining: 0,
       stats: [] as { label: string; value: string }[],
+      allCampaigns: false,
     };
     if (!c) return empty;
     const start = new Date(c.start).getTime();
@@ -1023,25 +1105,28 @@ export default class IndexPage {
       Math.min(1, Math.max(0, (Date.now() - start) / Math.max(1, end - start))) * 100,
     );
     const remaining = Math.max(0, Math.ceil((end - Date.now()) / 86_400_000));
-    const plots = this.data().plotsInScope.filter((p) => p.campaign === c.name);
+    const api = isApiMode();
+    const plots = api ? [] : this.data().plotsInScope.filter((p) => p.campaign === c.name);
     const t = this.t();
     const n = (v: number) => this.localeService.formatNumber(v);
     return {
       name: c.name,
+      // Mode API : les parcelles ne sont pas rattachées à une campagne par le serveur → chiffres de toutes les campagnes.
+      allCampaigns: api,
       start: fmtDate(c.start),
       end: fmtDate(c.end),
       pct,
       remaining,
       stats: [
-        { label: t("dashboard.campaign.plots"), value: n(plots.length) },
+        { label: t("dashboard.campaign.plots"), value: n(api ? this.data().plotsCount : plots.length) },
         {
           label: t("dashboard.campaign.validated"),
-          value: n(plots.filter((p) => p.status === "validée").length),
+          value: n(api ? this.data().plotsValidated : plots.filter((p) => p.status === "validée").length),
         },
         {
           label: t("dashboard.campaign.area"),
           value: t("dashboard.kpi.unitHa", {
-            value: nf1.format(plots.reduce((sum, p) => sum + (p.measured || 0), 0)),
+            value: nf1.format(api ? this.data().measuredHa : plots.reduce((sum, p) => sum + (p.measured || 0), 0)),
           }),
         },
       ],
@@ -1051,30 +1136,17 @@ export default class IndexPage {
   /** Répartition des fiches par état de qualité, en anneau (conic-gradient, sans Chart.js). */
   protected readonly quality = computed(() => {
     const ps = this.data().producersInScope;
+    const server = isApiMode() ? this.serverTotals() : null;
+    const count = (quality: string) => (server ? (server.byQuality[quality] ?? 0) : ps.filter((p) => p.quality === quality).length);
     const t = this.t();
     const rows = [
-      {
-        label: t("dashboard.quality.validated"),
-        n: ps.filter((p) => p.quality === "validé").length,
-        color: "var(--v2-vert-pousse)",
-      },
-      {
-        label: t("dashboard.quality.toVerify"),
-        n: ps.filter((p) => p.quality === "à vérifier").length,
-        color: "var(--v2-soleil)",
-      },
-      {
-        label: t("dashboard.quality.duplicate"),
-        n: ps.filter((p) => p.quality === "doublon").length,
-        color: "var(--v2-info-fg)",
-      },
-      {
-        label: t("dashboard.quality.invalid"),
-        n: ps.filter((p) => p.quality === "invalide").length,
-        color: "var(--v2-erreur-fg)",
-      },
+      { label: t("dashboard.quality.validated"), n: count("validé"), color: "var(--v2-vert-pousse)" },
+      { label: t("dashboard.quality.toVerify"), n: count("à vérifier"), color: "var(--v2-soleil)" },
+      { label: t("dashboard.quality.duplicate"), n: count("doublon"), color: "var(--v2-info-fg)" },
+      { label: t("dashboard.quality.invalid"), n: count("invalide"), color: "var(--v2-erreur-fg)" },
     ];
-    const total = ps.length || 1;
+    const grandTotal = server ? server.qualityTotal : ps.length;
+    const total = grandTotal || 1;
     let acc = 0;
     const stops = rows.map((r) => {
       const from = (acc / total) * 100;
@@ -1084,7 +1156,7 @@ export default class IndexPage {
     return {
       rows,
       pct: Math.round((rows[0]!.n / total) * 100),
-      ring: ps.length ? `conic-gradient(${stops.join(", ")})` : "var(--v2-lin)",
+      ring: grandTotal ? `conic-gradient(${stops.join(", ")})` : "var(--v2-lin)",
     };
   });
 
@@ -1177,6 +1249,21 @@ export default class IndexPage {
   /** Coopératives du périmètre, classées par nombre de producteurs (6 premières). */
   protected readonly ranking = computed(() => {
     const s = this.store.state();
+    if (isApiMode()) {
+      // Chiffres de chaque coopérative lus sur le serveur (`/scoops/stats`).
+      return this.coopStats()
+        .map(({ scoop, st }) => ({
+          id: scoop.id,
+          name: scoop.name,
+          commune: scoop.commune,
+          producers: st.producers,
+          women: st.producers ? Math.round((st.women / st.producers) * 100) : 0,
+          quality: st.producers ? Math.round((st.producersValidated / st.producers) * 100) : 0,
+        }))
+        .filter((r) => r.producers > 0)
+        .sort((a, b) => b.producers - a.producers)
+        .slice(0, 6);
+    }
     const ps = this.data().producersInScope;
     return s.scoops
       .filter((sc) => !sc.archived)
@@ -1224,16 +1311,18 @@ export default class IndexPage {
     const ink = this.token("--v2-encre");
     const muted = this.token("--v2-gris-texte");
     const line = this.token("--v2-separateur");
-    const rows = s.scoops
-      .map((scoop) => {
-        const ps = producers.filter((p) => p.scoopId === scoop.id);
-        return {
-          name: scoop.commune,
-          F: ps.filter((p) => p.sex === "F").length,
-          H: ps.filter((p) => p.sex === "H").length,
-        };
-      })
-      .filter((r) => r.F + r.H > 0);
+    const rows = (
+      isApiMode()
+        ? this.coopStats().map(({ scoop, st }) => ({ name: scoop.commune, F: st.women, H: st.men }))
+        : s.scoops.map((scoop) => {
+            const ps = producers.filter((p) => p.scoopId === scoop.id);
+            return {
+              name: scoop.commune,
+              F: ps.filter((p) => p.sex === "F").length,
+              H: ps.filter((p) => p.sex === "H").length,
+            };
+          })
+    ).filter((r) => r.F + r.H > 0);
     return {
       type: "bar",
       data: {
