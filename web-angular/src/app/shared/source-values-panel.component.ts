@@ -85,7 +85,7 @@ import { IconComponent } from "./ui";
             }
             @default {
               @if (rows().length) {
-                <table>
+                <div class="overflow-x-auto"><table>
                   <caption class="sr-only">
                     {{ t()("origine.title") }}
                   </caption>
@@ -103,7 +103,7 @@ import { IconComponent } from "./ui";
                       </tr>
                     }
                   </tbody>
-                </table>
+                </table></div>
               } @else {
                 <p class="sub mt-3">{{ t()("origine.empty") }}</p>
               }

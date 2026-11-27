@@ -1,3 +1,4 @@
+import { MAX_PAGE_SIZE } from "@/lib/api/pagination";
 import { isPlatformBrowser } from "@angular/common";
 import { Component, PLATFORM_ID, computed, effect, inject, signal, untracked } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
@@ -7,7 +8,8 @@ import { map } from "rxjs";
 import { isPhoneInputAccepted } from "@/lib/phone-sn";
 import { isApiMode } from "@/lib/api/config";
 import { producerItem, sheetDraft } from "@/lib/coop-request-templates";
-import { fetchProducerPhotos } from "@/lib/api/plots";
+import { fetchProducerPhotos, listPlots, plotFromApi } from "@/lib/api/plots";
+import { getProducer, producerFromApi } from "@/lib/api/producers";
 import { fmtAge, fmtDate, fmtDateTime, maskCni, maskPhone, nf, nf1 } from "@/lib/format";
 import type { MessageKey } from "@/lib/i18n";
 import type {
@@ -1959,9 +1961,28 @@ export default class ProducteurDetailPage {
         this.heroPhotoOpen.set(false);
         this.expandedPlotId.set(null);
         this.photoState.set("idle");
-        if (producerId && this.browser && isApiMode()) void this.loadPhotos(producerId);
+        if (producerId && this.browser && isApiMode()) {
+          void this.loadPhotos(producerId);
+          void this.loadRecord(producerId);
+        }
       });
     });
+  }
+
+  /**
+   * Mode API : la fiche et ses parcelles se lisent à l'ouverture (une fiche et quelques parcelles), sans charger
+   * la liste complète des producteurs.
+   */
+  private async loadRecord(producerId: string): Promise<void> {
+    try {
+      if (!this.store.state().producers.some((p) => p.id === producerId)) {
+        this.store.actions.upsertProducerFromApi(producerFromApi(await getProducer(producerId)));
+      }
+      const plots = await listPlots({ producerId, page: 1, limit: MAX_PAGE_SIZE });
+      this.store.actions.upsertPlotsFromApi(plots.items.map(plotFromApi));
+    } catch {
+      // Fiche ou parcelles indisponibles : l'écran garde ce qu'il a déjà.
+    }
   }
 
   async loadPhotos(producerId: string): Promise<void> {

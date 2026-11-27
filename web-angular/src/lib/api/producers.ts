@@ -107,6 +107,70 @@ export const listProducers = (query: PageQuery & Record<string, string | number 
 
 export const getProducer = (id: string) => apiFetch<ApiProducer>(`/producers/${encodeURIComponent(id)}`);
 
+export type ProducerListFilters = {
+  q?: string;
+  scoopId?: string;
+  orgId?: string;
+  status?: string;
+  quality?: string;
+  sourceBase?: "KOBO" | "CONSOLIDE" | "APPLICATION";
+  village?: string;
+  sex?: "F" | "H";
+  handicap?: "oui" | "non";
+  ageBand?: string;
+  crop?: string;
+  campaign?: string;
+  hideMerged?: "true";
+  youthMaxAge?: number;
+};
+
+export type ProducerStats = {
+  total: number;
+  members: number;
+  women: number;
+  men: number;
+  youth: number;
+  handicap: number;
+  validated: number;
+  toCheck: number;
+  handicapMen: number;
+  handicapWomen: number;
+  sexUnknown: number;
+  /** Fiches par tranche d'âge (`unknown` : âge non renseigné). */
+  byAgeBand: Record<string, number>;
+  byQuality: Record<string, number>;
+  qualityTotal: number;
+};
+
+export type ProducerSourceCounts = { KOBO: number; CONSOLIDE: number; autre: number };
+
+/** UNE page de fiches (filtres appliqués par le serveur) : c'est ce que demande l'écran à chaque clic de pagination. */
+export async function fetchProducersPage(
+  query: PageQuery & ProducerListFilters,
+): Promise<Page<Producer> & { sourceCounts: ProducerSourceCounts }> {
+  const result = await apiFetch<Page<ApiProducer> & { sourceCounts: ProducerSourceCounts }>(
+    withPage("/producers", query),
+  );
+  return { ...result, items: result.items.map(producerFromApi) };
+}
+
+/** Totaux de la barre et des cartes pour les mêmes filtres : un seul appel, sans télécharger les fiches. */
+const statsRecent = new Map<string, { at: number; promise: Promise<ProducerStats> }>();
+
+/**
+ * Plusieurs blocs d'un même écran (accueil, section « Producteurs en chiffres ») demandent les mêmes totaux :
+ * pendant 5 secondes, la même demande est partagée au lieu d'être renvoyée au serveur.
+ */
+export function getProducerStats(query: ProducerListFilters): Promise<ProducerStats> {
+  const path = withPage("/producers/stats", query);
+  const known = statsRecent.get(path);
+  if (known && Date.now() - known.at < 5000) return known.promise;
+  const promise = apiFetch<ProducerStats>(path);
+  statsRecent.set(path, { at: Date.now(), promise });
+  promise.catch(() => statsRecent.delete(path));
+  return promise;
+}
+
 /** Toutes les fiches du périmètre du compte (paquets de 200). */
 export async function fetchAllProducers(): Promise<Producer[]> {
   const rows = await fetchAllPages((page) => listProducers(page));
