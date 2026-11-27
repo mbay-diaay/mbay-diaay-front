@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Dernière mise à jour** | 31 octobre 2026 |
+| **Dernière mise à jour** | 27 novembre 2026 |
 | **Version suivie** | Prototype web, données fictives, sans serveur |
 | **Usage** | Document **interne** : suivre ce qui est fait, ce qui manque, et préparer les propositions au client. La section 6 est la matière à présenter ; les sections 7 et 8 ne sont pas à transmettre telles quelles. |
 | **Sources** | PRD Web v0.1, PRD Backend v0.1, PRD Mobile v0.1, décisions du porteur du projet, code du dépôt |
@@ -587,6 +587,7 @@ Ordre suggéré à présenter : **P1, P3, P8** (valeur immédiate et visible), p
 | 23 oct. 2026 | Règles de développement et CI/CD : guide unique `docs/DEVELOPPEMENT.md`, workflows GitHub, ESLint (tirets), Prettier, éditeur, variables d'environnement | `docs/DEVELOPPEMENT.md`, `.github/` |
 | 23 oct. 2026 | Périmètre SCOOP centralisé (`scope.ts`) et appliqué à la fiche parcelle, aux rapports et à la carte ; rapports générés sur le périmètre ; protection des exports CSV ; pages d'erreur en français ; balayage des tirets ; libellés et placeholders des dialogues ; e-mail dans la gestion des utilisateurs ; comptes désactivés bloqués à la connexion | 50 tests ; vérification navigateur avec un compte gestionnaire |
 | 23 oct. 2026 | Squelettes de chargement (première image, attente du routeur, carte) ; interrupteur partagé `Segmented` ; liste de filtre `FilterSelect` grisée à l'état neutre et teintée quand un filtre est actif ; jeton de couleur unique pour tous les placeholders | Vérifié dans un navigateur (ordinateur et téléphone) ; 50 tests |
+| 27 nov. 2026 | Pagination, filtres et totaux des producteurs côté serveur ; accueil alimenté par un seul résumé serveur (`/stats/overview`) avec la section « Producteurs en chiffres » ; deux bases (Kobo, consolidée) séparées sur la page Coopératives ; filtre et colonne handicap ; gestion des 429 (nouvelles tentatives, `Retry-After`, limite par compte) ; plafond de pagination à 100. Reste : convertir les autres écrans en pagination serveur | 388 tests API, 166 tests web, `pnpm run ci` vert ; vérifié dans un navigateur |
 
 | 23 oct. 2026 | Retours utilisateur (2e lot) : pastille de filtre `FilterPill` ; Qualité des données avec statuts de doublons regroupés en quatre pastilles et filtres secondaires repliés ; Référentiels en deux vues (Cultures, Règles et listes) avec phrases et impact en direct ; liens directs utilisateurs ↔ appareils ; Journal d'audit détaillé (familles d'actions, panneau de détail par entrée, liens vers l'objet, phrase lisible) | Vérifié dans un navigateur sur :8080 ; 50 tests |
 | 23 oct. 2026 | Points 9, 10 et 12 : campagnes issues du référentiel, périmètre d'un rôle lu dans `permissions.ts` (`ROLE_IS_SCOPED`), statuts d'alertes en pastilles ; répartition du travail restant (section 4.4) | 51 tests |
