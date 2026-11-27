@@ -12,6 +12,7 @@ import {
 import { CommonModule } from "@angular/common";
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from "@angular/router";
 import { toSignal } from "@angular/core/rxjs-interop";
+import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { filter, map } from "rxjs";
 import {
   LucideAngularModule,
@@ -45,6 +46,7 @@ import { ToastHostComponent } from "./toast-host.component";
 import { UiModalA11yDirective } from "./ui/modal-a11y.directive";
 import { BrandLogoComponent } from "./ui/brand-logo.component";
 import { SnackbarComponent } from "./ui/snackbar.component";
+import { SnackbarService } from "./ui/snackbar.service";
 import { IconComponent, type IconName } from "./ui/icon.component";
 
 /** Une seule hydratation par chargement de page (plusieurs `<app-shell>` possibles). */
@@ -646,6 +648,8 @@ export class AppLayoutComponent {
   protected readonly localeService = inject(LocaleService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly snackbar = inject(SnackbarService);
+  private lastThrottleNotice = 0;
   private readonly producerWorkflow = inject(ProducerWorkflow);
 
   protected readonly t = this.localeService.t;
@@ -801,6 +805,24 @@ export class AppLayoutComponent {
     );
   };
 
+  /**
+   * Écrans qui lisent une page (ou une fiche) à la fois sur le serveur : aucun chargement complet. Tous les autres
+   * demandent encore les listes entières, une seule fois par session et seulement à leur ouverture.
+   */
+  private loadForRoute(url: string): void {
+    const path = url.split(/[?#]/)[0].replace(/\/+$/, "");
+    // Adresse de démarrage (avant la redirection vers la page du rôle) : rien à charger.
+    if (!path || path === "/" || path === "/dashboard") return;
+    if (path === "/login" || path === "/dashboard/rapports" || path.startsWith("/dashboard/producteurs")) return;
+    // Accueil (`/dashboard/<rôle>`) : tout vient du résumé serveur, aucune liste complète à télécharger.
+    const role = this.store.state().session?.role;
+    // Session pas encore chargée : rien ne part ; l'effet ci-dessous relance dès qu'elle est prête.
+    if (!role) return;
+    if (path === `/dashboard/${role}`) return;
+    void this.producerWorkflow.ensureFullLists();
+    this.store.ensureMembers();
+  }
+
   constructor() {
     effect(() => {
       if (this.cniAlerts.canView()) untracked(() => void this.cniAlerts.refresh());
@@ -822,13 +844,33 @@ export class AppLayoutComponent {
         if (!target.closest("[data-top-menu]")) this.topMenu.set(null);
       };
       document.addEventListener("click", onDocClick);
+
+      // Le serveur demande de patienter (429) : le site réessaie tout seul ; on prévient, sans répéter le message.
+      const onThrottled = (event: Event) => {
+        const waitMs = (event as CustomEvent<{ waitMs: number }>).detail?.waitMs ?? 0;
+        if (Date.now() - this.lastThrottleNotice < 10_000) return;
+        this.lastThrottleNotice = Date.now();
+        this.snackbar.info(this.t()("common.throttled", { seconds: Math.max(1, Math.round(waitMs / 1000)) }), 6000);
+      };
+      window.addEventListener("api:throttled", onThrottled);
+      this.destroyRef.onDestroy(() => window.removeEventListener("api:throttled", onThrottled));
       this.destroyRef.onDestroy(() => document.removeEventListener("click", onDocClick));
     });
 
-    // Mode API : producteurs, dossiers et corrections du périmètre lus sur le serveur à chaque ouverture de session.
+    // Mode API : dossiers et corrections lus à l'ouverture de session. Producteurs, parcelles et membres ne sont
+    // plus téléchargés d'office : la page Producteurs lit une page à la fois, les autres écrans les demandent.
     effect(() => {
       const email = this.session()?.email;
       if (email && this.ready()) untracked(() => void this.producerWorkflow.hydrate());
+    });
+    this.router.events
+      .pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((e) => this.loadForRoute(e.urlAfterRedirects));
+    effect(() => {
+      if (this.session()?.email && this.ready()) untracked(() => this.loadForRoute(this.router.url));
     });
 
     // Redirect to /login if there's no session (mirrors the React useEffect).

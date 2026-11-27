@@ -22,7 +22,69 @@ type RequestOpts = {
   _retry?: boolean;
 };
 
+// ---------------------------------------------------------------- Gestion du 429 (« Too Many Requests »)
+
+/** Demandes envoyées en même temps au serveur : au-delà, elles attendent leur tour (pas de rafale). */
+export const MAX_CONCURRENT_REQUESTS = 6;
+/** Nouvelles tentatives après un 429 : jusqu'à 4, soit 5 envois au total. */
+export const MAX_RATE_LIMIT_RETRIES = 4;
+/** Attente maximale d'une seule tentative : assez pour suivre un `Retry-After` de 60 s du serveur, pas davantage. */
+const MAX_WAIT_MS = 61_000;
+
+let activeRequests = 0;
+const waitingRequests: (() => void)[] = [];
+
+async function acquireSlot(): Promise<void> {
+  while (activeRequests >= MAX_CONCURRENT_REQUESTS) {
+    await new Promise<void>((resolve) => waitingRequests.push(resolve));
+  }
+  activeRequests++;
+}
+
+function releaseSlot(): void {
+  activeRequests--;
+  waitingRequests.shift()?.();
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Attente avant la nouvelle tentative : `Retry-After` du serveur (secondes), sinon attente croissante + un peu de hasard. */
+export function retryDelayMs(res: Response, attempt: number): number {
+  const seconds = Number(res.headers.get("Retry-After"));
+  const fromServer = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+  const backoff = Math.min(1500 * 2 ** attempt, 15_000);
+  const jitter = Math.floor(Math.random() * 400);
+  return Math.min(Math.max(fromServer, backoff) + jitter, MAX_WAIT_MS);
+}
+
+/**
+ * `fetch` avec : (1) au plus 6 demandes simultanées ; (2) en cas de 429, attente puis nouvelle tentative (le serveur refuse
+ * AVANT de traiter la demande : la renvoyer est sans risque, même pour une écriture). Après la dernière tentative, la
+ * réponse 429 est rendue telle quelle et l'appelant affiche l'erreur.
+ */
+async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    await acquireSlot();
+    let res: Response;
+    try {
+      res = await fetch(url, init);
+    } finally {
+      releaseSlot();
+    }
+    if (res.status !== 429 || attempt >= MAX_RATE_LIMIT_RETRIES) return res;
+    const waitMs = retryDelayMs(res, attempt);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("api:throttled", { detail: { waitMs, attempt: attempt + 1 } }));
+    }
+    await sleep(waitMs);
+  }
+}
+
 async function parseError(res: Response): Promise<ApiError> {
+  // Plus de nouvelles tentatives possibles : message clair plutôt que le texte technique du serveur.
+  if (res.status === 429) {
+    return new ApiError(429, "RATE_LIMITED", "Trop de demandes en peu de temps. Réessayez dans quelques secondes.");
+  }
   try {
     const data = (await res.json()) as {
       code?: string;
@@ -63,7 +125,7 @@ export async function apiFetch<T>(path: string, opts: RequestOpts = {}): Promise
   };
   if (opts.body !== undefined) init.body = isForm ? (opts.body as FormData) : JSON.stringify(opts.body);
 
-  const res = await fetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, init);
+  const res = await fetchWithRetry(`${base}${path.startsWith("/") ? path : `/${path}`}`, init);
 
   if (res.status === 401 && opts.auth !== false && !opts._retry) {
     const refreshed = await refreshSession();
@@ -83,7 +145,7 @@ export async function apiFetchBlob(path: string, _retry = false): Promise<Blob> 
   const headers: Record<string, string> = { "X-Client": "web" };
   const token = getAccessToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
+  const res = await fetchWithRetry(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
     method: "GET",
     headers,
     credentials: "include",
