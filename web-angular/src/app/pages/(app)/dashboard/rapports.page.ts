@@ -644,6 +644,13 @@ const fileName = (r: GeneratedReport, ext: string) =>
                     [attr.aria-selected]="selectedKind() === item.kind"
                     (click)="selectedKind.set(item.kind)"
                   >
+                    <span
+                      class="watermark wm-report"
+                      [style.color]="cat(kindCategory(item.kind)).fg"
+                      aria-hidden="true"
+                    >
+                      <ui-icon [name]="cat(kindCategory(item.kind)).icon" [size]="96" />
+                    </span>
                     @if (selectedKind() === item.kind) {
                       <span class="tick" aria-hidden="true"
                         ><ui-icon name="check" [size]="18"
@@ -651,9 +658,10 @@ const fileName = (r: GeneratedReport, ext: string) =>
                     }
                     <span
                       class="relative grid size-12 place-items-center rounded-[14px]"
-                      style="background: var(--v2-foret); color: var(--v2-sauge)"
+                      [style.background]="cat(kindCategory(item.kind)).fg"
+                      [style.color]="cat(kindCategory(item.kind)).bg"
                     >
-                      <ui-icon name="summarize" [size]="24" />
+                      <ui-icon [name]="cat(kindCategory(item.kind)).icon" [size]="24" />
                     </span>
                     <span class="relative min-w-0">
                       <span class="block pr-8 text-[16px] font-extrabold leading-snug tracking-[-0.01em]">{{
@@ -1390,6 +1398,18 @@ export default class RapportsPage {
     for (const [id, n] of this.usage()) if (n > max) [best, max] = [id, n];
     return best;
   });
+
+  /** Catégorie (couleur, icône) d'un type de rapport du serveur. */
+  protected kindCategory(kind: string): ReportCategory {
+    const byKind: Record<string, ReportCategory> = {
+      effectifs: "producteurs",
+      superficies: "agriculture",
+      qualite: "qualite",
+      reprises: "agriculture",
+      reunions: "gouvernance",
+    };
+    return byKind[kind] ?? "producteurs";
+  }
 
   protected cat(c: ReportCategory) {
     return CATEGORY[c];
