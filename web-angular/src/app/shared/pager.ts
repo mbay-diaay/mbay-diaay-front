@@ -1,6 +1,6 @@
-import { computed, linkedSignal, signal, type Signal } from "@angular/core";
+import { computed, linkedSignal, signal, type Signal, type WritableSignal } from "@angular/core";
 
-import { DEFAULT_PAGE_SIZE, type Page, paginate } from "@/lib/api/pagination";
+import { DEFAULT_PAGE_SIZE, type Page, type PageMeta, paginate } from "@/lib/api/pagination";
 
 /** État de pagination d'un tableau, consommé par `<ui-pagination [pager]="…" />`. */
 export interface Pager<T> {
@@ -34,6 +34,27 @@ export function createPager<T>(source: () => readonly T[], size = DEFAULT_PAGE_S
     setSize: (s) => {
       limit.set(s);
       page.set(1);
+    },
+  };
+}
+
+/**
+ * Pagination pilotée par le serveur : la page affichée est celle que l'API a renvoyée, et chaque changement de
+ * page ou de taille relance l'appel (jamais de liste complète en mémoire).
+ */
+export function createServerPager<T>(source: {
+  items: Signal<T[]>;
+  meta: Signal<PageMeta>;
+  page: WritableSignal<number>;
+  limit: WritableSignal<number>;
+}): Pager<T> {
+  return {
+    result: computed(() => ({ ...source.meta(), items: source.items() })),
+    items: source.items,
+    setPage: (page) => source.page.set(page),
+    setSize: (size) => {
+      source.limit.set(size);
+      source.page.set(1);
     },
   };
 }

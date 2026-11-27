@@ -1,11 +1,19 @@
-import { Component, computed, effect, inject, signal, untracked } from "@angular/core";
+import { Component, computed, effect, inject, linkedSignal, signal, untracked } from "@angular/core";
 import { ActivatedRoute, type ParamMap, Router } from "@angular/router";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { map } from "rxjs";
 
 import { isApiMode } from "@/lib/api/config";
+import {
+  fetchProducersPage,
+  getProducerStats,
+  type ProducerListFilters,
+  type ProducerSourceCounts,
+  type ProducerStats,
+} from "@/lib/api/producers";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, type PageMeta } from "@/lib/api/pagination";
 import { actions, can, inScope } from "@/lib/store";
-import { CROPS, VILLAGES, type Quality } from "@/lib/mock/data";
+import { CROPS, VILLAGES, type Producer, type Quality } from "@/lib/mock/data";
 import { AGE_BANDS, ageAtMost, ageBand, downloadCsv, fmtDate, maskPhone, nf } from "@/lib/format";
 import { countBySource, describeSourceFact, SOURCE_FILTER_IDS, sourceOfRecord, type DataSourceId } from "@/lib/data-source";
 import type { MessageKey } from "@/lib/i18n";
@@ -18,7 +26,8 @@ import { PlacementBadgeComponent } from "@shared/placement-badge.component";
 import { SourceBadgeComponent } from "@shared/source-badge.component";
 import { TransferScoopModalComponent, type TransferRequest } from "@shared/transfer-scoop-modal.component";
 import { StoreService } from "@shared/store.service";
-import { createPager } from "@shared/pager";
+import { createPager, createServerPager } from "@shared/pager";
+import { ProducerWorkflow } from "@shared/producer-workflow.service";
 import {
   detailFact,
   detailKpi,
@@ -42,7 +51,7 @@ import { GlobalFiltersComponent } from "@shared/global-filters.component";
 
 const ALL = "__all";
 
-type FilterKey = "village" | "sexe" | "age" | "qualite" | "culture" | "source";
+type FilterKey = "village" | "sexe" | "handicap" | "age" | "qualite" | "culture" | "source";
 
 const SOURCE_LABEL: Record<DataSourceId, MessageKey> = {
   kobo: "qualite.source.kobo",
@@ -55,6 +64,7 @@ interface ProducteursUrlState {
   q: string;
   village: string;
   sexe: string;
+  handicap: string;
   age: string;
   qualite: string;
   culture: string;
@@ -69,6 +79,7 @@ function parseProducteursQuery(m: ParamMap): ProducteursUrlState {
     q: get("q") ?? "",
     village: get("village") ?? ALL,
     sexe: get("sexe") ?? ALL,
+    handicap: get("handicap") ?? ALL,
     age: get("age") ?? ALL,
     qualite: get("qualite") ?? ALL,
     culture: get("culture") ?? ALL,
@@ -135,6 +146,37 @@ const STATUS = {
       }
       .reset:hover {
         text-decoration: underline;
+      }
+      /* Qualité : ce qui demande une action ressort (rouge, ambre), seulement quand il y a des fiches concernées. */
+      .seg button.has[data-tone="ok"] {
+        color: var(--v2-foret);
+      }
+      .seg button.has[data-tone="ok"] .n {
+        background: var(--v2-foret);
+        color: var(--v2-blanc);
+      }
+      .seg button.has[data-tone="danger"] {
+        color: var(--v2-erreur-fg);
+        font-weight: 800;
+      }
+      .seg button.has[data-tone="danger"] .n {
+        background: var(--v2-erreur-fg);
+        color: var(--v2-blanc);
+      }
+      .seg button.has[data-tone="warn"] {
+        color: var(--v2-attente-fg);
+        font-weight: 800;
+      }
+      .seg button.has[data-tone="warn"] .n {
+        background: var(--v2-attente-bg);
+        color: var(--v2-attente-fg);
+      }
+      .seg button.has[data-tone="alert"] {
+        color: var(--v2-erreur-fg);
+      }
+      .seg button.has[data-tone="alert"] .n {
+        background: var(--v2-erreur-bg);
+        color: var(--v2-erreur-fg);
       }
       .bulk {
         position: sticky;
@@ -226,6 +268,8 @@ const STATUS = {
                 type="button"
                 role="radio"
                 [class.on]="filters().qualite === qualityButton.id"
+                [class.has]="qualityButton.count > 0"
+                [attr.data-tone]="qualityTone(qualityButton.id)"
                 [attr.aria-checked]="filters().qualite === qualityButton.id"
                 (click)="setFilter('qualite', qualityButton.id)"
               >
@@ -246,6 +290,7 @@ const STATUS = {
               [label]="filter.label"
               [leadingIcon]="filter.icon"
               [options]="filter.options"
+              [highlight]="isFiltered(filter.key)"
               [value]="filters()[filter.key]"
               (valueChange)="setFilter(filter.key, $event)"
             />
@@ -257,8 +302,8 @@ const STATUS = {
         <p class="sub" aria-live="polite">
           {{
             t()(
-              rows().length > 1 ? "producteurs.index.count.autre" : "producteurs.index.count.un",
-              { count: nf.format(rows().length) }
+              total() > 1 ? "producteurs.index.count.autre" : "producteurs.index.count.un",
+              { count: nf.format(total()) }
             )
           }}
         </p>
@@ -297,6 +342,11 @@ const STATUS = {
                     <span class="sub block truncate"
                       >{{ producer.village }} · {{ ageLabel(producer.age) }}</span
                     >
+                    @if (handicapState(producer) === "yes") {
+                      <span class="badge mt-1" style="background: var(--v2-info-bg); color: var(--v2-info-fg)">{{
+                        t()("producteurs.col.handicap")
+                      }}</span>
+                    }
                     <app-placement-badge [record]="producer" />
                     <app-cni-alert-badge [producerId]="producer.id" />
                   </span>
@@ -328,6 +378,7 @@ const STATUS = {
                   }
                   <th>{{ t()("producteurs.index.colProducer") }}</th>
                   <th>{{ t()("producteurs.index.colSexAge") }}</th>
+                  <th>{{ t()("producteurs.col.handicap") }}</th>
                   <th>{{ t()("producteurs.col.village") }}</th>
                   <th class="hidden xl:table-cell">{{ t()("producteurs.col.organisation") }}</th>
                   <th class="hidden lg:table-cell">{{ t()("producteurs.col.phone") }}</th>
@@ -379,6 +430,17 @@ const STATUS = {
                     <td class="whitespace-nowrap font-medium tabular-nums">
                       {{ t()(producer.sex === "F" ? "producteurs.sex.F" : "producteurs.sex.H") }} ·
                       <span [class.zero]="producer.age === null">{{ ageLabel(producer.age) }}</span>
+                    </td>
+                    <td>
+                      @if (handicapState(producer) === "yes") {
+                        <span class="badge" style="background: var(--v2-info-bg); color: var(--v2-info-fg)">{{
+                          t()("producteurs.handicap.yes")
+                        }}</span>
+                      } @else if (handicapState(producer) === "no") {
+                        <span class="font-medium" style="color: var(--v2-gris-texte)">{{ t()("producteurs.handicap.no") }}</span>
+                      } @else {
+                        <span class="zero">—</span>
+                      }
                     </td>
                     <td class="font-medium">{{ producer.village }}</td>
                     <td
@@ -440,10 +502,17 @@ const STATUS = {
               style="background: var(--v2-sauge); color: var(--v2-foret)"
               ><ui-icon name="search" [size]="26"
             /></span>
+            @if (loadError()) {
+              <p class="text-[15px] font-semibold" style="color: var(--v2-ardoise)" role="alert">
+                {{ t()("producteurs.index.loadError") }}
+              </p>
+              <button type="button" class="reset" (click)="retry()">{{ t()("rapports.api.retry") }}</button>
+            } @else {
             <p class="text-[15px] font-semibold" style="color: var(--v2-ardoise)">
               {{ t()("producteurs.index.empty") }}
             </p>
-            @if (activeCount() > 0) {
+            }
+            @if (activeCount() > 0 && !loadError()) {
               <button type="button" class="reset" (click)="resetFilters()">
                 {{ t()("producteurs.index.reset") }}
               </button>
@@ -556,6 +625,7 @@ export default class ProducteursPage {
   protected readonly filters = signal({
     village: this.queryState().village,
     sexe: this.queryState().sexe,
+    handicap: this.queryState().handicap,
     age: this.queryState().age,
     qualite: this.queryState().qualite,
     culture: this.queryState().culture,
@@ -568,6 +638,7 @@ export default class ProducteursPage {
     this.filters.set({
       village: s.village,
       sexe: s.sexe,
+      handicap: s.handicap,
       age: s.age,
       qualite: s.qualite,
       culture: s.culture,
@@ -585,7 +656,7 @@ export default class ProducteursPage {
       this.nominatif()
         ? "producteurs.index.exportNominatifDesc"
         : "producteurs.index.exportAnonymiseDesc",
-      { total: nf.format(this.rows().length) },
+      { total: nf.format(this.total()) },
     ),
   );
 
@@ -607,12 +678,20 @@ export default class ProducteursPage {
       ] as SelectOption[],
     });
     // Compteurs par base d'origine (Kobo / Consolidé / Saisie) à côté de chaque choix du filtre « Source ».
-    const sourceCounts = countBySource(
-      inScope(
-        this.store.state().producers.filter((p) => !p.mergedInto),
-        this.store.state().session,
-      ),
-    );
+    const serverSources = this.serverSources();
+    const sourceCounts = this.serverMode
+      ? ({
+          kobo: serverSources.KOBO,
+          consolidee: serverSources.CONSOLIDE,
+          application: serverSources.autre,
+          cradesc: 0,
+        } as Record<DataSourceId, number>)
+      : countBySource(
+          inScope(
+            this.store.state().producers.filter((p) => !p.mergedInto),
+            this.store.state().session,
+          ),
+        );
     const total = Object.values(sourceCounts).reduce((sum, n) => sum + n, 0);
     const withCounts = <T extends { options: SelectOption[] }>(entry: T): T => ({
       ...entry,
@@ -631,6 +710,10 @@ export default class ProducteursPage {
       def("sexe", t("producteurs.col.sex"), "person", [
         ["F", t("producteurs.sex.F")],
         ["H", t("producteurs.sex.H")],
+      ]),
+      def("handicap", t("producteurs.col.handicap"), "accessible", [
+        ["oui", t("producteurs.handicap.yes")],
+        ["non", t("producteurs.handicap.no")],
       ]),
       def(
         "age",
@@ -661,37 +744,41 @@ export default class ProducteursPage {
 
   protected readonly qualityButtons = computed(() => {
     const t = this.t();
-    const base = this.beforeQuality();
+    const serverStats = this.serverMode ? this.serverStats() : null;
+    const base = this.serverMode ? [] : this.beforeQuality();
     return [
-      { id: ALL, label: t("producteurs.index.qualityAll"), count: base.length },
+      { id: ALL, label: t("producteurs.index.qualityAll"), count: serverStats ? serverStats.qualityTotal : base.length },
       ...QUALITIES.map((q) => ({
         id: q,
         label: t(QUALITY[q].label),
-        count: base.filter((p) => p.quality === q).length,
+        count: serverStats ? (serverStats.byQuality[q] ?? 0) : base.filter((p) => p.quality === q).length,
       })),
     ];
   });
 
   protected readonly stats = computed<StatCard[]>(() => {
     const t = this.t();
-    const rows = this.rows();
-    const n = rows.length || 1;
+    // Mode API : les totaux viennent du serveur (un seul appel), la page affichée n'en contient qu'une partie.
+    const serverStats = this.serverMode ? this.serverStats() : null;
+    const rows = this.serverMode ? [] : this.rows();
+    const total = serverStats ? serverStats.total : rows.length;
+    const n = total || 1;
     const pct = (k: number) => Math.round((k / n) * 100);
     const youthAge = this.store.state().youthMaxAge;
-    const members = rows.filter((p) => p.status === "membre").length;
-    const women = rows.filter((p) => p.sex === "F").length;
-    const men = rows.filter((p) => p.sex === "H").length;
-    const youth = rows.filter((p) => ageAtMost(p.age, youthAge)).length;
-    const validated = rows.filter((p) => p.quality === "validé").length;
-    const toCheck = rows.filter((p) => p.quality === "à vérifier").length;
-    const handicap = rows.filter((p) => p.handicap).length;
+    const members = serverStats ? serverStats.members : rows.filter((p) => p.status === "membre").length;
+    const women = serverStats ? serverStats.women : rows.filter((p) => p.sex === "F").length;
+    const men = serverStats ? serverStats.men : rows.filter((p) => p.sex === "H").length;
+    const youth = serverStats ? serverStats.youth : rows.filter((p) => ageAtMost(p.age, youthAge)).length;
+    const validated = serverStats ? serverStats.validated : rows.filter((p) => p.quality === "validé").length;
+    const toCheck = serverStats ? serverStats.toCheck : rows.filter((p) => p.quality === "à vérifier").length;
+    const handicap = serverStats ? serverStats.handicap : rows.filter((p) => p.handicap).length;
     return [
       {
         label: t("producteurs.index.stat.total"),
-        value: nf.format(rows.length),
+        value: nf.format(total),
         sub: t("producteurs.index.stat.totalSub", {
           members: nf.format(members),
-          census: nf.format(rows.length - members),
+          census: nf.format(total - members),
         }),
         icon: "agriculture",
         bg: "",
@@ -736,11 +823,146 @@ export default class ProducteursPage {
     ];
   });
 
+  /**
+   * Handicap d'une fiche : « oui », « non », ou inconnu. La base consolidée n'enregistre pas cette information : « — »
+   * plutôt qu'un faux « non ».
+   */
+  protected handicapState(producer: Producer): "yes" | "no" | "unknown" {
+    if (producer.handicap) return "yes";
+    return sourceOfRecord(producer).id === "consolidee" ? "unknown" : "no";
+  }
+
+  /** Ton d'un bouton de qualité : « à vérifier » en rouge, « doublon » en ambre, « invalide » en rouge clair. */
+  protected qualityTone(id: string): string {
+    switch (id) {
+      case "validé":
+        return "ok";
+      case "à vérifier":
+        return "danger";
+      case "doublon":
+        return "warn";
+      case "invalide":
+        return "alert";
+      default:
+        return "";
+    }
+  }
+
+  /** Vrai quand ce filtre est actif : son champ change de couleur. */
+  protected isFiltered(key: FilterKey): boolean {
+    return this.filters()[key] !== ALL;
+  }
+
   protected readonly activeCount = computed(
     () => Object.values(this.filters()).filter((v) => v !== ALL).length,
   );
 
-  protected readonly rows = computed(() => this.filterRows(false));
+  // ── Mode API : une page à la fois, filtres et totaux faits par le serveur ──
+  protected readonly serverMode = isApiMode();
+  private readonly workflow = inject(ProducerWorkflow);
+  private readonly serverItems = signal<Producer[]>([]);
+  private readonly serverMeta = signal<PageMeta>({ total: 0, page: 1, limit: DEFAULT_PAGE_SIZE, pages: 1 });
+  private readonly serverStats = signal<ProducerStats | null>(null);
+  private readonly serverSources = signal<ProducerSourceCounts>({ KOBO: 0, CONSOLIDE: 0, autre: 0 });
+  protected readonly loading = signal(false);
+  /** Échec de lecture (serveur qui redémarre, réseau) : message + « Réessayer », jamais une liste vide muette. */
+  protected readonly loadError = signal(false);
+  private readonly retryTick = signal(0);
+  private retries = 0;
+  protected retry(): void {
+    this.retries = 0;
+    this.retryTick.update((n) => n + 1);
+  }
+  private requestId = 0;
+  private statsRequestId = 0;
+
+  /** Filtres envoyés au serveur (tout ce que la page savait filtrer en mémoire). */
+  private readonly serverQuery = computed<ProducerListFilters>(() => {
+    const f = this.filters();
+    const url = this.queryState();
+    const q = this.q().trim();
+    const sourceBase = ({ kobo: "KOBO", consolidee: "CONSOLIDE", application: "APPLICATION" } as const)[
+      f.source as "kobo" | "consolidee" | "application"
+    ];
+    return {
+      hideMerged: "true",
+      youthMaxAge: this.store.state().youthMaxAge,
+      ...(q && { q }),
+      ...(url.scoop && { scoopId: url.scoop }),
+      ...(url.campagne && { campaign: url.campagne }),
+      ...(f.village !== ALL && { village: f.village }),
+      ...(f.sexe !== ALL && { sex: f.sexe as "F" | "H" }),
+      ...(f.handicap !== ALL && { handicap: f.handicap as "oui" | "non" }),
+      ...(f.age !== ALL && { ageBand: f.age }),
+      ...(f.culture !== ALL && { crop: f.culture }),
+      ...(f.qualite !== ALL && { quality: f.qualite }),
+      ...(sourceBase && { sourceBase }),
+    };
+    // Même contenu = même requête : on ne relance pas l'appel quand les filtres sont réécrits à l'identique.
+  }, { equal: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
+  /** Retour en page 1 à chaque changement de filtre ; le clic sur la pagination change la page et relance l'appel. */
+  private readonly serverPage = linkedSignal({ source: this.serverQuery, computation: () => 1 });
+  private readonly serverLimit = signal(DEFAULT_PAGE_SIZE);
+
+  private readonly _loadServerPage = effect(() => {
+    if (!this.serverMode) return;
+    const query = this.serverQuery();
+    const page = this.serverPage();
+    const limit = this.serverLimit();
+    this.workflow.refreshTick();
+    this.retryTick();
+    untracked(() => void this.loadServerPage(query, page, limit));
+  });
+
+  private readonly _loadServerStats = effect(() => {
+    if (!this.serverMode) return;
+    const query = this.serverQuery();
+    this.workflow.refreshTick();
+    untracked(() => void this.loadServerStats(query));
+  });
+
+  private async loadServerPage(query: ProducerListFilters, page: number, limit: number): Promise<void> {
+    const request = ++this.requestId;
+    this.loading.set(true);
+    try {
+      const result = await fetchProducersPage({ ...query, page, limit });
+      if (request !== this.requestId) return;
+      this.loadError.set(false);
+      this.retries = 0;
+      this.serverItems.set(result.items);
+      this.serverMeta.set({ total: result.total, page: result.page, limit: result.limit, pages: result.pages });
+      this.serverSources.set(result.sourceCounts);
+      // Les fiches de la page rejoignent le store : transfert, déplacement et fiche détaillée les retrouvent.
+      actions.upsertProducersFromApi(result.items);
+    } catch (error: unknown) {
+      console.error("[ERROR][Producteurs.loadServerPage]", error);
+      if (request === this.requestId) {
+        this.serverItems.set([]);
+        this.loadError.set(true);
+        // Serveur qui redémarre : trois nouvelles tentatives automatiques, espacées de 3 secondes.
+        if (this.retries < 3) {
+          this.retries += 1;
+          setTimeout(() => this.retryTick.update((n) => n + 1), 3000);
+        }
+      }
+    } finally {
+      if (request === this.requestId) this.loading.set(false);
+    }
+  }
+
+  private async loadServerStats(query: ProducerListFilters): Promise<void> {
+    const request = ++this.statsRequestId;
+    try {
+      const stats = await getProducerStats(query);
+      if (request === this.statsRequestId) this.serverStats.set(stats);
+    } catch {
+      if (request === this.statsRequestId) this.serverStats.set(null);
+    }
+  }
+
+  /** Lignes de la page affichée (mode API) ou liste filtrée en mémoire (démonstration). */
+  protected readonly rows = computed(() => (this.serverMode ? this.serverItems() : this.filterRows(false)));
+  protected readonly total = computed(() => (this.serverMode ? this.serverMeta().total : this.rows().length));
 
   /** Applique recherche, périmètre, en-tête (SCOOP / campagne) et filtres ; `skipQuality` pour les compteurs. */
   private filterRows(skipQuality: boolean) {
@@ -758,6 +980,7 @@ export default class ProducteursPage {
         (!url.campagne || p.crops.some((c) => c.campaign === url.campagne)) &&
         (f.village === ALL || p.village === f.village) &&
         (f.sexe === ALL || p.sex === f.sexe) &&
+        (f.handicap === ALL || (f.handicap === "oui" ? p.handicap : !p.handicap)) &&
         (f.age === ALL || ageBand(p.age) === f.age) &&
         (skipQuality || f.qualite === ALL || p.quality === f.qualite) &&
         (f.culture === ALL || p.crops.some((c) => c.crop === f.culture)) &&
@@ -766,7 +989,9 @@ export default class ProducteursPage {
   }
 
   /** Pagination : mêmes règles que l'API (`GET /v1/producers?page=&limit=`). */
-  protected readonly pager = createPager(() => this.rows());
+  protected readonly pager = this.serverMode
+    ? createServerPager({ items: this.serverItems, meta: this.serverMeta, page: this.serverPage, limit: this.serverLimit })
+    : createPager(() => this.rows());
 
   // ── Transfert vers une coopérative (mode API, droit `scoop.transfer`) ──
   protected readonly canTransfer = computed(() => isApiMode() && this.store.can("scoop.transfer"));
@@ -948,6 +1173,7 @@ export default class ProducteursPage {
     this.patchQuery({
       village: null,
       sexe: null,
+      handicap: null,
       age: null,
       qualite: null,
       culture: null,
@@ -955,8 +1181,25 @@ export default class ProducteursPage {
     });
   }
 
-  protected doExport() {
-    const rows = this.rows();
+  /** Export : seul moment où l'on lit toutes les fiches du filtre, et seulement quand on le demande. */
+  private async rowsForExport(): Promise<Producer[]> {
+    if (!this.serverMode) return this.rows();
+    const all: Producer[] = [];
+    for (let page = 1; ; page++) {
+      const result = await fetchProducersPage({ ...this.serverQuery(), page, limit: MAX_PAGE_SIZE });
+      all.push(...result.items);
+      if (result.page >= result.pages) return all;
+    }
+  }
+
+  protected async doExport() {
+    let rows: Producer[];
+    try {
+      rows = await this.rowsForExport();
+    } catch {
+      this.snackbar.error(`${this.t()("common.exportError")} · ${this.t()("common.exportErrorDesc")}`);
+      return;
+    }
     const scoops = this.store.state().scoops;
     const nominatif = this.nominatif();
     const head = nominatif

@@ -498,7 +498,7 @@ const RULE_DEFS: {
                           (ngModelChange)="locQ.set($event)"
                         />
                       </div>
-                      <table class="mt-4 w-full text-sm">
+                      <div class="overflow-x-auto"><table class="mt-4 w-full text-sm">
                         <thead class="text-left text-xs text-muted-foreground">
                           <tr>
                             <th class="py-2 font-semibold">
@@ -525,7 +525,7 @@ const RULE_DEFS: {
                             </tr>
                           }
                         </tbody>
-                      </table>
+                      </table></div>
                       <ui-pagination class="px-4 pb-4" [pager]="localitePager" />
                     </section>
                   }

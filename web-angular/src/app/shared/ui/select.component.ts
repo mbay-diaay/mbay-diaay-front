@@ -82,6 +82,19 @@ let nextId = 0;
       border-color: transparent;
       background: var(--v2-creme);
     }
+    /* Champ qui filtre la liste : fond vert forêt (celui de la carte « Producteurs ») et texte blanc. */
+    .trigger.filtered,
+    .compact .trigger.filtered {
+      background: var(--v2-foret);
+      border: 2px solid var(--v2-foret);
+      padding-left: 15.5px;
+      font-weight: 800;
+      color: var(--v2-blanc);
+    }
+    .trigger.filtered .chevron,
+    .trigger.filtered ui-icon {
+      color: var(--v2-blanc);
+    }
     .chevron {
       color: var(--v2-gris-texte);
       transition: transform 0.2s ease;
@@ -211,6 +224,7 @@ let nextId = 0;
         type="button"
         class="trigger"
         [class.open]="open()"
+        [class.filtered]="highlight()"
         [id]="ids.trigger"
         aria-haspopup="listbox"
         [attr.aria-expanded]="open()"
@@ -222,7 +236,7 @@ let nextId = 0;
         @if (current()?.icon; as icon) {
           <ui-icon [name]="icon" [size]="20" style="color: var(--v2-foret)" />
         } @else if (leadingIcon()) {
-          <ui-icon [name]="leadingIcon()!" [size]="20" style="color: var(--v2-gris-texte)" />
+          <ui-icon [name]="leadingIcon()!" [size]="20" [style.color]="highlight() ? 'var(--v2-blanc)' : 'var(--v2-gris-texte)'" />
         }
         <span class="min-w-0 flex-1 truncate" [style.color]="current() ? null : 'var(--v2-gris-texte)'">
           {{ current()?.label ?? (placeholder() || t()("ui.select.placeholder")) }}
@@ -304,6 +318,8 @@ export class SelectComponent {
   readonly leadingIcon = input<IconName | null>(null);
   /** `compact` : fond crème sans bordure, pour une barre d'outils. */
   readonly variant = input<"default" | "compact">("default");
+  /** Vrai quand ce champ filtre la liste : il change de couleur. */
+  readonly highlight = input(false);
   readonly align = input<"left" | "right">("left");
   /** `up` : la liste s'ouvre au-dessus du champ (pied de tableau, bas de carte). */
   readonly drop = input<"down" | "up">("down");

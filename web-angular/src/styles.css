@@ -570,3 +570,9 @@
   color: var(--v2-encre);
   background: var(--v2-creme);
 }
+
+/* Tableaux de l'application connectée : les titres de colonnes restent sur UNE ligne ; si le tableau est trop large,
+   c'est son conteneur qui défile horizontalement. */
+app-shell table th {
+  white-space: nowrap;
+}
