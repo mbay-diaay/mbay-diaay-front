@@ -162,8 +162,13 @@ export const fetchScoopStaff = (scoopId: string) =>
  * Chiffres d'une coopérative tels que `GET /scoops/stats` les renvoie, calculés sur la base reçue du CRADESC (Kobo) :
  * producteurs (dont femmes, jeunes), parcelles et superficie en hectares. Tous les nombres sont fournis (0 si rien).
  */
+/** Chiffres d'une coopérative pour UNE base d'origine (Kobo ou consolidée) : les deux bases ne sont jamais mélangées. */
+export type ScoopBaseFigures = { producers: number; women: number; youth: number; plots: number; plotAreaHa: number };
+
 export type ScoopStatsDto = {
   scoopId: string;
+  /** Mêmes chiffres séparés par base d'origine (absent d'une ancienne réponse du serveur). */
+  bySource?: { KOBO: ScoopBaseFigures; CONSOLIDE: ScoopBaseFigures };
   producers: number;
   women: number;
   men: number;
@@ -184,8 +189,10 @@ export type ScoopStatsDto = {
 };
 
 /** Chiffres des coopératives du périmètre (ou d'une seule avec `scoopId`). */
-export async function fetchScoopStats(scoopId?: string): Promise<ScoopStatsDto[]> {
-  const response = await apiFetch<{ items: ScoopStatsDto[] }>(withPage("/scoops/stats", scoopId ? { scoopId } : {}));
+export async function fetchScoopStats(scoopId?: string, includeTechnical = false): Promise<ScoopStatsDto[]> {
+  const response = await apiFetch<{ items: ScoopStatsDto[] }>(
+    withPage("/scoops/stats", { ...(scoopId && { scoopId }), ...(includeTechnical && { includeTechnical: "true" }) }),
+  );
   return response.items;
 }
 
