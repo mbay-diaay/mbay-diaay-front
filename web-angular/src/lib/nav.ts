@@ -26,7 +26,7 @@ import {
   CalendarDays,
   Leaf,
   ClipboardList,
-  Map,
+  // Map, // module SIG masqué
   BellRing,
   HardHat,
   KeyRound,
@@ -283,13 +283,14 @@ export const NAV: NavGroup[] = [
         perm: "dashboard.read",
         module: "agronomique",
       }),
-      entry({
-        to: "/dashboard/carte",
-        labelKey: "nav.item.carte",
-        icon: Map,
-        perm: "dashboard.read",
-        module: "sig",
-      }),
+      // Module SIG (M5) masqué pour l'instant : la route /dashboard/carte reste en place.
+      // entry({
+      //   to: "/dashboard/carte",
+      //   labelKey: "nav.item.carte",
+      //   icon: Map,
+      //   perm: "dashboard.read",
+      //   module: "sig",
+      // }),
     ],
   },
   {

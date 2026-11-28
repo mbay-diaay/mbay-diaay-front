@@ -48,13 +48,14 @@ export const MODULES: readonly BusinessModule[] = [
     action: "modules.agronomique.action",
     purpose: "modules.agronomique.purpose",
   },
-  {
-    id: "sig",
-    code: "M5",
-    name: "modules.sig.name",
-    action: "modules.sig.action",
-    purpose: "modules.sig.purpose",
-  },
+  // Module SIG (M5) masqué pour l'instant.
+  // {
+  //   id: "sig",
+  //   code: "M5",
+  //   name: "modules.sig.name",
+  //   action: "modules.sig.action",
+  //   purpose: "modules.sig.purpose",
+  // },
 ];
 
 export interface ModuleSummary {

@@ -100,7 +100,8 @@ const MODULE_GROUPS: ModuleGroup[] = [
   { id: "m2", section: "modules", labelKey: "modules.commercial.name", icon: "storefront", items: byPath(["/dashboard/stocks", "/dashboard/credits", "/dashboard/ventes"]), soon: false, defaultOpen: false },
   { id: "m3", section: "modules", labelKey: "modules.exploitation.name", icon: "query_stats", items: itemsOfModule("exploitation"), soon: false, defaultOpen: false },
   { id: "m4", section: "modules", labelKey: "modules.agronomique.name", icon: "potted_plant", items: itemsOfModule("agronomique"), soon: false, defaultOpen: false },
-  { id: "m5", section: "modules", labelKey: "modules.sig.name", icon: "pin_drop", items: itemsOfModule("sig"), soon: false, defaultOpen: false },
+  // Module SIG (M5) masqué pour l'instant.
+  // { id: "m5", section: "modules", labelKey: "modules.sig.name", icon: "pin_drop", items: itemsOfModule("sig"), soon: false, defaultOpen: false },
   { id: "admin", section: "tools", labelKey: "nav.group.administration", icon: "tune", items: itemsOfSection("Administration"), soon: false, defaultOpen: false },
 ];
 
