@@ -12,9 +12,6 @@ node_modules
 dist
 dist-ssr
 .output
-.vinxi
-.tanstack/**
-.nitro
 *.local
 
 # Wrangler / Cloudflare
@@ -39,8 +36,6 @@ data/revue-doublons/
 # Sorties de build et outils de plateforme (jamais versionnées)
 .output/
 .wrangler/
-.nitro/
-.tanstack/
 *.tsbuildinfo
 coverage/
 
@@ -51,7 +46,7 @@ coverage/
 .env
 .env.*
 !.env.example
-!.env.production
+web-angular/src/environments/environment.local.ts
 
 # Données personnelles ou bases réelles : ne jamais versionner
 *.xlsx

@@ -13,7 +13,7 @@ export interface ToastItem {
 }
 
 /**
- * Toasts légers (équivalent léger de Sonner côté React), sans dépendance supplémentaire.
+ * Toasts légers (léger), sans dépendance supplémentaire.
  * L’affichage est assuré par `ToastHostComponent` monté dans `AppShellComponent`.
  */
 @Injectable({ providedIn: "root" })

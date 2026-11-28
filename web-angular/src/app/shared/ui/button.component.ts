@@ -20,7 +20,7 @@ const SIZES = {
 export type UiButtonVariant = keyof typeof VARIANTS;
 export type UiButtonSize = keyof typeof SIZES;
 
-/** Bouton Tailwind partagé — équivalent léger de src/components/ui/button.tsx. */
+/** Bouton Tailwind partagé. */
 @Component({
   selector: "ui-button",
   host: {

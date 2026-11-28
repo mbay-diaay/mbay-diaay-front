@@ -28,6 +28,8 @@ export function createCustomRole(body: {
   description?: string;
   scoped: boolean;
   copyFrom?: RoleId | null;
+  allowedPages?: string[] | null;
+  permissions?: Permission[];
 }) {
   return apiFetch<CustomRole & { permissions: Permission[] }>("/admin/roles", { method: "POST", body });
 }
@@ -35,7 +37,7 @@ export function createCustomRole(body: {
 /** Renomme un rôle créé, change sa description ou sa portée (sans compte). */
 export function updateCustomRole(
   role: RoleId,
-  body: { name?: string; description?: string; scoped?: boolean },
+  body: { name?: string; description?: string; scoped?: boolean; allowedPages?: string[] | null },
 ) {
   return apiFetch<CustomRole>(`/admin/roles/${role}`, { method: "PATCH", body });
 }
@@ -60,12 +62,22 @@ export function listScoopRoles(scoopId: string) {
 
 export function createScoopRole(
   scoopId: string,
-  body: { name: string; description?: string; copyFrom?: RoleId | null },
+  body: {
+    name: string;
+    description?: string;
+    copyFrom?: RoleId | null;
+    allowedPages?: string[] | null;
+    permissions?: Permission[];
+  },
 ) {
   return apiFetch<CustomRole & { permissions: Permission[] }>(scoopRoles(scoopId), { method: "POST", body });
 }
 
-export function updateScoopRole(scoopId: string, role: RoleId, body: { name?: string; description?: string }) {
+export function updateScoopRole(
+  scoopId: string,
+  role: RoleId,
+  body: { name?: string; description?: string; allowedPages?: string[] | null },
+) {
   return apiFetch<CustomRole>(`${scoopRoles(scoopId)}/${role}`, { method: "PATCH", body });
 }
 

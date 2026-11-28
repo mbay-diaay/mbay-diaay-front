@@ -242,7 +242,7 @@ export const CREDITS: Credit[] = (() => {
   ): Credit => ({
     id: `cr${n}`,
     scoopId: "s1",
-    memberId: members[k]!.id,
+    memberId: members[k % members.length]!.id,
     amount,
     ratePct: 0,
     purpose,
@@ -341,7 +341,7 @@ export const SALES: Sale[] = (() => {
   ): Sale => ({
     id: `sa${n}`,
     scoopId: "s1",
-    producerId: ps[k]!.id,
+    producerId: ps[k % ps.length]!.id,
     crop,
     quantityKg: kg,
     pricePerKg: price,

@@ -457,7 +457,7 @@ export const DOSSIERS: ProducerDossier[] = [
     ],
     [],
     {
-      producerId: inScoop("s1")[5]!.id,
+      producerId: inScoop("s1")[5 % inScoop("s1").length]!.id,
       decision: {
         at: day("2026-09-30"),
         by: "Babacar Fall",

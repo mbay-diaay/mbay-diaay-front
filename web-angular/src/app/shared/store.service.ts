@@ -16,12 +16,8 @@ import {
 import { LocaleService } from "./locale.service";
 
 /**
- * Angular port of the React app's src/lib/store.ts subscription layer.
- * The store itself (state, `actions`, business logic — ~3000 lines) is
- * copied verbatim into src/lib/store.ts; only its React-specific `useStore()`
- * hook (useSyncExternalStore) doesn't carry over. This service is the
- * replacement: same `subscribeToStore`/`getState` primitives, exposed as an
- * Angular signal instead of a hook.
+ * Abonnement Angular au store (src/lib/store.ts) : l'état, les `actions` et la logique métier
+ * vivent dans le store ; ce service les expose sous forme de signal.
  */
 @Injectable({ providedIn: "root" })
 export class StoreService {
@@ -29,7 +25,7 @@ export class StoreService {
   private readonly stateSignal = signal<State>(getState());
   readonly state = this.stateSignal.asReadonly();
 
-  /** Same `actions` object the React app calls (store.ts `actions.*`) — mutates the shared store directly. */
+  /** Les `actions` du store (store.ts `actions.*`) : elles modifient directement le store partagé. */
   readonly actions = actions;
 
   constructor() {
@@ -111,6 +107,12 @@ export class StoreService {
   can(permission: Permission): boolean {
     return can(this.state().session, permission);
   }
+
+  /** Colonne « Source » visible uniquement pour le super administrateur et l'administrateur CRADESC. */
+  readonly canSeeSource = computed(() => {
+    const role = this.state().session?.role;
+    return role ? (SUPER_ADMIN_ONLY_ROLES as readonly string[]).includes(role) : false;
+  });
 
   /**
    * Numéro de téléphone tel que la session a le droit de le voir :

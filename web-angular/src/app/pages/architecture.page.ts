@@ -2,7 +2,6 @@ import "@shared/ui/charte-v2-fonts";
 
 import { DOCUMENT } from "@angular/common";
 import { Component, afterNextRender, computed, inject, signal } from "@angular/core";
-import type { RouteMeta } from "@analogjs/router";
 
 import {
   API_ROUTES,
@@ -24,12 +23,6 @@ import {
   type DocRoleId,
 } from "@/lib/architecture-l2";
 import { BrandLogoComponent } from "@shared/ui";
-
-/** Page publique, non indexée par les moteurs de recherche (elle contient les comptes de test). */
-export const routeMeta: RouteMeta = {
-  title: "Architecture L2 · Mbay Diaay",
-  meta: [{ name: "robots", content: "noindex, nofollow" }],
-};
 
 type SectionLink = { id: string; n: string; label: string };
 

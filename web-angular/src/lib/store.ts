@@ -204,6 +204,7 @@ export interface Session {
   email: string;
   role: RoleId;
   permissions: Permission[];
+  allowedPages?: string[] | null;
   scope: Scope;
   expiresAt: number;
 }
@@ -604,12 +605,8 @@ const set = (patch: Partial<State> | ((s: State) => Partial<State>)) => {
   listeners.forEach((l) => l());
 };
 /**
- * Angular port: the React app reads this store through `useStore()`
- * (`useSyncExternalStore(subscribe, ...)`). Angular has no equivalent hook,
- * so `subscribe` is exported here instead — see `StoreService`
- * (src/app/shared/store.service.ts), which wraps it in a signal. Everything
- * else in this file (state, `set`, `actions`, selectors) is unchanged from
- * the React original.
+ * `subscribe` est exporté ici : voir `StoreService` (src/app/shared/store.service.ts), qui l'enveloppe
+ * dans un signal. Le reste du fichier (état, `set`, `actions`, sélecteurs) ne dépend d'aucun framework.
  */
 export const subscribeToStore = (l: () => void) => {
   listeners.add(l);
@@ -697,6 +694,7 @@ const buildSession = (
   { name, email, role, expiresAt }: StoredSession,
   serverPermissions?: readonly Permission[],
   serverScoopIds?: readonly string[],
+  serverAllowedPages?: readonly string[] | null,
 ): Session => {
   const user = state.users.find((u) => u.email === email);
   // Mode API : le périmètre renvoyé par le serveur (GET /me) fait foi, jamais la liste locale ni la démonstration.
@@ -704,6 +702,13 @@ const buildSession = (
     ? [...serverScoopIds]
     : (user?.scoopIds ?? (user?.scoopId ? [user.scoopId] : undefined));
   const computed = fetchMyPermissions(role, ids, state.rolePermissions, state.customRoles);
+  const customRole = state.customRoles.find((item) => item.id === role);
+  const allowedPages =
+    serverAllowedPages !== undefined
+      ? serverAllowedPages
+        ? [...serverAllowedPages]
+        : null
+      : (customRole?.allowedPages ?? null);
   // Mode API : les droits renvoyés par le serveur (GET /me) font foi.
   return {
     name,
@@ -711,6 +716,7 @@ const buildSession = (
     role,
     expiresAt,
     ...computed,
+    allowedPages,
     ...(serverPermissions && { permissions: [...serverPermissions] }),
   };
 };
@@ -1017,9 +1023,10 @@ export const actions = {
     role: RoleId,
     serverPermissions?: readonly Permission[],
     serverScoopIds?: readonly string[],
+    serverAllowedPages?: readonly string[] | null,
   ) {
     const stored: StoredSession = { name, email, role, expiresAt: Date.now() + TOKEN_MS };
-    set({ session: buildSession(stored, serverPermissions, serverScoopIds) });
+    set({ session: buildSession(stored, serverPermissions, serverScoopIds, serverAllowedPages) });
     audit("Connexion", "Session", `Profil ${role}`);
   },
   logout() {
@@ -4693,7 +4700,7 @@ export function sharedPhoneGroups(producers: Producer[]): PhoneGroup[] {
 export function can(s: Session | null, p: Permission) {
   return !!s?.permissions.includes(p);
 }
-// useCan (React hook) dropped here — see StoreService.can() in the Angular app.
+// Les droits se lisent avec StoreService.can().
 
 /** Producteurs visibles selon le périmètre de la session (filtré côté serveur en production). */
 export { inScope } from "./scope";

@@ -38,7 +38,7 @@ const DEFAULT_TYPE: OrgType = "Autre";
     `,
   ],
   template: `
-    <ui-modal [open]="open()" [title]="t()('orgs.add.title')" [description]="t()('orgs.add.description')" icon="group" [width]="600" [closeLabel]="t()('common.close')" (closed)="open.set(false)">
+    <ui-modal [open]="open()" [title]="t()('orgs.add.title')" [description]="t()('orgs.add.description')" icon="group" tone="brand" [width]="600" [closeLabel]="t()('common.close')" (closed)="open.set(false)">
       <div class="grid gap-4 pb-6 sm:grid-cols-2">
         @if (!scoopId()) {
           <div class="sm:col-span-2">

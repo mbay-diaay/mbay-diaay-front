@@ -247,7 +247,7 @@ const MODE_LABEL: Record<MeetingMode, MessageKey> = {
     }
   `,
   template: `
-    <ui-modal [open]="open()" [title]="titleText()" [description]="descriptionText()" icon="calendar_month" [width]="720" [closeLabel]="t()('common.close')" (closed)="close()">
+    <ui-modal [open]="open()" [title]="titleText()" [description]="descriptionText()" icon="calendar_month" tone="brand" [width]="720" [closeLabel]="t()('common.close')" (closed)="close()">
       <div class="pb-6">
         <!-- La réunion -->
         <h3 class="sec"><ui-icon name="event" [size]="18" />{{ t()("reunions.form.section.what") }}</h3>
@@ -393,7 +393,7 @@ export class MeetingFormDialogComponent {
   readonly open = model(false);
   readonly meeting = input<Meeting | undefined>(undefined);
   readonly defaultScoopId = input<string | undefined>(undefined);
-  /** Jour choisi dans le calendrier : proposition à 9 h (comme React). */
+  /** Jour choisi dans le calendrier : proposition à 9 h (par défaut). */
   readonly defaultDate = input<Date | undefined>(undefined);
 
   readonly notify = output<{ kind: "success" | "error"; text: string }>();

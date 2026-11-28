@@ -1,8 +1,10 @@
+import { paymentProvider } from "@/lib/api/config";
+
 /**
  * Paiement en ligne des cotisations : point de raccordement à un agrégateur (Wave, Orange Money, PayTech, CinetPay…).
  *
  * Aucun agrégateur n'est relié pour l'instant. Quand il le sera :
- * 1. `VITE_PAYMENT_PROVIDER` prend son identifiant (par exemple `paytech`) ;
+ * 1. `paymentProvider` dans l'environnement prend son identifiant (par exemple `paytech`) ;
  * 2. le serveur crée la transaction chez l'agrégateur depuis le lien de paiement et y redirige le membre ;
  * 3. l'agrégateur confirme par un rappel signé (webhook) ; seul le serveur, après contrôle de la signature, appelle
  *    le règlement du lien (`settlePaymentLink`) : jamais le navigateur du membre.
@@ -10,8 +12,7 @@
  * Tant qu'aucun agrégateur n'est relié, le lien montre le montant à payer et la démonstration propose un paiement
  * simulé ; en production, un paiement se saisit à la main (espèces, mobile money, virement) depuis l'écran Cotisations.
  */
-export const PAYMENT_PROVIDER: string | null =
-  (import.meta.env["VITE_PAYMENT_PROVIDER"] as string | undefined)?.trim() || null;
+export const PAYMENT_PROVIDER: string | null = paymentProvider();
 
 /** Vrai quand un agrégateur de paiement est relié. */
 export const aggregatorConnected = (): boolean => PAYMENT_PROVIDER !== null;

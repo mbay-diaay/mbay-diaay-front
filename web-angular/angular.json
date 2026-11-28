@@ -5,31 +5,74 @@
   "projects": {
     "mbay-diaay-angular": {
       "projectType": "application",
-      "root": ".",
+      "root": "",
       "sourceRoot": "src",
       "prefix": "app",
       "architect": {
         "build": {
-          "builder": "@analogjs/platform:vite",
+          "builder": "@angular/build:application",
           "options": {
-            "configFile": "vite.config.ts",
-            "main": "src/main.ts",
-            "outputPath": "dist/client",
-            "tsConfig": "tsconfig.app.json"
+            "outputPath": {
+              "base": "dist/client",
+              "browser": ""
+            },
+            "index": "src/index.html",
+            "browser": "src/main.ts",
+            "tsConfig": "tsconfig.app.json",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": [
+              "src/styles.css",
+              "node_modules/leaflet/dist/leaflet.css",
+              "node_modules/mapbox-gl/dist/mapbox-gl.css"
+            ],
+            "loader": {
+              ".svg": "text",
+              ".woff": "file",
+              ".woff2": "file"
+            },
+            "allowedCommonJsDependencies": [
+              "leaflet",
+              "mapbox-gl"
+            ]
           },
           "defaultConfiguration": "production",
           "configurations": {
-            "development": {
-              "mode": "development"
-            },
             "production": {
-              "sourcemap": false,
-              "mode": "production"
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.production.ts"
+                }
+              ],
+              "outputHashing": "all",
+              "optimization": true,
+              "sourceMap": false
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            },
+            "local": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.local.ts"
+                }
+              ],
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
             }
           }
         },
         "serve": {
-          "builder": "@analogjs/platform:vite-dev-server",
+          "builder": "@angular/build:dev-server",
           "defaultConfiguration": "development",
           "options": {
             "buildTarget": "mbay-diaay-angular:build",
@@ -37,12 +80,24 @@
           },
           "configurations": {
             "development": {
-              "buildTarget": "mbay-diaay-angular:build:development",
-              "hmr": true
+              "buildTarget": "mbay-diaay-angular:build:development"
+            },
+            "local": {
+              "buildTarget": "mbay-diaay-angular:build:local"
             },
             "production": {
               "buildTarget": "mbay-diaay-angular:build:production"
             }
+          }
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "runner": "vitest",
+            "tsConfig": "tsconfig.spec.json",
+            "exclude": [
+              "src/lib/no-browser-storage.spec.ts"
+            ]
           }
         }
       }

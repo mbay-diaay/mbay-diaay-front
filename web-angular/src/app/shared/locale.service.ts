@@ -13,11 +13,8 @@ import {
 import type { MessageKey } from "@/lib/i18n/fr";
 
 /**
- * Angular replacement for the React app's LocaleProvider/I18nContext
- * (src/lib/i18n/context.ts, LocaleProvider.tsx, use-i18n.ts). Wraps the same
- * framework-agnostic translate()/formatNumber()/formatDate() functions copied
- * verbatim into src/lib/i18n/ — only the reactive binding changes (Angular
- * signal instead of a React context).
+ * Service de langue : enveloppe les fonctions translate()/formatNumber()/formatDate()
+ * (src/lib/i18n/) dans un signal Angular.
  */
 @Injectable({ providedIn: "root" })
 export class LocaleService {

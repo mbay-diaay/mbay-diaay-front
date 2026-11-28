@@ -1,0 +1,40 @@
+/** Centre d'aide : Guide d'utilisation et Questions fréquentes. */
+export const help = {
+  "guide.area": "Guide d'utilisation",
+  "guide.eyebrow": "Centre d'aide",
+  "guide.title": "Guide d'utilisation",
+  "guide.description":
+    "Parcours pas à pas pour prendre en main la plateforme Mbay Diaay selon votre rôle : gestion des coopératives, producteurs, qualité des données et suivi administratif.",
+  "guide.openFaq": "Questions fréquentes",
+  "guide.searchPlaceholder": "Rechercher un thème, une action, un écran…",
+  "guide.filter.all": "Tout",
+  "guide.filter.start": "Premiers pas",
+  "guide.filter.network": "Réseau & coopératives",
+  "guide.filter.producers": "Producteurs & dossiers",
+  "guide.filter.quality": "Qualité & doublons",
+  "guide.filter.admin": "Administration & suivi",
+  "guide.stepsLabel": "Étapes clés",
+  "guide.openScreen": "Ouvrir l'écran",
+  "guide.emptyTitle": "Aucun chapitre trouvé",
+  "guide.emptyDesc": "Essayez un autre mot-clé ou réinitialisez le filtre.",
+  "guide.reset": "Tout afficher",
+
+  "faq.area": "Questions fréquentes",
+  "faq.eyebrow": "Centre d'aide",
+  "faq.title": "Questions fréquentes",
+  "faq.description":
+    "Réponses aux questions les plus courantes sur le fonctionnement des coopératives, les données Kobo et consolidées, la sécurité des CNI et les droits d'accès.",
+  "faq.openGuide": "Guide d'utilisation",
+  "faq.searchPlaceholder": "Rechercher une question ou un mot-clé…",
+  "faq.filter.all": "Toutes",
+  "faq.filter.access": "Accès & sécurité",
+  "faq.filter.network": "Coopératives & HCR",
+  "faq.filter.quality": "Doublons & CNI",
+  "faq.filter.data": "Kobo & consolidé",
+  "faq.emptyTitle": "Aucune question correspondante",
+  "faq.emptyDesc": "Modifiez votre recherche ou changez de catégorie.",
+  "faq.reset": "Afficher toutes les questions",
+  "faq.supportTitle": "Vous ne trouvez pas votre réponse ?",
+  "faq.supportDesc":
+    "Contactez l'équipe support du CRADESC pour toute question métier, demande de correction ou ouverture d'accès.",
+} as const;

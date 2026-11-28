@@ -107,6 +107,8 @@ export interface CustomRole {
   scoopId?: string | undefined;
   /** Vrai : limité à une coopérative ; faux : vue consolidée. */
   scoped: boolean;
+  /** Routes `/dashboard/…` autorisées dans le menu (nul/absent : déduit des droits). */
+  allowedPages?: string[] | null;
   createdAt: string;
   createdBy: string;
 }

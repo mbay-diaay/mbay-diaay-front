@@ -732,7 +732,7 @@ function sparkPaths(series: number[]): { line: string; area: string } {
         <section class="card p-6" style="grid-area: activity" aria-labelledby="activity-title">
           <div class="flex items-center justify-between gap-3">
             <h2 id="activity-title" class="h2">{{ t()("dashboard.activity.title") }}</h2>
-            @if (store.can("audit.read") || store.can("audit.read.scoop")) {
+            @if (store.can("role.configure")) {
               <a class="link" routerLink="/dashboard/audit"
                 >{{ t()("dashboard.activity.all") }} <ui-icon name="arrow_forward" [size]="18"
               /></a>

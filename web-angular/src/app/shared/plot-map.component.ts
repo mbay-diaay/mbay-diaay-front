@@ -23,7 +23,7 @@ const STATUS_VAR: Record<PlotStatus, string> = {
 };
 
 /**
- * Port Angular de PlotMap.tsx — import dynamique Leaflet, client-only (SSR-safe).
+ * Carte d'une parcelle : import dynamique Leaflet, client-only (SSR-safe).
  * Tuiles Esri (Street Map / Imagery) — aligné CSP Report-Only.
  */
 @Component({
@@ -86,10 +86,9 @@ export class PlotMapComponent implements OnDestroy {
     const el = this.host()?.nativeElement;
     if (!el || this.map) return;
     this.L = await import("leaflet");
-    await import("leaflet/dist/leaflet.css");
     const L = this.L;
 
-    // Garde défensive canvas (comme React) : ignore redraw après démontage.
+    // Garde défensive canvas : ignore redraw après démontage.
     const canvasProto = L.Canvas.prototype as unknown as Record<
       string,
       (...args: unknown[]) => unknown

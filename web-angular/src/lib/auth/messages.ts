@@ -2,7 +2,7 @@ import { translate, type TranslateParams } from "@/lib/i18n/translate";
 import type { MessageKey } from "@/lib/i18n/fr";
 import { AuthError, type AuthErrorCode } from "./types";
 
-/** Traducteur d'une phrase : celui du contexte React, ou le français par défaut (tests, code hors interface). */
+/** Traducteur d'une phrase : celui de la langue en cours, ou le français par défaut (tests, code hors interface). */
 export type Translator = (key: MessageKey, params?: TranslateParams) => string;
 const french: Translator = (key, params) => translate("fr", key, params);
 

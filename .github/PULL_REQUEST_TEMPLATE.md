@@ -16,7 +16,7 @@
 - [ ] Code réutilisé plutôt que dupliqué (composants de `components/app` et `components/auth`)
 - [ ] Un test couvre la règle métier ou de sécurité ajoutée
 - [ ] Aucun secret, aucune donnée personnelle réelle, aucune donnée sensible dans les journaux
-- [ ] Si `vite.config.ts` change : le front Angular reste un site statique (`analog({ ssr: false })`, sortie `dist/client`) ; lancer `pnpm check:host`
+- [ ] Si `angular.json` change : le front Angular reste un site statique (sortie `dist`) ; lancer `pnpm typecheck && pnpm test && pnpm build`
 
 ## Sécurité
 

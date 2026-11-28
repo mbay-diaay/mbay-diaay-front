@@ -1,9 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("./config", () => ({
-  apiBaseUrl: () => "https://api.mbaydiaay.com/v1",
-  isApiMode: () => true,
-}));
+import { describe, expect, it } from "vitest";
 
 import { buildGenerateBody, countRecentReports, latestReport, safeReportFileName, type ApiReport } from "./reports";
 import { isEmailTakenError } from "./users";

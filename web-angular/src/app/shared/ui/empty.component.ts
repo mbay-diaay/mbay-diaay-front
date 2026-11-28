@@ -1,6 +1,6 @@
 import { Component } from "@angular/core";
 
-/** Message vide centré — port de Empty dans ui-bits.tsx. */
+/** Message vide centré. */
 @Component({
   selector: "ui-empty",
   template: `

@@ -15,10 +15,10 @@ import { admin } from "./messages/admin";
 import { auth } from "./messages/auth";
 import { shell as shellMessages } from "./messages/shell";
 import { organisations } from "./messages/organisations";
-import { donnees } from "./messages/donnees";
 import { imports } from "./messages/imports";
 import { calendrier } from "./messages/calendrier";
 import { guard } from "./messages/guard";
+import { help } from "./messages/help";
 import { transfert } from "./messages/transfert";
 import { cni } from "./messages/cni";
 
@@ -92,10 +92,10 @@ export const fr = {
   ...auth,
   ...shellMessages,
   ...organisations,
-  ...donnees,
   ...imports,
   ...calendrier,
   ...guard,
+  ...help,
   ...transfert,
   ...cni,
 } as const;

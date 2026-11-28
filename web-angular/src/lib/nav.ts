@@ -30,11 +30,11 @@ import {
   BellRing,
   HardHat,
   KeyRound,
+  User,
 } from "lucide-angular";
 // NOTE: `lucide-angular` is the deprecated package, kept deliberately for its
 // `<lucide-angular [img]="data">` generic-by-value rendering, which matches
-// this file's data-driven `icon: typeof Users` field exactly (React also
-// stores icon *components* as plain data here). The successor
+// this file's data-driven `icon: typeof Users` field exactly. The successor
 // `@lucide/angular` replaced this with one standalone component PER icon
 // (`LucideUsers`, `LucideHome`, …) and dropped the generic-by-data path —
 // porting to it means reworking this file to store icon names/components
@@ -67,20 +67,12 @@ export type NavItem = {
 export type ModuleId = "administratif" | "commercial" | "exploitation" | "agronomique" | "sig";
 /** Entrée de menu : le libellé français se lit dans le dictionnaire, une seule source. */
 const entry = (i: Omit<NavItem, "label">): NavItem => ({ ...i, label: fr[i.labelKey] });
-const soon = (labelKey: MessageKey, icon: typeof Users, module: ModuleId): NavItem =>
-  entry({
-    to: "",
-    labelKey,
-    icon,
-    module,
-    perm: "dashboard.read",
-    soon: true,
-  });
 export const navAllowed = (session: Session, i: NavItem) =>
   !i.hidden &&
   !(i.hiddenWithCooperativeHome && cooperativeHomeId(session)) &&
   (i.audience === undefined ||
     (i.audience === "consolidated") === (session.scope.kind === "consolidé")) &&
+  (!session.allowedPages || session.allowedPages.includes(i.to)) &&
   (Array.isArray(i.perm)
     ? i.perm.some((p) => session.permissions.includes(p))
     : session.permissions.includes(i.perm));
@@ -227,7 +219,7 @@ export const NAV: NavGroup[] = [
         icon: ShieldCheck,
         perm: ["quality.review", "alert.manage", "correction.manage", "coop_request.read"],
       }),
-      // M2–M5 : visibles sur la page modules comme « à venir », absents du menu cliquable.
+      // M2–M5 : écrans ouverts au menu, sans donnée tant que le module n'est pas relié au serveur (état vide clair).
       entry({
         to: "/dashboard/stocks",
         labelKey: "nav.item.stocks",
@@ -249,13 +241,55 @@ export const NAV: NavGroup[] = [
         perm: "sales.read",
         module: "commercial",
       }),
-      soon("nav.item.charges", Receipt, "exploitation"),
-      soon("nav.item.exploitation", TrendingUp, "exploitation"),
-      soon("nav.item.plans", Sprout, "agronomique"),
-      soon("nav.item.campagnes", CalendarDays, "agronomique"),
-      soon("nav.item.calendriers", Leaf, "agronomique"),
-      soon("nav.item.suivi", ClipboardList, "agronomique"),
-      soon("nav.item.carte", Map, "sig"),
+      entry({
+        to: "/dashboard/charges",
+        labelKey: "nav.item.charges",
+        icon: Receipt,
+        perm: "dashboard.read",
+        module: "exploitation",
+      }),
+      entry({
+        to: "/dashboard/exploitation",
+        labelKey: "nav.item.exploitation",
+        icon: TrendingUp,
+        perm: "dashboard.read",
+        module: "exploitation",
+      }),
+      entry({
+        to: "/dashboard/plans",
+        labelKey: "nav.item.plans",
+        icon: Sprout,
+        perm: "dashboard.read",
+        module: "agronomique",
+      }),
+      entry({
+        to: "/dashboard/campagnes",
+        labelKey: "nav.item.campagnes",
+        icon: CalendarDays,
+        perm: "dashboard.read",
+        module: "agronomique",
+      }),
+      entry({
+        to: "/dashboard/calendriers",
+        labelKey: "nav.item.calendriers",
+        icon: Leaf,
+        perm: "dashboard.read",
+        module: "agronomique",
+      }),
+      entry({
+        to: "/dashboard/suivi",
+        labelKey: "nav.item.suivi",
+        icon: ClipboardList,
+        perm: "dashboard.read",
+        module: "agronomique",
+      }),
+      entry({
+        to: "/dashboard/carte",
+        labelKey: "nav.item.carte",
+        icon: Map,
+        perm: "dashboard.read",
+        module: "sig",
+      }),
     ],
   },
   {
@@ -280,6 +314,12 @@ export const NAV: NavGroup[] = [
         to: "/dashboard/super-admin/parametres",
         labelKey: "nav.item.superadminParametres",
         icon: KeyRound,
+        perm: "role.configure",
+      }),
+      entry({
+        to: "/dashboard/profil",
+        labelKey: "nav.item.superadminProfil",
+        icon: User,
         perm: "role.configure",
       }),
     ],
@@ -312,18 +352,14 @@ export const NAV: NavGroup[] = [
         labelKey: "nav.item.referentiels",
         icon: BookMarked,
         perm: "config.manage",
+        // Masquée : les réglages n'ont pas encore de route serveur (rien ne s'enregistre en mode API). À reprendre plus tard.
+        hidden: true,
       }),
       entry({
         to: "/dashboard/imports",
         labelKey: "nav.item.imports",
         icon: Upload,
         perm: "import.manage",
-      }),
-      entry({
-        to: "/dashboard/donnees",
-        labelKey: "nav.item.donnees",
-        icon: Archive,
-        perm: "data.backup",
       }),
       entry({
         to: "/dashboard/roles-cooperative",
@@ -335,7 +371,7 @@ export const NAV: NavGroup[] = [
         to: "/dashboard/audit",
         labelKey: "nav.item.audit",
         icon: ScrollText,
-        perm: ["audit.read", "audit.read.scoop"],
+        perm: "role.configure",
       }),
     ],
   },

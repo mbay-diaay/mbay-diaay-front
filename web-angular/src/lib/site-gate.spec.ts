@@ -28,9 +28,10 @@ describe("site en construction", () => {
 
   it("garde l'accès dans le navigateur une fois le code saisi", () => {
     const storage = memory();
-    expect(isUnlocked(storage)).toBe(false);
+    expect(isUnlocked(storage, true)).toBe(false);
     unlock(storage);
-    expect(isUnlocked(storage)).toBe(true);
+    expect(isUnlocked(storage, true)).toBe(true);
+    expect(isUnlocked(null, false)).toBe(true);
   });
 
   it("ne renvoie jamais vers un autre site après le code", () => {

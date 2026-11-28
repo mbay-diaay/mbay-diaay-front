@@ -6,11 +6,13 @@
  * - les adresses e-mail, numéros de téléphone et suites de chiffres longues (CNI) sont masqués dans le texte ;
  * - une même erreur n'est signalée qu'une fois par dix secondes (une boucle de rendu ne doit pas inonder le service).
  *
- * Branchement : `VITE_ERROR_REPORT_URL` envoie chaque rapport en JSON par `navigator.sendBeacon`, ou
+ * Branchement : `errorReportUrl` dans l'environnement envoie chaque rapport en JSON par `navigator.sendBeacon`, ou
  * `addErrorSink(fn)` enregistre un service de son choix. Sans l'un ni l'autre, rien n'est envoyé.
  */
 
-export type ErrorMechanism = "react_error_boundary" | "onerror" | "unhandledrejection" | "manual";
+import { errorReportUrl } from "@/lib/api/config";
+
+export type ErrorMechanism = "angular_error_handler" | "onerror" | "unhandledrejection" | "manual";
 
 export interface ErrorReport {
   message: string;
@@ -87,7 +89,7 @@ export function buildReport(
 
 /** Service par défaut : envoi par `sendBeacon` si une adresse est configurée. */
 function beaconSink(): ErrorSink | undefined {
-  const url = import.meta.env["VITE_ERROR_REPORT_URL"] as string | undefined;
+  const url = errorReportUrl();
   if (!url || typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function")
     return undefined;
   return (report) => {

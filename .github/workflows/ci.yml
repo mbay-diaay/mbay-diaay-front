@@ -16,25 +16,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify:
-    name: Qualité (types, lint, format, tests, build)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4 # version lue dans "packageManager" de package.json
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check:host
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm format:check
-      - run: pnpm test
-      - run: pnpm build
-
   e2e:
     name: Parcours dans un navigateur (Playwright)
     runs-on: ubuntu-latest
@@ -57,9 +38,9 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-  # Référence fonctionnelle Angular (Analog) — ne remplace pas encore le job React prod.
+  # Front Angular (Angular CLI).
   angular:
-    name: Angular (check:host, types, build)
+    name: Angular (types, tests, build)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -75,9 +56,9 @@ jobs:
           node-version-file: web-angular/.nvmrc
           cache: pnpm
           cache-dependency-path: web-angular/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile --ignore-workspace
-      - run: pnpm check:host
+      - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - run: pnpm test
       - run: pnpm build
 
   security:

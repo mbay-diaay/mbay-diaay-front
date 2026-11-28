@@ -1,13 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./config", () => ({ apiBaseUrl: () => "http://api.test/v1", isApiMode: () => true }));
-vi.mock("./tokens", () => ({
-  getAccessToken: () => "jeton",
-  setAccessToken: vi.fn(),
-  clearTokens: vi.fn(),
-}));
+import { environment } from "../../environments/environment";
+import { apiFetch, ApiError, MAX_CONCURRENT_REQUESTS, MAX_RATE_LIMIT_RETRIES, retryDelayMs } from "./client";
+import { clearTokens, setAccessToken } from "./tokens";
 
-const { apiFetch, ApiError, MAX_CONCURRENT_REQUESTS, MAX_RATE_LIMIT_RETRIES, retryDelayMs } = await import("./client");
+let previousApiUrl: string | null = null;
+beforeAll(() => {
+  previousApiUrl = environment.apiUrl;
+  environment.apiUrl = "http://api.test/v1";
+  setAccessToken("jeton");
+});
+afterAll(() => {
+  environment.apiUrl = previousApiUrl;
+  clearTokens();
+});
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });

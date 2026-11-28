@@ -22,7 +22,7 @@ import {
 export type UiSheetSide = "right" | "left" | "bottom";
 
 /**
- * Panneau coulissant (équivalent Angular du Sheet Radix côté React).
+ * Panneau coulissant.
  * Animations : utilitaires `mbay-animate-*` dans styles.css.
  */
 @Component({

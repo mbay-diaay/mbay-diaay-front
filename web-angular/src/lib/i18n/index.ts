@@ -1,9 +1,7 @@
 /**
- * Trimmed barrel: the React original (src/lib/i18n/index.ts) also exports
- * `LocaleProvider`/`useI18n`/`useT` (React context + hooks), dropped here in
- * favor of LocaleService (src/app/shared/locale.service.ts). Only the
- * framework-agnostic re-exports survive — several src/lib/*.ts files import
- * `tNow`/`MessageKey`/`TranslateParams` from this path.
+ * Barrel i18n : seuls les exports indépendants du framework sont conservés ; la langue en cours
+ * se lit via LocaleService (src/app/shared/locale.service.ts). Plusieurs fichiers src/lib/*.ts
+ * importent `tNow`/`MessageKey`/`TranslateParams` depuis ce chemin.
  *
  * Wolof is lazy-loaded via `ensureWolofLoaded` (not re-exported as a static `wo`).
  */

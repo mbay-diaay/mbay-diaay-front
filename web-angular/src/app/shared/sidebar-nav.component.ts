@@ -25,7 +25,7 @@ type ModuleGroup = {
 };
 
 /**
- * Écrans du module M1 (le modèle `NAV`, partagé avec l'archive React, ne porte le module que pour M2–M5), dans
+ * Écrans du module M1 (le modèle `NAV` ne porte le module que pour M2–M5), dans
  * l'ordre d'affichage : la coopérative, les personnes, puis la vie de la coopérative (les rôles sont dans Administration). La phrase « à quoi ça
  * sert » vit sous le titre de chaque page, pas dans le menu.
  */
@@ -46,7 +46,7 @@ const M1_PATHS = [
 const ALL_ITEMS = NAV.flatMap((g) => g.items);
 const byPath = (paths: string[]) =>
   paths.map((path) => ALL_ITEMS.find((item) => item.to === path)).filter((item): item is NavItem => !!item);
-const soonOf = (module: ModuleId) => ALL_ITEMS.filter((i) => i.soon && i.module === module);
+const itemsOfModule = (module: ModuleId) => ALL_ITEMS.filter((i) => !i.soon && !i.hidden && i.module === module);
 const itemsOfSection = (name: string) => NAV.find((g) => g.group === name)?.items.filter((i) => !i.soon) ?? [];
 
 /** Icône de chaque écran (Material Symbols Rounded, charte V2) ; repli sur l'icône du module. */
@@ -66,6 +66,13 @@ const SCREEN_ICONS: Record<string, IconName> = {
   "/dashboard/stocks": "inventory_2",
   "/dashboard/credits": "payments",
   "/dashboard/ventes": "storefront",
+  "/dashboard/charges": "payments",
+  "/dashboard/exploitation": "query_stats",
+  "/dashboard/plans": "potted_plant",
+  "/dashboard/campagnes": "calendar_month",
+  "/dashboard/calendriers": "event",
+  "/dashboard/suivi": "grass",
+  "/dashboard/carte": "map",
   "/dashboard/techniciens": "badge",
   "/dashboard/roles-cooperative": "admin_panel_settings",
   "/dashboard/qualite": "verified",
@@ -74,11 +81,12 @@ const SCREEN_ICONS: Record<string, IconName> = {
   "/dashboard/appareils": "devices",
   "/dashboard/referentiels": "dataset",
   "/dashboard/imports": "upload_file",
-  "/dashboard/donnees": "database",
   "/dashboard/audit": "history",
   "/dashboard/super-admin/roles": "admin_panel_settings",
   "/dashboard/super-admin/comptes": "manage_accounts",
   "/dashboard/super-admin/parametres": "settings",
+  "/dashboard/profil": "person",
+  "/dashboard/super-admin/profil": "person",
 };
 
 /** Menu organisé module par module (note de cadrage), puis les blocs transversaux. */
@@ -90,9 +98,9 @@ const MODULE_GROUPS: ModuleGroup[] = [
   { id: "superadmin", section: "superadmin", labelKey: "nav.group.superadmin", icon: "lock", items: itemsOfSection("Super administration"), soon: false, defaultOpen: true },
   { id: "m1", section: "modules", labelKey: "modules.administratif.name", icon: "badge", items: byPath(M1_PATHS), soon: false, defaultOpen: true },
   { id: "m2", section: "modules", labelKey: "modules.commercial.name", icon: "storefront", items: byPath(["/dashboard/stocks", "/dashboard/credits", "/dashboard/ventes"]), soon: false, defaultOpen: false },
-  { id: "m3", section: "modules", labelKey: "modules.exploitation.name", icon: "query_stats", items: soonOf("exploitation"), soon: true, defaultOpen: false },
-  { id: "m4", section: "modules", labelKey: "modules.agronomique.name", icon: "potted_plant", items: soonOf("agronomique"), soon: true, defaultOpen: false },
-  { id: "m5", section: "modules", labelKey: "modules.sig.name", icon: "pin_drop", items: soonOf("sig"), soon: true, defaultOpen: false },
+  { id: "m3", section: "modules", labelKey: "modules.exploitation.name", icon: "query_stats", items: itemsOfModule("exploitation"), soon: false, defaultOpen: false },
+  { id: "m4", section: "modules", labelKey: "modules.agronomique.name", icon: "potted_plant", items: itemsOfModule("agronomique"), soon: false, defaultOpen: false },
+  { id: "m5", section: "modules", labelKey: "modules.sig.name", icon: "pin_drop", items: itemsOfModule("sig"), soon: false, defaultOpen: false },
   { id: "admin", section: "tools", labelKey: "nav.group.administration", icon: "tune", items: itemsOfSection("Administration"), soon: false, defaultOpen: false },
 ];
 

@@ -1,18 +1,18 @@
+import { siteAccessCode, siteGate } from "@/lib/api/config";
+
 /**
  * Rideau « site en construction » : tant que le code d'accès n'a pas été saisi dans ce navigateur, le site affiche
  * l'écran `/construction`. Ce n'est pas une sécurité (le code est dans le site publié) : la vraie protection reste la
- * connexion (mot de passe + code e-mail). Pour retirer le rideau à l'ouverture, passer `VITE_SITE_GATE=false`.
+ * connexion (mot de passe + code e-mail). Pour retirer le rideau à l'ouverture, passer `siteGate: false` dans l'environnement.
  *
  * Restent ouverts sans code : le rapport `/architecture` et les liens de paiement `/payer/…` envoyés aux adhérents.
  */
 
-/** Code demandé. Se change par `VITE_SITE_ACCESS_CODE` au build (`.env.production`). */
-export const SITE_ACCESS_CODE: string =
-  ((import.meta.env["VITE_SITE_ACCESS_CODE"] as string | undefined) ?? "").trim() || "CRADESC-NIAYES";
+/** Code demandé (configuré dans `src/environments/`). */
+export const SITE_ACCESS_CODE: string = siteAccessCode();
 
-/** Rideau actif sauf `VITE_SITE_GATE=false`. */
-export const SITE_GATE_ENABLED: boolean =
-  ((import.meta.env["VITE_SITE_GATE"] as string | undefined) ?? "true").trim().toLowerCase() !== "false";
+/** Rideau actif sauf `siteGate: false`. */
+export const SITE_GATE_ENABLED: boolean = siteGate();
 
 export const SITE_GATE_PAGE = "/construction";
 const STORAGE_KEY = "mbay.site-access";
@@ -36,8 +36,9 @@ export function isAccessCode(input: string, expected = SITE_ACCESS_CODE): boolea
 /** Valeur gardée : liée au code, pour qu'un changement de code redemande l'accès à tout le monde. */
 const marker = (expected = SITE_ACCESS_CODE) => `ok:${normalize(expected)}`;
 
-export function isUnlocked(storage: Pick<Storage, "getItem"> | null = safeStorage()): boolean {
-  if (!SITE_GATE_ENABLED) return true;
+/** `gateEnabled` : le rideau est-il actif ? (paramètre pour les tests ; par défaut, la valeur de l'environnement.) */
+export function isUnlocked(storage: Pick<Storage, "getItem"> | null = safeStorage(), gateEnabled: boolean = SITE_GATE_ENABLED): boolean {
+  if (!gateEnabled) return true;
   try {
     return storage?.getItem(STORAGE_KEY) === marker();
   } catch {

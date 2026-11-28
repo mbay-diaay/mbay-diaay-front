@@ -9,7 +9,7 @@ import {
 } from "@/lib/auth";
 
 /**
- * Injection Angular autour de `src/lib/auth` (même bascule démo / API que React) :
+ * Injection Angular autour de `src/lib/auth` (même bascule démo / API partout) :
  * - `VITE_API_URL` → NestJS (`createApiAuthService`)
  * - sinon → démonstration en mémoire si `VITE_DEMO_MODE`
  */

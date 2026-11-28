@@ -12,16 +12,10 @@ import { AuthPasswordRulesComponent } from "@shared/auth-password-rules.componen
 import { AuthShellComponent } from "@shared/auth-shell.component";
 import { AuthService } from "@shared/auth.service";
 import { LocaleService } from "@shared/locale.service";
-import type { RouteMeta } from "@analogjs/router";
-import { siteGateGuard } from "@shared/site-gate.guard";
-
-
-/** Rideau « site en construction » : code d'accès demandé tant qu'il n'a pas été saisi. */
-export const routeMeta: RouteMeta = { canActivate: [siteGateGuard] };
 
 /**
- * Port de src/routes/invitation.tsx — activation de compte (premier mot de passe).
- * Le jeton est retiré de l’URL après lecture (replace), comme en React.
+ * Activation de compte (premier mot de passe).
+ * Le jeton est retiré de l’URL après lecture (replace).
  */
 @Component({
   selector: "app-invitation-page",

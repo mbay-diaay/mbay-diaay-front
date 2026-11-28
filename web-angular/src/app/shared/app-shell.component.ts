@@ -1,5 +1,5 @@
 import { Component, computed, inject, input } from "@angular/core";
-import { RouterLink } from "@angular/router";
+import { Router, RouterLink } from "@angular/router";
 import { LucideAngularModule, ShieldAlert } from "lucide-angular";
 
 import type { Permission } from "@/lib/permissions";
@@ -50,6 +50,7 @@ export class AppShellComponent {
   readonly area = input.required<string>();
 
   private readonly store = inject(StoreService);
+  private readonly router = inject(Router);
   protected readonly t = inject(LocaleService).t;
   protected readonly shieldAlert = ShieldAlert;
   protected readonly session = computed(() => this.store.state().session);
@@ -59,6 +60,18 @@ export class AppShellComponent {
     if (!session) return false;
     const perm = this.perm();
     const perms: readonly Permission[] = Array.isArray(perm) ? perm : [perm as Permission];
-    return perms.some((p) => session.permissions.includes(p));
+    if (!perms.some((p) => session.permissions.includes(p))) return false;
+    if (session.allowedPages) {
+      const path = this.router.url.split("?")[0];
+      const home = `/dashboard/${session.role}`;
+      if (
+        path !== home &&
+        path !== "/dashboard/profil" &&
+        !session.allowedPages.some((p) => path === p || path.startsWith(`${p}/`))
+      ) {
+        return false;
+      }
+    }
+    return true;
   });
 }

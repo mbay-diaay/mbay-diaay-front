@@ -1,6 +1,6 @@
 import { Component, input } from "@angular/core";
 
-/** En-tête de page — port de PageHeader dans src/components/app/ui-bits.tsx. */
+/** En-tête de page. */
 @Component({
   selector: "ui-page-header",
   template: `

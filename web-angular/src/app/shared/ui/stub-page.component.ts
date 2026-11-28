@@ -17,6 +17,6 @@ export class UiStubPageComponent {
   readonly title = input.required<string>();
   readonly description = input("");
   readonly hint = input(
-    "Écran en cours de portage Angular — structure et droits alignés sur React ; contenu détail à suivre.",
+    "Écran en cours de construction — structure et droits en place ; contenu détaillé à suivre.",
   );
 }

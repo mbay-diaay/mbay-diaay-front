@@ -7,12 +7,8 @@
 /*
  * Mbay Diaay — design system (Angular front-end).
  *
- * Mirrored verbatim from the React app's src/styles.css, which mirrors
- * docs/prd/design-tokens.json. This file is NOT the source of truth: during
- * the React→Angular migration, update the React app's tokens first, then
- * copy this file over again. Once the React app is retired, this becomes
- * the sole copy and design-tokens.json keeps being the source of truth.
- * To apply a new client charter: change ONLY the primitive block.
+ * Miroir de docs/prd/design-tokens.json, qui reste la source de vérité des jetons.
+ * Pour appliquer une nouvelle charte cliente : changer UNIQUEMENT le bloc primitif.
  */
 
 @theme inline {
@@ -191,7 +187,7 @@
   --map-fam-cereales: var(--p-fam-cereales);
   --map-fam-autres: var(--p-fam-autres);
 
-  /* ───── shadcn mapping ───── */
+  /* ───── alias des composants ───── */
   --radius: var(--radius-md-token);
   --background: var(--sem-bg);
   --foreground: var(--sem-text);
@@ -436,7 +432,7 @@
   content: "!";
 }
 
-/* Animations locales pour ui-sheet / toasts (équivalent léger des classes animate-in du kit React). */
+/* Animations locales pour ui-sheet / toasts (classes animate-in légères). */
 @keyframes mbay-sheet-overlay-in {
   from {
     opacity: 0;

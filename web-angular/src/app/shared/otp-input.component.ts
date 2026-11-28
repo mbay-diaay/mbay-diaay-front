@@ -17,7 +17,7 @@ import { OTP_LENGTH } from "@/lib/auth/policy";
 
 /**
  * Six digit cells with auto-advance, backspace-to-previous, paste, and
- * submit-on-complete — parity with React `input-otp` + `OtpStep`.
+ * submit-on-complete.
  */
 @Component({
   selector: "app-otp-input",

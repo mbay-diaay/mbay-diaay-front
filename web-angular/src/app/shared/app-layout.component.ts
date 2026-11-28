@@ -443,21 +443,14 @@ function ensureSessionHydrated(): Promise<void> {
                         <p class="text-[16px] font-extrabold tracking-[-0.01em]">{{ t()("shell.help.title") }}</p>
                         <p class="text-[13px] font-medium" style="color: var(--v2-gris-texte)">{{ t()("shell.help.intro") }}</p>
                       </div>
-                      <button type="button" class="pop-item" (click)="topMenu.set(null); openPalette()">
-                        <ui-icon name="search" [size]="20" />
-                        <span class="flex-1">{{ t()("shell.help.search") }}</span>
-                        <kbd class="kbd">{{ modKey() }} K</kbd>
-                      </button>
-                      <div class="pop-item is-soon" aria-disabled="true">
+                      <a routerLink="/dashboard/guide" class="pop-item" (click)="topMenu.set(null)">
                         <ui-icon name="menu_book" [size]="20" />
                         <span class="flex-1">{{ t()("shell.help.guide") }}</span>
-                        <span class="soon-pill">{{ t()("modules.state.soon") }}</span>
-                      </div>
-                      <div class="pop-item is-soon" aria-disabled="true">
+                      </a>
+                      <a routerLink="/dashboard/faq" class="pop-item" (click)="topMenu.set(null)">
                         <ui-icon name="quiz" [size]="20" />
                         <span class="flex-1">{{ t()("shell.help.faq") }}</span>
-                        <span class="soon-pill">{{ t()("modules.state.soon") }}</span>
-                      </div>
+                      </a>
                       <div class="mx-2 mt-2 rounded-[16px] p-3" style="background: var(--v2-sauge)">
                         <p class="flex items-center gap-2 text-[14px] font-bold">
                           <ui-icon name="support_agent" [size]="20" /> {{ t()("shell.help.contact") }}
@@ -520,7 +513,7 @@ function ensureSessionHydrated(): Promise<void> {
                 <div class="relative" data-account-menu>
                   <button
                     type="button"
-                    class="top-btn flex max-w-[12rem] shrink-0 items-center gap-2.5 rounded-[14px] border border-transparent p-1 pr-2 text-left sm:max-w-[14rem] xl:max-w-[17rem]"
+                    class="top-btn flex max-w-[12rem] shrink-0 items-center gap-2.5 rounded-[14px] border border-transparent p-1 pr-2 text-left sm:max-w-[14rem] xl:max-w-[22rem]"
                     [attr.aria-label]="t()('shell.accountAria')"
                     [attr.aria-expanded]="accountMenuOpen()"
                     aria-haspopup="menu"
@@ -534,9 +527,16 @@ function ensureSessionHydrated(): Promise<void> {
                     </span>
                     <span class="hidden min-w-0 leading-tight xl:block">
                       <span class="block truncate text-sm font-bold" style="color: var(--v2-encre)">{{ session()!.name }}</span>
-                      <span class="block truncate text-xs font-medium" style="color: var(--v2-gris-texte)">{{
-                        store.roleLabel(session()!.role)
-                      }}</span>
+                      <span class="mt-0.5 flex min-w-0 items-center gap-1">
+                        <span class="min-w-0 shrink-0 truncate rounded-full px-2 py-0.5 text-[10.5px] font-bold" style="background: var(--v2-sauge); color: var(--v2-foret)">{{
+                          roleBadge()
+                        }}</span>
+                        @if (scopeBadge(); as badge) {
+                          <span class="min-w-0 truncate rounded-full px-2 py-0.5 text-[10.5px] font-bold" style="background: var(--v2-citron); color: var(--v2-foret)">{{
+                            badge
+                          }}</span>
+                        }
+                      </span>
                     </span>
                     <lucide-angular [img]="icons.chevronDown" [size]="16" class="hidden shrink-0 xl:block" style="color: var(--v2-gris-texte)" />
                   </button>
@@ -546,22 +546,43 @@ function ensureSessionHydrated(): Promise<void> {
                       class="absolute right-0 top-full z-[60] mt-2 w-72 rounded-[16px] border p-1.5"
                       style="border-color: var(--v2-bord-carte); background: var(--v2-blanc); box-shadow: var(--v2-ombre-modale)"
                     >
-                      <div class="flex items-center gap-3 px-3 py-3">
-                        <span
-                          class="grid size-11 shrink-0 place-items-center rounded-full text-sm font-extrabold"
-                          style="background: var(--v2-foret); color: var(--v2-citron)"
-                          >{{ initials() }}</span
-                        >
-                        <div class="min-w-0">
-                          <div class="truncate font-bold">{{ session()!.name }}</div>
-                          <div class="truncate text-xs font-medium" style="color: var(--v2-gris-texte)">
-                            {{ store.roleLabel(session()!.role) }} · {{ scopeLabel() }}
+                      <a
+                        role="menuitem"
+                        class="pop-item"
+                        routerLink="/dashboard/profil"
+                        (click)="accountMenuOpen.set(false)"
+                      >
+                        <ui-icon name="person" [size]="20" />
+                        <span class="flex-1">Mon profil</span>
+                      </a>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class="pop-item"
+                        [attr.aria-expanded]="profileOpen()"
+                        (click)="profileOpen.set(!profileOpen())"
+                      >
+                        <ui-icon name="mail" [size]="20" />
+                        <span class="flex-1">E-mail du compte</span>
+                        <lucide-angular
+                          [img]="icons.chevronDown"
+                          [size]="16"
+                          style="color: var(--v2-gris-texte); transition: transform 0.15s ease"
+                          [style.transform]="profileOpen() ? 'rotate(180deg)' : 'none'"
+                        />
+                      </button>
+                      @if (profileOpen()) {
+                        <dl class="mx-2 mb-1 mt-1 grid gap-2.5 rounded-[14px] p-3 text-[13px]" style="background: var(--v2-creme)">
+                          <div>
+                            <dt class="text-[11px] font-bold uppercase tracking-wide" style="color: var(--v2-ardoise)">E-mail</dt>
+                            <dd class="truncate font-bold">{{ session()!.email }}</dd>
                           </div>
-                        </div>
-                      </div>
+                        </dl>
+                      }
                       <div class="my-1 h-px" style="background: var(--v2-separateur)"></div>
-                      <button type="button" role="menuitem" class="menu-item" style="color: var(--v2-erreur-fg)" (click)="logout()">
-                        <lucide-angular [img]="icons.logOut" [size]="18" /> {{ t()("shell.logout") }}
+                      <button type="button" role="menuitem" class="pop-item" style="color: var(--v2-erreur-fg)" (click)="logout()">
+                        <ui-icon name="arrow_outward" [size]="20" />
+                        <span class="flex-1">{{ t()("shell.logout") }}</span>
                       </button>
                     </div>
                   }
@@ -685,6 +706,8 @@ export class AppLayoutComponent {
   /** Menu replié : préférence du compte (serveur), dépliée par défaut. */
   protected readonly collapsed = computed(() => this.preferences.preferences().sidebarCollapsed ?? false);
   protected readonly accountMenuOpen = signal(false);
+  /** Sous-menu « Profil » du menu du compte (rôle, périmètre, e-mail). */
+  protected readonly profileOpen = signal(false);
   /** Panneau ouvert dans la barre du haut (notifications, aide, paramètres). */
   protected readonly topMenu = signal<"notif" | "help" | "settings" | null>(null);
   protected readonly locales = ["fr", "wo"] as const;
@@ -782,6 +805,24 @@ export class AppLayoutComponent {
     return scoopNamesOf(session, this.store.state().scoops);
   });
 
+  /**
+   * Badges sous le nom : le rôle, rattaché à son organisation.
+   * Rôles du réseau (super administrateur, administrateur) : le rôle, puis « CRADESC » dans un badge à part.
+   * Autres rôles : le rôle, puis la coopérative (ou les coopératives) du compte ; « Vue consolidée » si le compte voit tout.
+   */
+  protected readonly roleBadge = computed(() => {
+    const session = this.session();
+    if (!session) return "";
+    return this.store.roleLabel(session.role);
+  });
+
+  protected readonly scopeBadge = computed(() => {
+    const session = this.session();
+    if (!session) return null;
+    if (session.role === "superadmin" || session.role === "admin") return "CRADESC";
+    return this.scopeLabel() || null;
+  });
+
   protected readonly initials = computed(() => {
     const session = this.session();
     if (!session) return "";
@@ -873,12 +914,12 @@ export class AppLayoutComponent {
       if (this.session()?.email && this.ready()) untracked(() => this.loadForRoute(this.router.url));
     });
 
-    // Redirect to /login if there's no session (mirrors the React useEffect).
+    // Redirige vers /login s'il n'y a pas de session.
     effect(() => {
       if (this.ready() && !this.session()) void this.router.navigateByUrl("/login");
     });
 
-    // Ferme le menu mobile au changement de route (équivalent React `useEffect` sur `path`).
+    // Ferme le menu mobile au changement de route (sur chaque changement de `path`).
     effect(() => {
       this.path();
       this.mobileOpen.set(false);
@@ -903,6 +944,7 @@ export class AppLayoutComponent {
   protected toggleAccountMenu(event: Event): void {
     event.stopPropagation();
     this.topMenu.set(null);
+    this.profileOpen.set(false);
     this.accountMenuOpen.update((open) => !open);
   }
 

@@ -1,10 +1,7 @@
 /**
- * Adaptateur du jeu de données fictif complet (`data/fixtures/mbay_fixture_complet.json`)
- * vers les types de l'application. Les volumes reprennent la base CRADESC du 05/10/2026
- * (1 317 producteurs, 1 534 parcelles, 1 941 cultures, 609 alertes, 5 doublons candidats).
- * Tout est inventé : téléphones et CNI en clair sont fabriqués à partir des fins masquées.
+ * Adaptateur du jeu de données minimal de démonstration vers les types de l'application.
+ * Tout est inventé : aucune donnée réelle de personne.
  */
-import raw from "../../../data/fixtures/mbay_fixture_complet.json";
 import type {
   CropRecord,
   DataAlert,
@@ -207,7 +204,139 @@ export function scoopCode(name: string, taken: string[]): string {
   return base.slice(0, 5);
 }
 
-export function buildFixtureData(fx: Fixture = raw as unknown as Fixture): FixtureData {
+const MINIMAL_FIXTURE: Fixture = {
+  scoops: [
+    { id: "s1", nom: "SCOOP Keur Moussa (KMS)", code: "KMS" },
+    { id: "s2", nom: "SCOOP Mboro (MBR)", code: "MBR" },
+  ],
+  organisations: [
+    { id: "o1", nom: "GIE Bokk Jom", type: "gie", parent: "s1" },
+    { id: "o2", nom: "GIE Takku Liggeey", type: "gie", parent: "s2" },
+  ],
+  producteurs: [
+    {
+      id: "NIA-KMS-001",
+      nom: "Producteur Démo 1",
+      sexe: "Homme",
+      scoop_id: "s1",
+      organisation_id: "o1",
+      village: "Keur Moussa",
+      age: 42,
+      statut_qualite: "valide",
+      situation_handicap: "non",
+      telephone_masque: "77 *** ** 01",
+      cni_masquee: "1 *** **** ***01",
+      statut_adhesion: "adherent",
+      date_enquete: "2026-10-01",
+      enqueteur: "Technicien Démo",
+    },
+    {
+      id: "NIA-MBR-001",
+      nom: "Producteur Démo 2",
+      sexe: "Femme",
+      scoop_id: "s2",
+      organisation_id: "o2",
+      village: "Mboro",
+      age: 35,
+      statut_qualite: "valide",
+      situation_handicap: "non",
+      telephone_masque: "77 *** ** 02",
+      cni_masquee: "2 *** **** ***02",
+      statut_adhesion: "adherent",
+      date_enquete: "2026-10-02",
+      enqueteur: "Technicien Démo",
+    },
+    {
+      id: "NIA-KMS-002",
+      nom: "Producteur Démo 3",
+      sexe: "Homme",
+      scoop_id: "s1",
+      organisation_id: "o1",
+      village: "Keur Moussa",
+      age: 51,
+      statut_qualite: "valide",
+      situation_handicap: "non",
+      telephone_masque: "77 *** ** 03",
+      cni_masquee: "1 *** **** ***03",
+      statut_adhesion: "recense",
+      date_enquete: "2026-10-03",
+      enqueteur: "Technicien Démo",
+    },
+    {
+      id: "NIA-KMS-003",
+      nom: "Producteur Démo 3 bis",
+      sexe: "Homme",
+      scoop_id: "s1",
+      organisation_id: "o1",
+      village: "Keur Moussa",
+      age: 52,
+      statut_qualite: "valide",
+      situation_handicap: "non",
+      telephone_masque: "77 *** ** 04",
+      cni_masquee: "1 *** **** ***04",
+      statut_adhesion: "recense",
+      date_enquete: "2026-10-03",
+      enqueteur: "Technicien Démo",
+    },
+  ],
+  parcelles: [
+    {
+      id: "NIA-KMS-001-P1",
+      producteur_id: "NIA-KMS-001",
+      superficie_ha: 1.5,
+      contour: [
+        [14.81, -17.11],
+        [14.811, -17.11],
+        [14.811, -17.109],
+        [14.81, -17.109],
+      ],
+      contour_valide: true,
+      contour_brut: [],
+      precision_gps_m: 4,
+      cultures: [{ culture: "Oignon", part_pct: 100 }],
+      statut_carte: "validee",
+    },
+    {
+      id: "NIA-MBR-001-P1",
+      producteur_id: "NIA-MBR-001",
+      superficie_ha: 2.0,
+      contour: [
+        [15.14, -16.88],
+        [15.141, -16.88],
+        [15.141, -16.879],
+        [15.14, -16.879],
+      ],
+      contour_valide: true,
+      contour_brut: [],
+      precision_gps_m: 4,
+      cultures: [{ culture: "Tomate", part_pct: 100 }],
+      statut_carte: "validee",
+    },
+  ],
+  chevauchements: [],
+  doublons_candidats: [
+    {
+      id: "D-001",
+      signal: "Noms semblables",
+      fiche_a: "NIA-KMS-002",
+      fiche_b: "NIA-KMS-003",
+      sim_nom: 80,
+      meme_village: true,
+      meme_telephone: false,
+      distance_min_parcelles_m: null,
+    },
+  ],
+  groupes_telephone: [],
+  fusions_historiques: [],
+  alertes: [],
+  cultures_referentiel: [
+    { nom: "Oignon", famille: "Bulbes" },
+    { nom: "Tomate", famille: "Fruits-légumes" },
+  ],
+  journal_audit: [],
+};
+
+export function buildFixtureData(fx: Fixture = MINIMAL_FIXTURE): FixtureData {
   const scoops: Scoop[] = [];
   fx.scoops.forEach((s, i) =>
     scoops.push({

@@ -1,5 +1,6 @@
 import { Component, computed, effect, inject, input, model, output, signal, untracked } from "@angular/core";
 
+import { NAV } from "@/lib/nav";
 import { LOCKED_ROLE, type CustomRole, type Permission, type RoleId } from "@/lib/permissions";
 
 import { LocaleService } from "./locale.service";
@@ -17,6 +18,8 @@ export interface RoleFormValue {
   description: string;
   scoped: boolean;
   copyFrom: RoleId | null;
+  allowedPages: string[] | null;
+  permissions?: Permission[];
 }
 
 type FormErrors = Partial<Record<"name", string>>;
@@ -162,6 +165,28 @@ const NO_COPY = "";
         </fieldset>
         }
         @if (!role()) {
+          <fieldset>
+            <legend class="lbl">Mode d’accès au menu</legend>
+            <div class="scopes mt-2" role="radiogroup">
+              <button type="button" role="radio" class="scope" [class.on]="accessMode() === 'copy'" [attr.aria-checked]="accessMode() === 'copy'" (click)="accessMode.set('copy')">
+                <span class="scope-ico"><ui-icon name="file_export" [size]="18" /></span>
+                <span>
+                  <span class="block text-[15px] font-extrabold">À partir d’un rôle existant</span>
+                  <span class="block text-[13px] font-medium" style="color: var(--v2-gris-texte)">Copie les droits d’un rôle de la coopérative</span>
+                </span>
+              </button>
+              <button type="button" role="radio" class="scope" [class.on]="accessMode() === 'pages'" [attr.aria-checked]="accessMode() === 'pages'" (click)="accessMode.set('pages')">
+                <span class="scope-ico"><ui-icon name="task_alt" [size]="18" /></span>
+                <span>
+                  <span class="block text-[15px] font-extrabold">Accès par pages</span>
+                  <span class="block text-[13px] font-medium" style="color: var(--v2-gris-texte)">Cochez les pages visibles dans le menu</span>
+                </span>
+              </button>
+            </div>
+          </fieldset>
+        }
+
+        @if (!role() && accessMode() === "copy") {
           <ui-select
             [label]="t()('superadmin.roles.form.copyFrom')"
             [options]="copyOptions()"
@@ -169,6 +194,37 @@ const NO_COPY = "";
             leadingIcon="file_export"
             (valueChange)="copyFrom.set($event)"
           />
+        }
+
+        @if (accessMode() === "pages" || role()?.allowedPages) {
+          <div class="space-y-3 rounded-2xl border p-4" style="border-color: var(--v2-gris-trait); background: var(--v2-blanc)">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <p class="lbl">Pages autorisées ({{ selectedPages().length }})</p>
+              <div class="flex gap-2">
+                <button type="button" class="btn btn-ghost" style="height: 30px; padding: 0 10px; font-size: 12px" (click)="selectAllPages()">Tout cocher</button>
+                <button type="button" class="btn btn-ghost" style="height: 30px; padding: 0 10px; font-size: 12px" (click)="selectedPages.set([])">Tout décocher</button>
+              </div>
+            </div>
+            <div class="grid max-h-64 gap-3 overflow-y-auto pr-1">
+              @for (group of availableNavGroups(); track group.group) {
+                <div class="space-y-1.5">
+                  <p class="text-[11px] font-extrabold uppercase tracking-wider" style="color: var(--v2-gris-texte)">{{ t()(group.groupKey) }}</p>
+                  <div class="grid gap-1.5 sm:grid-cols-2">
+                    @for (item of group.items; track item.to) {
+                      <label class="flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[13px] font-semibold" style="border-color: var(--v2-gris-trait)">
+                        <input
+                          type="checkbox"
+                          [checked]="selectedPages().includes(item.to)"
+                          (change)="togglePage(item.to, $any($event.target).checked)"
+                        />
+                        <span>{{ t()(item.labelKey) }}</span>
+                      </label>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
         }
         <!-- Aperçu : ce que verront les utilisateurs de ce rôle, selon le rôle de départ choisi. -->
         <app-role-access-preview
@@ -206,6 +262,8 @@ export class RoleFormDialogComponent {
   protected readonly description = signal("");
   protected readonly scoped = signal(true);
   protected readonly copyFrom = signal<string>(NO_COPY);
+  protected readonly accessMode = signal<"copy" | "pages">("copy");
+  protected readonly selectedPages = signal<string[]>([]);
   private readonly tried = signal(false);
 
   constructor() {
@@ -219,6 +277,13 @@ export class RoleFormDialogComponent {
         this.description.set(edited?.description ?? "");
         this.scoped.set(edited?.scoped ?? true);
         this.copyFrom.set(NO_COPY);
+        if (edited?.allowedPages) {
+          this.accessMode.set("pages");
+          this.selectedPages.set([...edited.allowedPages]);
+        } else {
+          this.accessMode.set("copy");
+          this.selectedPages.set([]);
+        }
         this.tried.set(false);
       });
     });
@@ -243,11 +308,54 @@ export class RoleFormDialogComponent {
       })),
   ]);
 
+  protected readonly availableNavGroups = computed(() => {
+    const ceiling = this.ceiling();
+    return NAV.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (item.hidden) return false;
+        if (!ceiling) return true;
+        const perms = Array.isArray(item.perm) ? item.perm : [item.perm];
+        return perms.some((perm) => ceiling.includes(perm));
+      }),
+    })).filter((group) => group.items.length > 0);
+  });
+
+  protected readonly pagePermissions = computed<Permission[]>(() => {
+    const chosen = new Set(this.selectedPages());
+    if (!chosen.size) return [];
+    const ceiling = this.ceiling();
+    const out = new Set<Permission>();
+    for (const group of NAV) {
+      for (const item of group.items) {
+        if (!chosen.has(item.to)) continue;
+        const perms = Array.isArray(item.perm) ? item.perm : [item.perm];
+        for (const perm of perms) {
+          if (!ceiling || ceiling.includes(perm)) out.add(perm);
+        }
+      }
+    }
+    if (!ceiling || ceiling.includes("dashboard.read")) out.add("dashboard.read");
+    return [...out];
+  });
+
+  protected togglePage(route: string, checked: boolean) {
+    this.selectedPages.update((current) =>
+      checked ? [...new Set([...current, route])] : current.filter((p) => p !== route),
+    );
+  }
+
+  protected selectAllPages() {
+    const all = this.availableNavGroups().flatMap((g) => g.items.map((i) => i.to));
+    this.selectedPages.set(all);
+  }
+
   /**
    * Droits montrés dans l'aperçu : ceux du rôle modifié, sinon ceux du rôle de départ choisi (aucun si on part de
    * zéro), limités au plafond du créateur.
    */
   protected readonly previewPermissions = computed<Permission[]>(() => {
+    if (this.accessMode() === "pages") return this.pagePermissions();
     const source = this.role()?.id ?? (this.copyFrom() || null);
     const granted = source ? (this.store.state().rolePermissions[source] ?? []) : [];
     const ceiling = this.ceiling();
@@ -263,11 +371,14 @@ export class RoleFormDialogComponent {
   protected submit(): void {
     this.tried.set(true);
     if (Object.keys(this.errors()).length) return;
+    const byPages = this.accessMode() === "pages";
     this.submitted.emit({
       name: this.name().trim().replace(/\s+/g, " "),
       description: this.description().trim(),
       scoped: this.lockScope() ? true : this.scoped(),
-      copyFrom: (this.copyFrom() || null) as RoleId | null,
+      copyFrom: byPages ? null : ((this.copyFrom() || null) as RoleId | null),
+      allowedPages: byPages ? this.selectedPages() : null,
+      permissions: byPages ? this.pagePermissions() : undefined,
     });
   }
 }

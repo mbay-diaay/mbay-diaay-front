@@ -23,8 +23,6 @@ import {
 } from "lucide-angular";
 
 import { CRADESC, LOGIN_PHOTOS } from "@/config/brand";
-import type { RouteMeta } from "@analogjs/router";
-import { siteGateGuard } from "@shared/site-gate.guard";
 import { isApiMode } from "@/lib/api/config";
 import { hydrateSessionFromApi } from "@/lib/api/session";
 import { DEMO_MODE } from "@/lib/auth/config";
@@ -43,10 +41,6 @@ import {
 } from "@shared/ui";
 
 type Step = { name: "credentials" } | { name: "code"; challengeId: string; sent: CodeSent };
-
-
-/** Rideau « site en construction » : code d'accès demandé tant qu'il n'a pas été saisi. */
-export const routeMeta: RouteMeta = { canActivate: [siteGateGuard] };
 
 /**
  * Connexion (charte graphique V2) : e-mail + mot de passe, puis code à usage unique.

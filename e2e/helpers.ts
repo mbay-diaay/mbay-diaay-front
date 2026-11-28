@@ -18,17 +18,10 @@ export const ROLES = {
 export type Role = keyof typeof ROLES;
 
 /**
- * Attend que le client Angular ait hydraté (pas seulement le HTML SSR).
- * Marqueurs Analog/Angular 22 : `__jsaction_fns` ou `__ngDebugHydrationInfo__`.
+ * Attend que le formulaire Angular soit monté dans le DOM.
  */
 export async function hydrated(page: Page) {
-  await page.waitForFunction(() => {
-    const el = document.querySelector("#email, #otp, #password");
-    if (!el) return false;
-    return Object.keys(el).some(
-      (k) => k === "__jsaction_fns" || k.startsWith("__ngDebugHydrationInfo"),
-    );
-  });
+  await page.locator("#email, #otp, #password").first().waitFor({ state: "visible" });
 }
 
 /**

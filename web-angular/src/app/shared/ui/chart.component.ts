@@ -13,7 +13,7 @@ import { DOCUMENT, isPlatformBrowser } from "@angular/common";
 import type { Chart as ChartType, ChartConfiguration, ChartType as ChartJsType } from "chart.js";
 
 /**
- * Wrapper Chart.js — client-only (canvas indisponible en SSR Analog).
+ * Wrapper Chart.js — client-only (canvas indisponible hors navigateur).
  * Résout `var(--chart-*)` / `var(--…)` en couleurs calculées : Chart.js
  * n'interprète pas les variables CSS dans `backgroundColor`.
  */

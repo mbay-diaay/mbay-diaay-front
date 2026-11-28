@@ -1,9 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-vi.mock("./config", () => ({
-  apiBaseUrl: () => "https://api.mbaydiaay.com/v1",
-  isApiMode: () => true,
-}));
+import { environment } from "../../environments/environment";
+
+let previousApiUrl: string | null = null;
+beforeAll(() => {
+  previousApiUrl = environment.apiUrl;
+  environment.apiUrl = "https://api.mbaydiaay.com/v1";
+});
+afterAll(() => {
+  environment.apiUrl = previousApiUrl;
+});
 
 import { scoopFromApi, type ApiScoop } from "./scoops";
 

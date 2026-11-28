@@ -354,7 +354,8 @@ const CORR_MOTIFS = [
   "Le nom patronymique était mal orthographié lors du recensement.",
 ];
 for (let i = 0; i < 14; i++) {
-  const p = PRODUCERS[i * 61]!;
+  // Le jeu de démonstration est petit : l'indice boucle sur les producteurs disponibles.
+  const p = PRODUCERS[(i * 61) % PRODUCERS.length]!;
   const variant = i % 5;
   const changes: CorrectionChange[] =
     variant === 0
@@ -503,7 +504,7 @@ export const ACCOUNT_CANDIDATES: AccountCandidate[] = (() => {
         ],
       });
   });
-  const p4 = PRODUCERS[400]!;
+  const p4 = PRODUCERS[400 % PRODUCERS.length]!;
   cand.push({
     id: "ac4",
     userId: "u4",

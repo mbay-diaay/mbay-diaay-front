@@ -142,7 +142,7 @@ type Errors = Partial<Record<"firstName" | "lastName" | "email" | "phone" | "sex
     }
   `,
   template: `
-    <ui-modal [open]="open()" [title]="t()('tech.dialog.title')" [description]="t()('tech.dialog.description')" icon="person_add" [width]="680" [closeLabel]="t()('common.close')" (closed)="open.set(false)">
+    <ui-modal [open]="open()" [title]="t()('tech.dialog.title')" [description]="t()('tech.dialog.description')" icon="person_add" tone="brand" [width]="680" [closeLabel]="t()('common.close')" (closed)="open.set(false)">
       <div class="pb-6">
         <div class="modes" role="radiogroup" [attr.aria-label]="t()('tech.dialog.mode.aria')">
           <button type="button" role="radio" class="mode" [class.on]="mode() === 'new'" [attr.aria-checked]="mode() === 'new'" (click)="setMode('new')">

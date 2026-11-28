@@ -75,6 +75,6 @@ export async function missingWolofKeys(
   return (Object.keys(fr) as MessageKey[]).filter((k) => !(k in DICTS.wo) && !allow.has(k));
 }
 
-/** Traduit dans la langue en cours : pour le code qui n'a pas accès au contexte React. */
+/** Traduit dans la langue en cours : pour le code qui n'a pas accès au service de langue. */
 export const tNow = (key: MessageKey, params?: TranslateParams): string =>
   translate(currentLocale, key, params);

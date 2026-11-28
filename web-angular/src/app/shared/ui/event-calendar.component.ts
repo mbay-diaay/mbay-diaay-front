@@ -54,7 +54,7 @@ const TONE: Record<CalendarTone, { card: string; dot: string }> = {
 
 const ALL = "__all";
 
-/** Port de src/components/ui/event-calendar.tsx — agenda à quatre vues + filtre par type. */
+/** Agenda à quatre vues + filtre par type. */
 @Component({
   selector: "ui-event-calendar",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -314,7 +314,7 @@ export class UiEventCalendarComponent implements OnInit {
   readonly eventClick = output<CalendarEvent>();
   /** Affiche « Ajouter un événement ce jour » (ex. création de réunion). */
   readonly dayCreateEnabled = input(false);
-  /** Réunion (etc.) : jour choisi pour préremplir la date (voir React `onDayCreate`). */
+  /** Réunion (etc.) : jour choisi pour préremplir la date (voir `dayCreate`). */
   readonly dayCreate = output<Date>();
 
   protected readonly calendarView = signal<CalendarView>("month");

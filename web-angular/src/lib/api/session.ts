@@ -7,7 +7,7 @@ import { fetchAllPages } from "./pagination";
 import { fetchScoopStats, listScoops, managerRowsFromScoops, scoopFromApi } from "./scoops";
 import { clearTokens, getAccessToken } from "./tokens";
 
-type MeResponse = {
+export type MeResponse = {
   id: string;
   email: string;
   name: string;
@@ -17,7 +17,12 @@ type MeResponse = {
   scoopIds?: string[];
   /** Droits appliqués par le serveur (matrice modifiable par le super administrateur). */
   permissions?: Permission[];
+  /** Pages explicitement autorisées pour un rôle créé (nul : déduit des droits). */
+  allowedPages?: string[] | null;
 };
+
+/** Récupère les informations du compte actuellement connecté auprès de l'API. */
+export const fetchMe = () => apiFetch<MeResponse>("/me");
 
 /**
  * Retrouve la session auprès de l'API : le jeton d'accès n'est qu'en mémoire, donc au chargement (ou dans un
@@ -36,7 +41,14 @@ export async function hydrateSessionFromApi(): Promise<boolean> {
   }
   try {
     const me = await apiFetch<MeResponse>("/me");
-    actions.login(me.name, me.email, me.role, me.permissions, me.scoopIds ?? (me.scoopId ? [me.scoopId] : []));
+    actions.login(
+      me.name,
+      me.email,
+      me.role,
+      me.permissions,
+      me.scoopIds ?? (me.scoopId ? [me.scoopId] : []),
+      me.allowedPages,
+    );
     await Promise.all([loadScoopsFromApi(), loadPreferences()]);
     return true;
   } catch {

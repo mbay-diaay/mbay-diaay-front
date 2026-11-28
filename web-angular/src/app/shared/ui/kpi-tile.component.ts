@@ -1,7 +1,7 @@
 import { Component, computed, input } from "@angular/core";
 import { cn } from "@/lib/utils";
 
-/** Indicateur chiffré — port de KpiTile (ui-bits.tsx). */
+/** Indicateur chiffré. */
 @Component({
   selector: "ui-kpi-tile",
   template: `
